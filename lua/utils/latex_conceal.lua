@@ -77,7 +77,8 @@ local function ensure_loaded()
   return state.lookup_conceal ~= nil
 end
 
--- Function to convert LaTeX math symbols to Unicode
+--- Function to convert LaTeX math symbols to Unicode
+--- @param text string: The LaTeX math symbol to convert
 function M.lookup_math_symbol(text)
   if not ensure_loaded() then
     return text

@@ -517,6 +517,7 @@ lazy_static! {
         m.insert("^\\.", "˙");
         m.insert("^=", "˭");
         m.insert("\\,", "");
+        m.insert("\\circ", "∘");
         m
     };
 }
