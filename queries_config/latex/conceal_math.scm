@@ -1,4 +1,3 @@
-
 ; math conceals
 (generic_command
   command: ((command_name) @conceal
