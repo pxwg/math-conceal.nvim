@@ -10,12 +10,20 @@ The structure of the knowledge is a connected diagrams, which could abstractly b
 
 ```lua
 return {
-  "pxwg/note-tree.nvim",
+  "pxwg/latex-conceal.nvim",
   event = "VeryLazy",
   build = "make lua51",
+  --- @type LaTeXConcealOptions
   opts = {
-    max_depth = 10, -- The deepest search depth
-    root = "~/personal-wiki", -- The root directory of the notes
+    enabled = true,
+    conceal = {
+      "greek",
+      "script",
+      "math",
+      "font",
+      "delim",
+    },
+    ft = { "tex", "latex", "markdown" },
   },
 }
 ```
