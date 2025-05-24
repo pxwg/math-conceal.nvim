@@ -5,7 +5,7 @@
   command: ((command_name) @cmd (#eq? @cmd "\\bra"))
   (#has-ancestor? @cmd math_environment inline_formula displayed_equation)
   (#set! priority 101)
-  (#set! conceal "|"))
+  (#set! conceal "<"))
 
 (generic_command
   command: (command_name) @_cmd (#eq? @_cmd "\\bra")
@@ -17,13 +17,13 @@
   command: (command_name) @_cmd (#eq? @_cmd "\\bra")
   arg: (curly_group "}" @close1)
   (#has-ancestor? @close1 math_environment inline_formula displayed_equation)
-  (#set! conceal ">"))
+  (#set! conceal "|"))
 
 (generic_command
   command: ((command_name) @cmd (#eq? @cmd "\\ket"))
   (#has-ancestor? @cmd math_environment inline_formula displayed_equation)
   (#set! priority 101)
-  (#set! conceal "<"))
+  (#set! conceal "|"))
 
 (generic_command
   command: (command_name) @_cmd (#eq? @_cmd "\\ket")
@@ -35,4 +35,4 @@
   command: (command_name) @_cmd (#eq? @_cmd "\\ket")
   arg: (curly_group "}" @close1)
   (#has-ancestor? @close1 math_environment inline_formula displayed_equation)
-  (#set! conceal "|"))
+  (#set! conceal ">"))
