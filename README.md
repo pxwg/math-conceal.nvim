@@ -26,6 +26,7 @@ return {
       "math",
       "font",
       "delim",
+      "phy",
     },
     ft = { "tex", "latex", "markdown" },
   },
