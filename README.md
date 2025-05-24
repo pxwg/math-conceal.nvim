@@ -1,6 +1,6 @@
 # latex-conceal.nvim ☀️
 
-Faster and concrete latex conceal.
+Faster and More Precise latex conceal.
 
 ## Introduction
 
