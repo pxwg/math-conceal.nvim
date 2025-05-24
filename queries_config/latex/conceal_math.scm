@@ -48,7 +48,8 @@
 (generic_command
   command: ((command_name) @cmd (#eq? @cmd "\\frac"))
   (#has-ancestor? @cmd math_environment inline_formula displayed_equation)
-  (#set! conceal ""))
+  (#set! priority 101)
+  (#set! conceal "("))
 
 (generic_command
   command: (command_name) @_cmd (#eq? @_cmd "\\frac")
@@ -75,4 +76,4 @@
   arg: (curly_group)
   arg: (curly_group "}" @close2)
   (#has-ancestor? @close2 math_environment inline_formula displayed_equation)
-  (#set! conceal ""))
+  (#set! conceal ")"))
