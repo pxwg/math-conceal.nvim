@@ -20,6 +20,7 @@ local default_opts = {
     "math",
     "font",
     "delim",
+    "phy",
   },
   ft = { "tex", "latex", "markdown" },
 }
