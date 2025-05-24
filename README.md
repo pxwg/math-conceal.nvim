@@ -2,6 +2,8 @@
 
 Faster and More Precise latex conceal.
 
+![showcase](./fig/showcase_1.png)
+
 ## Introduction
 
 In neovim `0.11.0`, the treesitter query has been changed to allow the asynchronous query, which allows us to use the treesitter query to conceal latex file. However, it's still slow while fully use `#set! conceal` directive since the expansive cost of query over the whole AST while conceal a single node.
