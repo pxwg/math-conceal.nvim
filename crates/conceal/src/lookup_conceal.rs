@@ -6,6 +6,176 @@ use std::collections::HashMap;
 lazy_static! {
     pub static ref MATH_SYMBOLS: HashMap<&'static str, &'static str> = {
         let mut m = HashMap::new();
+
+        // Typst symbols - Greek letters
+        m.insert("alpha", "α");
+        m.insert("beta", "β");
+        m.insert("gamma", "γ");
+        m.insert("delta", "δ");
+        m.insert("epsilon", "ε");
+        m.insert("varepsilon", "ϵ");
+        m.insert("zeta", "ζ");
+        m.insert("eta", "η");
+        m.insert("theta", "θ");
+        m.insert("vartheta", "ϑ");
+        m.insert("iota", "ι");
+        m.insert("kappa", "κ");
+        m.insert("lambda", "λ");
+        m.insert("mu", "μ");
+        m.insert("nu", "ν");
+        m.insert("xi", "ξ");
+        m.insert("pi", "π");
+        m.insert("varpi", "ϖ");
+        m.insert("rho", "ρ");
+        m.insert("varrho", "ϱ");
+        m.insert("sigma", "σ");
+        m.insert("varsigma", "ς");
+        m.insert("tau", "τ");
+        m.insert("upsilon", "υ");
+        m.insert("phi", "φ");
+        m.insert("varphi", "ϕ");
+        m.insert("chi", "χ");
+        m.insert("psi", "ψ");
+        m.insert("omega", "ω");
+        m.insert("Gamma", "Γ");
+        m.insert("Delta", "Δ");
+        m.insert("Theta", "Θ");
+        m.insert("Lambda", "Λ");
+        m.insert("Xi", "Ξ");
+        m.insert("Pi", "Π");
+        m.insert("Sigma", "Σ");
+        m.insert("Upsilon", "Υ");
+        m.insert("Phi", "Φ");
+        m.insert("Chi", "Χ");
+        m.insert("Psi", "Ψ");
+        m.insert("Omega", "Ω");
+
+        // Typst math operators and symbols
+        m.insert("sum", "∑");
+        m.insert("product", "∏");
+        m.insert("integral", "∫");
+        m.insert("nabla", "∇");
+        m.insert("partial", "∂");
+        m.insert("infinity", "∞");
+        m.insert("emptyset", "∅");
+        m.insert("aleph", "ℵ");
+        m.insert("subset", "⊂");
+        m.insert("superset", "⊃");
+        m.insert("union", "∪");
+        m.insert("intersection", "∩");
+        m.insert("in", "∈");
+        m.insert("notin", "∉");
+        m.insert("element", "∈");
+        m.insert("forall", "∀");
+        m.insert("exists", "∃");
+        m.insert("neg", "¬");
+        m.insert("and", "∧");
+        m.insert("or", "∨");
+        m.insert("implies", "⇒");
+        m.insert("iff", "⇔");
+        m.insert("equiv", "≡");
+        m.insert("approx", "≈");
+        m.insert("neq", "≠");
+        m.insert("leq", "≤");
+        m.insert("geq", "≥");
+        m.insert("ll", "≪");
+        m.insert("gg", "≫");
+        m.insert("pm", "±");
+        m.insert("mp", "∓");
+        m.insert("times", "×");
+        m.insert("div", "÷");
+        m.insert("cdot", "·");
+        m.insert("bullet", "•");
+        m.insert("circ", "∘");
+        m.insert("ast", "∗");
+        m.insert("cap", "∩");
+        m.insert("cup", "∪");
+        m.insert("sqcap", "⊓");
+        m.insert("sqcup", "⊔");
+        m.insert("vee", "∨");
+        m.insert("wedge", "∧");
+        m.insert("oplus", "⊕");
+        m.insert("ominus", "⊖");
+        m.insert("otimes", "⊗");
+        m.insert("oslash", "⊘");
+        m.insert("odot", "⊙");
+        m.insert("parallel", "∥");
+        m.insert("perp", "⊥");
+        m.insert("angle", "∠");
+        m.insert("triangle", "△");
+        m.insert("square", "□");
+        m.insert("diamond", "◊");
+        m.insert("star", "⋆");
+        m.insert("dagger", "†");
+        m.insert("ddagger", "‡");
+        m.insert("sharp", "♯");
+        m.insert("flat", "♭");
+        m.insert("natural", "♮");
+        m.insert("clubs", "♣");
+        m.insert("diamonds", "♢");
+        m.insert("hearts", "♡");
+        m.insert("spades", "♠");
+        m.insert("dif", "d");
+        m.insert("diff", "∂");
+        m.insert("paren.b", "⏝");
+        m.insert("brace.l", "{");
+        m.insert("brace.r", "}");
+        m.insert("brace.t", "⏞");
+        m.insert("brace.b", "⏟");
+        m.insert("bracket.l", "{");
+        m.insert("bracket.l.double", "⟦");
+        m.insert("bracket.r", "}");
+        m.insert("bracket.r.double", "⟧");
+        m.insert("bracket.t", "⎴");
+        m.insert("bracket.b", "⎵");
+        m.insert("turtle.l", "〔");
+        m.insert("turtle.r", "〕");
+        m.insert("turtle.t", "⏠");
+        m.insert("turtle.b", "⏡");
+        m.insert("bar.v", "|");
+
+        // Typst delimiters
+        m.insert("langle", "⟨");
+        m.insert("rangle", "⟩");
+        m.insert("lfloor", "⌊");
+        m.insert("rfloor", "⌋");
+        m.insert("lceil", "⌈");
+        m.insert("rceil", "⌉");
+        m.insert("norm", "‖");
+        m.insert("abs", "|");
+
+        // Typst physics symbols
+        m.insert("hbar", "ℏ");
+        m.insert("planck", "ℎ");
+        m.insert("boltzmann", "k");
+        m.insert("avogadro", "N");
+        m.insert("electron", "e");
+        m.insert("proton", "p");
+        m.insert("neutron", "n");
+        m.insert("speed", "c");
+        m.insert("light", "c");
+        m.insert("gravity", "g");
+        m.insert("charge", "q");
+        m.insert("mass", "m");
+        m.insert("energy", "E");
+        m.insert("momentum", "p");
+        m.insert("angular", "L");
+        m.insert("spin", "S");
+        m.insert("magnetic", "B");
+        m.insert("electric", "E");
+        m.insert("force", "F");
+        m.insert("pressure", "P");
+        m.insert("temperature", "T");
+        m.insert("entropy", "S");
+        m.insert("enthalpy", "H");
+        m.insert("helmholtz", "F");
+        m.insert("gibbs", "G");
+        m.insert("grad", "∇");
+        m.insert("div", "∇·");
+        m.insert("curl", "∇×");
+        m.insert("laplacian", "∇²");
+
+        // LaTeX symbols (existing)
         m.insert("\\mathbb{A}", "𝔸");
         m.insert("\\mathbb{B}", "𝔹");
         m.insert("\\mathbb{C}", "ℂ");
@@ -518,6 +688,161 @@ lazy_static! {
         m.insert("^=", "˭");
         m.insert("\\,", "");
         m.insert("\\circ", "∘");
+        m.insert("\\dashint", "⨍");
+        m.insert("A", "ℒ");
+        m
+    };
+    // Font-specific symbol tables
+    pub static ref BOLD_SYMBOLS: HashMap<&'static str, &'static str> = {
+        let mut m = HashMap::new();
+        // Bold uppercase letters
+        m.insert("A", "𝐀"); m.insert("B", "𝐁"); m.insert("C", "𝐂"); m.insert("D", "𝐃");
+        m.insert("E", "𝐄"); m.insert("F", "𝐅"); m.insert("G", "𝐆"); m.insert("H", "𝐇");
+        m.insert("I", "𝐈"); m.insert("J", "𝐉"); m.insert("K", "𝐊"); m.insert("L", "𝐋");
+        m.insert("M", "𝐌"); m.insert("N", "𝐍"); m.insert("O", "𝐎"); m.insert("P", "𝐏");
+        m.insert("Q", "𝐐"); m.insert("R", "𝐑"); m.insert("S", "𝐒"); m.insert("T", "𝐓");
+        m.insert("U", "𝐔"); m.insert("V", "𝐕"); m.insert("W", "𝐖"); m.insert("X", "𝐗");
+        m.insert("Y", "𝐘"); m.insert("Z", "𝐙");
+        // Bold lowercase letters
+        m.insert("a", "𝐚"); m.insert("b", "𝐛"); m.insert("c", "𝐜"); m.insert("d", "𝐝");
+        m.insert("e", "𝐞"); m.insert("f", "𝐟"); m.insert("g", "𝐠"); m.insert("h", "𝐡");
+        m.insert("i", "𝐢"); m.insert("j", "𝐣"); m.insert("k", "𝐤"); m.insert("l", "𝐥");
+        m.insert("m", "𝐦"); m.insert("n", "𝐧"); m.insert("o", "𝐨"); m.insert("p", "𝐩");
+        m.insert("q", "𝐪"); m.insert("r", "𝐫"); m.insert("s", "𝐬"); m.insert("t", "𝐭");
+        m.insert("u", "𝐮"); m.insert("v", "𝐯"); m.insert("w", "𝐰"); m.insert("x", "𝐱");
+        m.insert("y", "𝐲"); m.insert("z", "𝐳");
+        // Bold Greek letters
+        m.insert("\\alpha", "𝛂"); m.insert("\\beta", "𝛃"); m.insert("\\gamma", "𝛄");
+        m.insert("\\delta", "𝛅"); m.insert("\\epsilon", "𝛆"); m.insert("\\zeta", "𝛇");
+        m.insert("\\eta", "𝛈"); m.insert("\\theta", "𝛉"); m.insert("\\iota", "𝛊");
+        m.insert("\\kappa", "𝛋"); m.insert("\\lambda", "𝛌"); m.insert("\\mu", "𝛍");
+        m.insert("\\nu", "𝛎"); m.insert("\\xi", "𝛏"); m.insert("\\pi", "𝛑");
+        m.insert("\\rho", "𝛒"); m.insert("\\sigma", "𝛔"); m.insert("\\tau", "𝛕");
+        m.insert("\\upsilon", "𝛖"); m.insert("\\phi", "𝛗"); m.insert("\\chi", "𝛘");
+        m.insert("\\psi", "𝛙"); m.insert("\\omega", "𝛚");
+        m.insert("\\Gamma", "𝚪"); m.insert("\\Delta", "𝚫"); m.insert("\\Theta", "𝚯");
+        m.insert("\\Lambda", "𝚲"); m.insert("\\Xi", "𝚵"); m.insert("\\Pi", "𝚷");
+        m.insert("\\Sigma", "𝚺"); m.insert("\\Upsilon", "𝚼"); m.insert("\\Phi", "𝚽");
+        m.insert("\\Chi", "𝚾"); m.insert("\\Psi", "𝚿"); m.insert("\\Omega", "𝛀");
+        m
+    };
+
+    pub static ref ITALIC_SYMBOLS: HashMap<&'static str, &'static str> = {
+        let mut m = HashMap::new();
+        // Italic uppercase letters
+        m.insert("A", "𝐴"); m.insert("B", "𝐵"); m.insert("C", "𝐶"); m.insert("D", "𝐷");
+        m.insert("E", "𝐸"); m.insert("F", "𝐹"); m.insert("G", "𝐺"); m.insert("H", "𝐻");
+        m.insert("I", "𝐼"); m.insert("J", "𝐽"); m.insert("K", "𝐾"); m.insert("L", "𝐿");
+        m.insert("M", "𝑀"); m.insert("N", "𝑁"); m.insert("O", "𝑂"); m.insert("P", "𝑃");
+        m.insert("Q", "𝑄"); m.insert("R", "𝑅"); m.insert("S", "𝑆"); m.insert("T", "𝑇");
+        m.insert("U", "𝑈"); m.insert("V", "𝑉"); m.insert("W", "𝑊"); m.insert("X", "𝑋");
+        m.insert("Y", "𝑌"); m.insert("Z", "𝑍");
+        // Italic lowercase letters
+        m.insert("a", "𝑎"); m.insert("b", "𝑏"); m.insert("c", "𝑐"); m.insert("d", "𝑑");
+        m.insert("e", "𝑒"); m.insert("f", "𝑓"); m.insert("g", "𝑔"); m.insert("h", "ℎ");
+        m.insert("i", "𝑖"); m.insert("j", "𝑗"); m.insert("k", "𝑘"); m.insert("l", "𝑙");
+        m.insert("m", "𝑚"); m.insert("n", "𝑛"); m.insert("o", "𝑜"); m.insert("p", "𝑝");
+        m.insert("q", "𝑞"); m.insert("r", "𝑟"); m.insert("s", "𝑠"); m.insert("t", "𝑡");
+        m.insert("u", "𝑢"); m.insert("v", "𝑣"); m.insert("w", "𝑤"); m.insert("x", "𝑥");
+        m.insert("y", "𝑦"); m.insert("z", "𝑧");
+        m
+    };
+
+    pub static ref SANS_SYMBOLS: HashMap<&'static str, &'static str> = {
+        let mut m = HashMap::new();
+        // Sans-serif uppercase letters
+        m.insert("A", "𝖠"); m.insert("B", "𝖡"); m.insert("C", "𝖢"); m.insert("D", "𝖣");
+        m.insert("E", "𝖤"); m.insert("F", "𝖥"); m.insert("G", "𝖦"); m.insert("H", "𝖧");
+        m.insert("I", "𝖨"); m.insert("J", "𝖩"); m.insert("K", "𝖪"); m.insert("L", "𝖫");
+        m.insert("M", "𝖬"); m.insert("N", "𝖭"); m.insert("O", "𝖮"); m.insert("P", "𝖯");
+        m.insert("Q", "𝖰"); m.insert("R", "𝖱"); m.insert("S", "𝖲"); m.insert("T", "𝖳");
+        m.insert("U", "𝖴"); m.insert("V", "𝖵"); m.insert("W", "𝖶"); m.insert("X", "𝖷");
+        m.insert("Y", "𝖸"); m.insert("Z", "𝖹");
+        // Sans-serif lowercase letters
+        m.insert("a", "𝖺"); m.insert("b", "𝖻"); m.insert("c", "𝖼"); m.insert("d", "𝖽");
+        m.insert("e", "𝖾"); m.insert("f", "𝖿"); m.insert("g", "𝗀"); m.insert("h", "𝗁");
+        m.insert("i", "𝗂"); m.insert("j", "𝗃"); m.insert("k", "𝗄"); m.insert("l", "𝗅");
+        m.insert("m", "𝗆"); m.insert("n", "𝗇"); m.insert("o", "𝗈"); m.insert("p", "𝗉");
+        m.insert("q", "𝗊"); m.insert("r", "𝗋"); m.insert("s", "𝗌"); m.insert("t", "𝗍");
+        m.insert("u", "𝗎"); m.insert("v", "𝗏"); m.insert("w", "𝗐"); m.insert("x", "𝗑");
+        m.insert("y", "𝗒"); m.insert("z", "𝗓");
+        m
+    };
+
+    pub static ref MONO_SYMBOLS: HashMap<&'static str, &'static str> = {
+        let mut m = HashMap::new();
+        // Monospace uppercase letters
+        m.insert("A", "𝙰"); m.insert("B", "𝙱"); m.insert("C", "𝙲"); m.insert("D", "𝙳");
+        m.insert("E", "𝙴"); m.insert("F", "𝙵"); m.insert("G", "𝙶"); m.insert("H", "𝙷");
+        m.insert("I", "𝙸"); m.insert("J", "𝙹"); m.insert("K", "𝙺"); m.insert("L", "𝙻");
+        m.insert("M", "𝙼"); m.insert("N", "𝙽"); m.insert("O", "𝙾"); m.insert("P", "𝙿");
+        m.insert("Q", "𝚀"); m.insert("R", "𝚁"); m.insert("S", "𝚂"); m.insert("T", "𝚃");
+        m.insert("U", "𝚄"); m.insert("V", "𝚅"); m.insert("W", "𝚆"); m.insert("X", "𝚇");
+        m.insert("Y", "𝚈"); m.insert("Z", "𝚉");
+        // Monospace lowercase letters
+        m.insert("a", "𝚊"); m.insert("b", "𝚋"); m.insert("c", "𝚌"); m.insert("d", "𝚍");
+        m.insert("e", "𝚎"); m.insert("f", "𝚏"); m.insert("g", "𝚐"); m.insert("h", "𝚑");
+        m.insert("i", "𝚒"); m.insert("j", "𝚓"); m.insert("k", "𝚔"); m.insert("l", "𝚕");
+        m.insert("m", "𝚖"); m.insert("n", "𝚗"); m.insert("o", "𝚘"); m.insert("p", "𝚙");
+        m.insert("q", "𝚚"); m.insert("r", "𝚛"); m.insert("s", "𝚜"); m.insert("t", "𝚝");
+        m.insert("u", "𝚞"); m.insert("v", "𝚟"); m.insert("w", "𝚠"); m.insert("x", "𝚡");
+        m.insert("y", "𝚢"); m.insert("z", "𝚣");
+        m
+    };
+
+    pub static ref BLACKBOARD_SYMBOLS: HashMap<&'static str, &'static str> = {
+        let mut m = HashMap::new();
+        // Double-struck (blackboard bold) letters
+        m.insert("A", "𝔸"); m.insert("B", "𝔹"); m.insert("C", "ℂ"); m.insert("D", "𝔻");
+        m.insert("E", "𝔼"); m.insert("F", "𝔽"); m.insert("G", "𝔾"); m.insert("H", "ℍ");
+        m.insert("I", "𝕀"); m.insert("J", "𝕁"); m.insert("K", "𝕂"); m.insert("L", "𝕃");
+        m.insert("M", "𝕄"); m.insert("N", "ℕ"); m.insert("O", "𝕆"); m.insert("P", "ℙ");
+        m.insert("Q", "ℚ"); m.insert("R", "ℝ"); m.insert("S", "𝕊"); m.insert("T", "𝕋");
+        m.insert("U", "𝕌"); m.insert("V", "𝕍"); m.insert("W", "𝕎"); m.insert("X", "𝕏");
+        m.insert("Y", "𝕐"); m.insert("Z", "ℤ");
+        m
+    };
+
+    pub static ref SCRIPT_SYMBOLS: HashMap<&'static str, &'static str> = {
+        let mut m = HashMap::new();
+        // Script/calligraphic letters
+        m.insert("A", "𝒜"); m.insert("B", "ℬ"); m.insert("C", "𝒞"); m.insert("D", "𝒟");
+        m.insert("E", "ℰ"); m.insert("F", "ℱ"); m.insert("G", "𝒢"); m.insert("H", "ℋ");
+        m.insert("I", "ℐ"); m.insert("J", "𝒥"); m.insert("K", "𝒦"); m.insert("L", "ℒ");
+        m.insert("M", "ℳ"); m.insert("N", "𝒩"); m.insert("O", "𝒪"); m.insert("P", "𝒫");
+        m.insert("Q", "𝒬"); m.insert("R", "ℛ"); m.insert("S", "𝒮"); m.insert("T", "𝒯");
+        m.insert("U", "𝒰"); m.insert("V", "𝒱"); m.insert("W", "𝒲"); m.insert("X", "𝒳");
+        m.insert("Y", "𝒴"); m.insert("Z", "𝒵");
+        m
+    };
+
+    pub static ref FRAKTUR_SYMBOLS: HashMap<&'static str, &'static str> = {
+        let mut m = HashMap::new();
+        // Fraktur uppercase letters
+        m.insert("A", "𝔄"); m.insert("B", "𝔅"); m.insert("C", "ℭ"); m.insert("D", "𝔇");
+        m.insert("E", "𝔈"); m.insert("F", "𝔉"); m.insert("G", "𝔊"); m.insert("H", "ℌ");
+        m.insert("I", "ℑ"); m.insert("J", "𝔍"); m.insert("K", "𝔎"); m.insert("L", "𝔏");
+        m.insert("M", "𝔐"); m.insert("N", "𝔑"); m.insert("O", "𝔒"); m.insert("P", "𝔓");
+        m.insert("Q", "𝔔"); m.insert("R", "ℜ"); m.insert("S", "𝔖"); m.insert("T", "𝔗");
+        m.insert("U", "𝔘"); m.insert("V", "𝔙"); m.insert("W", "𝔚"); m.insert("X", "𝔛");
+        m.insert("Y", "𝔜"); m.insert("Z", "ℨ");
+        // Fraktur lowercase letters
+        m.insert("a", "𝔞"); m.insert("b", "𝔟"); m.insert("c", "𝔠"); m.insert("d", "𝔡");
+        m.insert("e", "𝔢"); m.insert("f", "𝔣"); m.insert("g", "𝔤"); m.insert("h", "𝔥");
+        m.insert("i", "𝔦"); m.insert("j", "𝔧"); m.insert("k", "𝔨"); m.insert("l", "𝔩");
+        m.insert("m", "𝔪"); m.insert("n", "𝔫"); m.insert("o", "𝔬"); m.insert("p", "𝔭");
+        m.insert("q", "𝔮"); m.insert("r", "𝔯"); m.insert("s", "𝔰"); m.insert("t", "𝔱");
+        m.insert("u", "𝔲"); m.insert("v", "𝔳"); m.insert("w", "𝔴"); m.insert("x", "𝔵");
+        m.insert("y", "𝔶"); m.insert("z", "𝔷");
+        m
+    };
+
+    pub static ref DOUBLE_STRUCK_SYMBOLS: HashMap<&'static str, &'static str> = {
+        let mut m = HashMap::new();
+        // Double-struck digits
+        m.insert("0", "𝟘"); m.insert("1", "𝟙"); m.insert("2", "𝟚"); m.insert("3", "𝟛");
+        m.insert("4", "𝟜"); m.insert("5", "𝟝"); m.insert("6", "𝟞"); m.insert("7", "𝟟");
+        m.insert("8", "𝟠"); m.insert("9", "𝟡");
         m
     };
 }
@@ -525,4 +850,21 @@ lazy_static! {
 // Return the actual Unicode character or the original string
 pub fn lookup_math_symbol(s: &str) -> String {
     MATH_SYMBOLS.get(s).copied().unwrap_or(s).to_string()
+}
+
+// Return the font-styled character based on font type
+pub fn lookup_font_symbol(text: &str, font_type: &str) -> String {
+    let symbol_map = match font_type {
+        "bold" => &*BOLD_SYMBOLS,
+        "italic" => &*ITALIC_SYMBOLS,
+        "sans" => &*SANS_SYMBOLS,
+        "mono" => &*MONO_SYMBOLS,
+        "bb" | "blackboard" => &*BLACKBOARD_SYMBOLS,
+        "cal" | "script" => &*SCRIPT_SYMBOLS,
+        "frak" | "fraktur" => &*FRAKTUR_SYMBOLS,
+        "double" => &*DOUBLE_STRUCK_SYMBOLS,
+        _ => return text.to_string(), // Return original if unknown font type
+    };
+
+    symbol_map.get(text).copied().unwrap_or(text).to_string()
 }

@@ -8,7 +8,7 @@ local M = {}
 --- @class LaTeXConcealOptions
 --- @field enabled boolean: Enable or disable LaTeX conceal. Default is true.
 --- @field conceal string[]?: Enable or disable math symbol concealment. You can add your own custom conceal types here. Default is {"greek", "script", "math", "font", "delim"}.
---- @field ft string[]: A list of filetypes to enable LaTeX conceal. Default is {"tex", "latex", "markdown"}.
+--- @field ft string[]: A list of filetypes to enable LaTeX conceal. Default is {"tex", "latex", "markdown", "typst"}.
 
 -- Default options
 --- @type LaTeXConcealOptions
@@ -22,7 +22,7 @@ local default_opts = {
     "delim",
     "phy",
   },
-  ft = { "tex", "latex", "markdown" },
+  ft = { "tex", "latex", "markdown", "typst" },
 }
 local autocmd = require("latex-conceal.autocmd")
 

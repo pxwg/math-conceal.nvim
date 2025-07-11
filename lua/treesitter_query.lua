@@ -82,19 +82,36 @@ end
 local function lua_func(match, _, source, predicate, metadata)
   -- (#lua_func! @capture key value)
   local capture_id = predicate[2]
-  local node = match[capture_id]
-  -- Exit early if node is nil
-  if not node then
+  local key = predicate[3]
+  local value = predicate[4]
+
+  -- Early exits for invalid parameters
+  if not capture_id or not match[capture_id] or not key then
     return
   end
-  -- Get the node text (for possible future use)
-  local node_text = vim.treesitter.get_node_text(node, source)
-  local key = predicate[3] or "conceal"
-  local value = predicate[4] or "font"
+
+  local node = match[capture_id]
+
+  -- Initialize metadata table once
   if type(metadata[capture_id]) ~= "table" then
     metadata[capture_id] = {}
   end
-  metadata[capture_id][key] = M.get_mathfont_conceal(node_text)
+
+  -- Get node text once and cache it
+  local node_text = vim.treesitter.get_node_text(node, source)
+
+  -- Handle font case
+  if value == "font" then
+    local function_name_id = predicate[3] -- @function_name is the 3rd element
+    local function_name_node = match[function_name_id]
+    local function_name_text = function_name_node and vim.treesitter.get_node_text(function_name_node, source) or "cal"
+
+    metadata[capture_id]["conceal"] = M.get_mathfont_conceal(node_text, "font", function_name_text)
+  elseif key == "conceal" then
+    metadata[capture_id][key] = M.get_mathfont_conceal(node_text)
+  else
+    metadata[capture_id][key] = node_text
+  end
 end
 
 --- @param args LaTeXConcealOptions
@@ -102,21 +119,35 @@ local function load_queries(args)
   vim.treesitter.query.add_predicate("has-grandparent?", hasgrandparent, { force = true })
   vim.treesitter.query.add_directive("set-pairs!", setpairs, { force = true })
   vim.treesitter.query.add_directive("lua_func!", lua_func, { force = true })
-  local out = vim.treesitter.query.get_files("latex", "highlights")
-  -- local out = {}
+
+  -- Load LaTeX queries
+  local latex_out = vim.treesitter.query.get_files("latex", "highlights")
   for _, name in ipairs(args.conceal) do
     local files = vim.api.nvim_get_runtime_file("queries_config/latex/conceal_" .. name .. ".scm", true)
     for _, file in ipairs(files) do
-      table.insert(out, file)
+      table.insert(latex_out, file)
     end
   end
-  local strings = read_query_files(out)
-  vim.treesitter.query.set("latex", "highlights", strings)
+  local latex_strings = read_query_files(latex_out)
+  vim.treesitter.query.set("latex", "highlights", latex_strings)
+
+  -- Load Typst queries
+  local typst_out = vim.treesitter.query.get_files("typst", "highlights")
+  for _, name in ipairs(args.conceal) do
+    local files = vim.api.nvim_get_runtime_file("queries_config/typst/conceal_" .. name .. ".scm", true)
+    for _, file in ipairs(files) do
+      table.insert(typst_out, file)
+    end
+  end
+  local typst_strings = read_query_files(typst_out)
+  vim.treesitter.query.set("typst", "highlights", typst_strings)
 end
 
 --- @param text string
-function M.get_mathfont_conceal(text)
-  local out = require("utils.latex_conceal").lookup_math_symbol(text)
+--- @param pattern string?
+--- @param type string?
+function M.get_mathfont_conceal(text, pattern, type)
+  local out = require("utils.latex_conceal").lookup_math_symbol(text, pattern, type)
   return out or text
 end
 
