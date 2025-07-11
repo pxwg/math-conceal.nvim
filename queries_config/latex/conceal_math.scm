@@ -29,7 +29,7 @@
    "\\surd" "\\swarrow" "\\times" "\\to" "\\top" 
    "\\triangle" "\\triangleleft" "\\triangleright" "\\uparrow" 
    "\\Uparrow" "\\updownarrow" "\\Updownarrow" "\\vdash" "\\vdots" 
-   "\\vee" "\\wedge" "\\wp" "\\wr" "\\langle" "\\rangle" "\\{" "\\}" "\\," "\\circ"))
+   "\\vee" "\\wedge" "\\wp" "\\wr" "\\langle" "\\rangle" "\\{" "\\}" "\\," "\\circ" "\\dashint"))
   (#has-ancestor? @conceal math_environment inline_formula displayed_equation)
   (#not-has-ancestor? @conceal label_definition text_mode)
   (#lua_func! @conceal "conceal"))
