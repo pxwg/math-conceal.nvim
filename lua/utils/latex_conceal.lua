@@ -81,14 +81,15 @@ end
 --- @param text string: The LaTeX math symbol to convert
 --- @param pattern? string: Conceal or Fonts pattern to use
 --- @param type? string: Type of concealment (e.g., "cal", "frak", "bold", etc.)
+--- @return string: The converted Unicode symbol or the original text if not found
 function M.lookup_math_symbol(text, pattern, type)
   if not ensure_loaded() then
     return text
   end
 
-  return state.lookup_conceal.lookup_math_symbol(text, pattern or "conceal", type or "cal")
+  return state.lookup_conceal.lookup_math_symbol({ text = text, pattern = pattern or "", mode = type or "" })
 end
 
-_G.GetMathSymbol = M.lookup_math_symbol
+-- _G.GetMathSymbol = M.lookup_math_symbol
 
 return M

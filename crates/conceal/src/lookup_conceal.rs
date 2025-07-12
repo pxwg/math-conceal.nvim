@@ -1,11 +1,11 @@
 use lazy_static::lazy_static;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 // TODO: Add custumizeable math symbols with treesitter
 
 lazy_static! {
-    pub static ref MATH_SYMBOLS: HashMap<&'static str, &'static str> = {
-        let mut m = HashMap::new();
+    pub static ref MATH_SYMBOLS: FxHashMap<&'static str, &'static str> = {
+        let mut m = FxHashMap::with_capacity_and_hasher(1032, Default::default());
 
         // Typst symbols - Greek letters
         m.insert("alpha", "α");
@@ -693,179 +693,384 @@ lazy_static! {
         m.insert("A", "ℒ");
         m
     };
-    // Font-specific symbol tables
-    pub static ref BOLD_SYMBOLS: HashMap<&'static str, &'static str> = {
-        let mut m = HashMap::new();
-        // Bold uppercase letters
-        m.insert("A", "𝐀"); m.insert("B", "𝐁"); m.insert("C", "𝐂"); m.insert("D", "𝐃");
-        m.insert("E", "𝐄"); m.insert("F", "𝐅"); m.insert("G", "𝐆"); m.insert("H", "𝐇");
-        m.insert("I", "𝐈"); m.insert("J", "𝐉"); m.insert("K", "𝐊"); m.insert("L", "𝐋");
-        m.insert("M", "𝐌"); m.insert("N", "𝐍"); m.insert("O", "𝐎"); m.insert("P", "𝐏");
-        m.insert("Q", "𝐐"); m.insert("R", "𝐑"); m.insert("S", "𝐒"); m.insert("T", "𝐓");
-        m.insert("U", "𝐔"); m.insert("V", "𝐕"); m.insert("W", "𝐖"); m.insert("X", "𝐗");
-        m.insert("Y", "𝐘"); m.insert("Z", "𝐙");
-        // Bold lowercase letters
-        m.insert("a", "𝐚"); m.insert("b", "𝐛"); m.insert("c", "𝐜"); m.insert("d", "𝐝");
-        m.insert("e", "𝐞"); m.insert("f", "𝐟"); m.insert("g", "𝐠"); m.insert("h", "𝐡");
-        m.insert("i", "𝐢"); m.insert("j", "𝐣"); m.insert("k", "𝐤"); m.insert("l", "𝐥");
-        m.insert("m", "𝐦"); m.insert("n", "𝐧"); m.insert("o", "𝐨"); m.insert("p", "𝐩");
-        m.insert("q", "𝐪"); m.insert("r", "𝐫"); m.insert("s", "𝐬"); m.insert("t", "𝐭");
-        m.insert("u", "𝐮"); m.insert("v", "𝐯"); m.insert("w", "𝐰"); m.insert("x", "𝐱");
-        m.insert("y", "𝐲"); m.insert("z", "𝐳");
-        // Bold Greek letters
-        m.insert("\\alpha", "𝛂"); m.insert("\\beta", "𝛃"); m.insert("\\gamma", "𝛄");
-        m.insert("\\delta", "𝛅"); m.insert("\\epsilon", "𝛆"); m.insert("\\zeta", "𝛇");
-        m.insert("\\eta", "𝛈"); m.insert("\\theta", "𝛉"); m.insert("\\iota", "𝛊");
-        m.insert("\\kappa", "𝛋"); m.insert("\\lambda", "𝛌"); m.insert("\\mu", "𝛍");
-        m.insert("\\nu", "𝛎"); m.insert("\\xi", "𝛏"); m.insert("\\pi", "𝛑");
-        m.insert("\\rho", "𝛒"); m.insert("\\sigma", "𝛔"); m.insert("\\tau", "𝛕");
-        m.insert("\\upsilon", "𝛖"); m.insert("\\phi", "𝛗"); m.insert("\\chi", "𝛘");
-        m.insert("\\psi", "𝛙"); m.insert("\\omega", "𝛚");
-        m.insert("\\Gamma", "𝚪"); m.insert("\\Delta", "𝚫"); m.insert("\\Theta", "𝚯");
-        m.insert("\\Lambda", "𝚲"); m.insert("\\Xi", "𝚵"); m.insert("\\Pi", "𝚷");
-        m.insert("\\Sigma", "𝚺"); m.insert("\\Upsilon", "𝚼"); m.insert("\\Phi", "𝚽");
-        m.insert("\\Chi", "𝚾"); m.insert("\\Psi", "𝚿"); m.insert("\\Omega", "𝛀");
-        m
-    };
-
-    pub static ref ITALIC_SYMBOLS: HashMap<&'static str, &'static str> = {
-        let mut m = HashMap::new();
-        // Italic uppercase letters
-        m.insert("A", "𝐴"); m.insert("B", "𝐵"); m.insert("C", "𝐶"); m.insert("D", "𝐷");
-        m.insert("E", "𝐸"); m.insert("F", "𝐹"); m.insert("G", "𝐺"); m.insert("H", "𝐻");
-        m.insert("I", "𝐼"); m.insert("J", "𝐽"); m.insert("K", "𝐾"); m.insert("L", "𝐿");
-        m.insert("M", "𝑀"); m.insert("N", "𝑁"); m.insert("O", "𝑂"); m.insert("P", "𝑃");
-        m.insert("Q", "𝑄"); m.insert("R", "𝑅"); m.insert("S", "𝑆"); m.insert("T", "𝑇");
-        m.insert("U", "𝑈"); m.insert("V", "𝑉"); m.insert("W", "𝑊"); m.insert("X", "𝑋");
-        m.insert("Y", "𝑌"); m.insert("Z", "𝑍");
-        // Italic lowercase letters
-        m.insert("a", "𝑎"); m.insert("b", "𝑏"); m.insert("c", "𝑐"); m.insert("d", "𝑑");
-        m.insert("e", "𝑒"); m.insert("f", "𝑓"); m.insert("g", "𝑔"); m.insert("h", "ℎ");
-        m.insert("i", "𝑖"); m.insert("j", "𝑗"); m.insert("k", "𝑘"); m.insert("l", "𝑙");
-        m.insert("m", "𝑚"); m.insert("n", "𝑛"); m.insert("o", "𝑜"); m.insert("p", "𝑝");
-        m.insert("q", "𝑞"); m.insert("r", "𝑟"); m.insert("s", "𝑠"); m.insert("t", "𝑡");
-        m.insert("u", "𝑢"); m.insert("v", "𝑣"); m.insert("w", "𝑤"); m.insert("x", "𝑥");
-        m.insert("y", "𝑦"); m.insert("z", "𝑧");
-        m
-    };
-
-    pub static ref SANS_SYMBOLS: HashMap<&'static str, &'static str> = {
-        let mut m = HashMap::new();
-        // Sans-serif uppercase letters
-        m.insert("A", "𝖠"); m.insert("B", "𝖡"); m.insert("C", "𝖢"); m.insert("D", "𝖣");
-        m.insert("E", "𝖤"); m.insert("F", "𝖥"); m.insert("G", "𝖦"); m.insert("H", "𝖧");
-        m.insert("I", "𝖨"); m.insert("J", "𝖩"); m.insert("K", "𝖪"); m.insert("L", "𝖫");
-        m.insert("M", "𝖬"); m.insert("N", "𝖭"); m.insert("O", "𝖮"); m.insert("P", "𝖯");
-        m.insert("Q", "𝖰"); m.insert("R", "𝖱"); m.insert("S", "𝖲"); m.insert("T", "𝖳");
-        m.insert("U", "𝖴"); m.insert("V", "𝖵"); m.insert("W", "𝖶"); m.insert("X", "𝖷");
-        m.insert("Y", "𝖸"); m.insert("Z", "𝖹");
-        // Sans-serif lowercase letters
-        m.insert("a", "𝖺"); m.insert("b", "𝖻"); m.insert("c", "𝖼"); m.insert("d", "𝖽");
-        m.insert("e", "𝖾"); m.insert("f", "𝖿"); m.insert("g", "𝗀"); m.insert("h", "𝗁");
-        m.insert("i", "𝗂"); m.insert("j", "𝗃"); m.insert("k", "𝗄"); m.insert("l", "𝗅");
-        m.insert("m", "𝗆"); m.insert("n", "𝗇"); m.insert("o", "𝗈"); m.insert("p", "𝗉");
-        m.insert("q", "𝗊"); m.insert("r", "𝗋"); m.insert("s", "𝗌"); m.insert("t", "𝗍");
-        m.insert("u", "𝗎"); m.insert("v", "𝗏"); m.insert("w", "𝗐"); m.insert("x", "𝗑");
-        m.insert("y", "𝗒"); m.insert("z", "𝗓");
-        m
-    };
-
-    pub static ref MONO_SYMBOLS: HashMap<&'static str, &'static str> = {
-        let mut m = HashMap::new();
-        // Monospace uppercase letters
-        m.insert("A", "𝙰"); m.insert("B", "𝙱"); m.insert("C", "𝙲"); m.insert("D", "𝙳");
-        m.insert("E", "𝙴"); m.insert("F", "𝙵"); m.insert("G", "𝙶"); m.insert("H", "𝙷");
-        m.insert("I", "𝙸"); m.insert("J", "𝙹"); m.insert("K", "𝙺"); m.insert("L", "𝙻");
-        m.insert("M", "𝙼"); m.insert("N", "𝙽"); m.insert("O", "𝙾"); m.insert("P", "𝙿");
-        m.insert("Q", "𝚀"); m.insert("R", "𝚁"); m.insert("S", "𝚂"); m.insert("T", "𝚃");
-        m.insert("U", "𝚄"); m.insert("V", "𝚅"); m.insert("W", "𝚆"); m.insert("X", "𝚇");
-        m.insert("Y", "𝚈"); m.insert("Z", "𝚉");
-        // Monospace lowercase letters
-        m.insert("a", "𝚊"); m.insert("b", "𝚋"); m.insert("c", "𝚌"); m.insert("d", "𝚍");
-        m.insert("e", "𝚎"); m.insert("f", "𝚏"); m.insert("g", "𝚐"); m.insert("h", "𝚑");
-        m.insert("i", "𝚒"); m.insert("j", "𝚓"); m.insert("k", "𝚔"); m.insert("l", "𝚕");
-        m.insert("m", "𝚖"); m.insert("n", "𝚗"); m.insert("o", "𝚘"); m.insert("p", "𝚙");
-        m.insert("q", "𝚚"); m.insert("r", "𝚛"); m.insert("s", "𝚜"); m.insert("t", "𝚝");
-        m.insert("u", "𝚞"); m.insert("v", "𝚟"); m.insert("w", "𝚠"); m.insert("x", "𝚡");
-        m.insert("y", "𝚢"); m.insert("z", "𝚣");
-        m
-    };
-
-    pub static ref BLACKBOARD_SYMBOLS: HashMap<&'static str, &'static str> = {
-        let mut m = HashMap::new();
-        // Double-struck (blackboard bold) letters
-        m.insert("A", "𝔸"); m.insert("B", "𝔹"); m.insert("C", "ℂ"); m.insert("D", "𝔻");
-        m.insert("E", "𝔼"); m.insert("F", "𝔽"); m.insert("G", "𝔾"); m.insert("H", "ℍ");
-        m.insert("I", "𝕀"); m.insert("J", "𝕁"); m.insert("K", "𝕂"); m.insert("L", "𝕃");
-        m.insert("M", "𝕄"); m.insert("N", "ℕ"); m.insert("O", "𝕆"); m.insert("P", "ℙ");
-        m.insert("Q", "ℚ"); m.insert("R", "ℝ"); m.insert("S", "𝕊"); m.insert("T", "𝕋");
-        m.insert("U", "𝕌"); m.insert("V", "𝕍"); m.insert("W", "𝕎"); m.insert("X", "𝕏");
-        m.insert("Y", "𝕐"); m.insert("Z", "ℤ");
-        m
-    };
-
-    pub static ref SCRIPT_SYMBOLS: HashMap<&'static str, &'static str> = {
-        let mut m = HashMap::new();
-        // Script/calligraphic letters
-        m.insert("A", "𝒜"); m.insert("B", "ℬ"); m.insert("C", "𝒞"); m.insert("D", "𝒟");
-        m.insert("E", "ℰ"); m.insert("F", "ℱ"); m.insert("G", "𝒢"); m.insert("H", "ℋ");
-        m.insert("I", "ℐ"); m.insert("J", "𝒥"); m.insert("K", "𝒦"); m.insert("L", "ℒ");
-        m.insert("M", "ℳ"); m.insert("N", "𝒩"); m.insert("O", "𝒪"); m.insert("P", "𝒫");
-        m.insert("Q", "𝒬"); m.insert("R", "ℛ"); m.insert("S", "𝒮"); m.insert("T", "𝒯");
-        m.insert("U", "𝒰"); m.insert("V", "𝒱"); m.insert("W", "𝒲"); m.insert("X", "𝒳");
-        m.insert("Y", "𝒴"); m.insert("Z", "𝒵");
-        m
-    };
-
-    pub static ref FRAKTUR_SYMBOLS: HashMap<&'static str, &'static str> = {
-        let mut m = HashMap::new();
-        // Fraktur uppercase letters
-        m.insert("A", "𝔄"); m.insert("B", "𝔅"); m.insert("C", "ℭ"); m.insert("D", "𝔇");
-        m.insert("E", "𝔈"); m.insert("F", "𝔉"); m.insert("G", "𝔊"); m.insert("H", "ℌ");
-        m.insert("I", "ℑ"); m.insert("J", "𝔍"); m.insert("K", "𝔎"); m.insert("L", "𝔏");
-        m.insert("M", "𝔐"); m.insert("N", "𝔑"); m.insert("O", "𝔒"); m.insert("P", "𝔓");
-        m.insert("Q", "𝔔"); m.insert("R", "ℜ"); m.insert("S", "𝔖"); m.insert("T", "𝔗");
-        m.insert("U", "𝔘"); m.insert("V", "𝔙"); m.insert("W", "𝔚"); m.insert("X", "𝔛");
-        m.insert("Y", "𝔜"); m.insert("Z", "ℨ");
-        // Fraktur lowercase letters
-        m.insert("a", "𝔞"); m.insert("b", "𝔟"); m.insert("c", "𝔠"); m.insert("d", "𝔡");
-        m.insert("e", "𝔢"); m.insert("f", "𝔣"); m.insert("g", "𝔤"); m.insert("h", "𝔥");
-        m.insert("i", "𝔦"); m.insert("j", "𝔧"); m.insert("k", "𝔨"); m.insert("l", "𝔩");
-        m.insert("m", "𝔪"); m.insert("n", "𝔫"); m.insert("o", "𝔬"); m.insert("p", "𝔭");
-        m.insert("q", "𝔮"); m.insert("r", "𝔯"); m.insert("s", "𝔰"); m.insert("t", "𝔱");
-        m.insert("u", "𝔲"); m.insert("v", "𝔳"); m.insert("w", "𝔴"); m.insert("x", "𝔵");
-        m.insert("y", "𝔶"); m.insert("z", "𝔷");
-        m
-    };
-
-    pub static ref DOUBLE_STRUCK_SYMBOLS: HashMap<&'static str, &'static str> = {
-        let mut m = HashMap::new();
-        // Double-struck digits
-        m.insert("0", "𝟘"); m.insert("1", "𝟙"); m.insert("2", "𝟚"); m.insert("3", "𝟛");
-        m.insert("4", "𝟜"); m.insert("5", "𝟝"); m.insert("6", "𝟞"); m.insert("7", "𝟟");
-        m.insert("8", "𝟠"); m.insert("9", "𝟡");
+    // pub static ref UNIFIED_FONT_SYMBOLS: FxHashMap<&'static str, &'static str> = {
+    //     let mut m = FxHashMap::with_capacity_and_hasher(50, Default::default());
+    //
+    //     m
+    // };
+    pub static ref UNIFIED_FONT_SYMBOLS: FxHashMap<&'static str, &'static str> = {
+        let mut m = FxHashMap::with_capacity_and_hasher(407, Default::default());
+        m.insert("bold:A", "𝐀");
+        m.insert("bold:B", "𝐁");
+        m.insert("bold:C", "𝐂");
+        m.insert("bold:D", "𝐃");
+        m.insert("bold:E", "𝐄");
+        m.insert("bold:F", "𝐅");
+        m.insert("bold:G", "𝐆");
+        m.insert("bold:H", "𝐇");
+        m.insert("bold:I", "𝐈");
+        m.insert("bold:J", "𝐉");
+        m.insert("bold:K", "𝐊");
+        m.insert("bold:L", "𝐋");
+        m.insert("bold:M", "𝐌");
+        m.insert("bold:N", "𝐍");
+        m.insert("bold:O", "𝐎");
+        m.insert("bold:P", "𝐏");
+        m.insert("bold:Q", "𝐐");
+        m.insert("bold:R", "𝐑");
+        m.insert("bold:S", "𝐒");
+        m.insert("bold:T", "𝐓");
+        m.insert("bold:U", "𝐔");
+        m.insert("bold:V", "𝐕");
+        m.insert("bold:W", "𝐖");
+        m.insert("bold:X", "𝐗");
+        m.insert("bold:Y", "𝐘");
+        m.insert("bold:Z", "𝐙");
+        m.insert("bold:a", "𝐚");
+        m.insert("bold:b", "𝐛");
+        m.insert("bold:c", "𝐜");
+        m.insert("bold:d", "𝐝");
+        m.insert("bold:e", "𝐞");
+        m.insert("bold:f", "𝐟");
+        m.insert("bold:g", "𝐠");
+        m.insert("bold:h", "𝐡");
+        m.insert("bold:i", "𝐢");
+        m.insert("bold:j", "𝐣");
+        m.insert("bold:k", "𝐤");
+        m.insert("bold:l", "𝐥");
+        m.insert("bold:m", "𝐦");
+        m.insert("bold:n", "𝐧");
+        m.insert("bold:o", "𝐨");
+        m.insert("bold:p", "𝐩");
+        m.insert("bold:q", "𝐪");
+        m.insert("bold:r", "𝐫");
+        m.insert("bold:s", "𝐬");
+        m.insert("bold:t", "𝐭");
+        m.insert("bold:u", "𝐮");
+        m.insert("bold:v", "𝐯");
+        m.insert("bold:w", "𝐰");
+        m.insert("bold:x", "𝐱");
+        m.insert("bold:y", "𝐲");
+        m.insert("bold:z", "𝐳");
+        m.insert("bold:\\alpha", "𝛂");
+        m.insert("bold:\\beta", "𝛃");
+        m.insert("bold:\\gamma", "𝛄");
+        m.insert("bold:\\delta", "𝛅");
+        m.insert("bold:\\epsilon", "𝛆");
+        m.insert("bold:\\zeta", "𝛇");
+        m.insert("bold:\\eta", "𝛈");
+        m.insert("bold:\\theta", "𝛉");
+        m.insert("bold:\\iota", "𝛊");
+        m.insert("bold:\\kappa", "𝛋");
+        m.insert("bold:\\lambda", "𝛌");
+        m.insert("bold:\\mu", "𝛍");
+        m.insert("bold:\\nu", "𝛎");
+        m.insert("bold:\\xi", "𝛏");
+        m.insert("bold:\\pi", "𝛑");
+        m.insert("bold:\\rho", "𝛒");
+        m.insert("bold:\\sigma", "𝛔");
+        m.insert("bold:\\tau", "𝛕");
+        m.insert("bold:\\upsilon", "𝛖");
+        m.insert("bold:\\phi", "𝛗");
+        m.insert("bold:\\chi", "𝛘");
+        m.insert("bold:\\psi", "𝛙");
+        m.insert("bold:\\omega", "𝛚");
+        m.insert("bold:\\Gamma", "𝚪");
+        m.insert("bold:\\Delta", "𝚫");
+        m.insert("bold:\\Theta", "𝚯");
+        m.insert("bold:\\Lambda", "𝚲");
+        m.insert("bold:\\Xi", "𝚵");
+        m.insert("bold:\\Pi", "𝚷");
+        m.insert("bold:\\Sigma", "𝚺");
+        m.insert("bold:\\Upsilon", "𝚼");
+        m.insert("bold:\\Phi", "𝚽");
+        m.insert("bold:\\Chi", "𝚾");
+        m.insert("bold:\\Psi", "𝚿");
+        m.insert("bold:\\Omega", "𝛀");
+        m.insert("italic:A", "𝐴");
+        m.insert("italic:B", "𝐵");
+        m.insert("italic:C", "𝐶");
+        m.insert("italic:D", "𝐷");
+        m.insert("italic:E", "𝐸");
+        m.insert("italic:F", "𝐹");
+        m.insert("italic:G", "𝐺");
+        m.insert("italic:H", "𝐻");
+        m.insert("italic:I", "𝐼");
+        m.insert("italic:J", "𝐽");
+        m.insert("italic:K", "𝐾");
+        m.insert("italic:L", "𝐿");
+        m.insert("italic:M", "𝑀");
+        m.insert("italic:N", "𝑁");
+        m.insert("italic:O", "𝑂");
+        m.insert("italic:P", "𝑃");
+        m.insert("italic:Q", "𝑄");
+        m.insert("italic:R", "𝑅");
+        m.insert("italic:S", "𝑆");
+        m.insert("italic:T", "𝑇");
+        m.insert("italic:U", "𝑈");
+        m.insert("italic:V", "𝑉");
+        m.insert("italic:W", "𝑊");
+        m.insert("italic:X", "𝑋");
+        m.insert("italic:Y", "𝑌");
+        m.insert("italic:Z", "𝑍");
+        m.insert("italic:a", "𝑎");
+        m.insert("italic:b", "𝑏");
+        m.insert("italic:c", "𝑐");
+        m.insert("italic:d", "𝑑");
+        m.insert("italic:e", "𝑒");
+        m.insert("italic:f", "𝑓");
+        m.insert("italic:g", "𝑔");
+        m.insert("italic:h", "ℎ");
+        m.insert("italic:i", "𝑖");
+        m.insert("italic:j", "𝑗");
+        m.insert("italic:k", "𝑘");
+        m.insert("italic:l", "𝑙");
+        m.insert("italic:m", "𝑚");
+        m.insert("italic:n", "𝑛");
+        m.insert("italic:o", "𝑜");
+        m.insert("italic:p", "𝑝");
+        m.insert("italic:q", "𝑞");
+        m.insert("italic:r", "𝑟");
+        m.insert("italic:s", "𝑠");
+        m.insert("italic:t", "𝑡");
+        m.insert("italic:u", "𝑢");
+        m.insert("italic:v", "𝑣");
+        m.insert("italic:w", "𝑤");
+        m.insert("italic:x", "𝑥");
+        m.insert("italic:y", "𝑦");
+        m.insert("italic:z", "𝑧");
+        m.insert("sans:A", "𝖠");
+        m.insert("sans:B", "𝖡");
+        m.insert("sans:C", "𝖢");
+        m.insert("sans:D", "𝖣");
+        m.insert("sans:E", "𝖤");
+        m.insert("sans:F", "𝖥");
+        m.insert("sans:G", "𝖦");
+        m.insert("sans:H", "𝖧");
+        m.insert("sans:I", "𝖨");
+        m.insert("sans:J", "𝖩");
+        m.insert("sans:K", "𝖪");
+        m.insert("sans:L", "𝖫");
+        m.insert("sans:M", "𝖬");
+        m.insert("sans:N", "𝖭");
+        m.insert("sans:O", "𝖮");
+        m.insert("sans:P", "𝖯");
+        m.insert("sans:Q", "𝖰");
+        m.insert("sans:R", "𝖱");
+        m.insert("sans:S", "𝖲");
+        m.insert("sans:T", "𝖳");
+        m.insert("sans:U", "𝖴");
+        m.insert("sans:V", "𝖵");
+        m.insert("sans:W", "𝖶");
+        m.insert("sans:X", "𝖷");
+        m.insert("sans:Y", "𝖸");
+        m.insert("sans:Z", "𝖹");
+        m.insert("sans:a", "𝖺");
+        m.insert("sans:b", "𝖻");
+        m.insert("sans:c", "𝖼");
+        m.insert("sans:d", "𝖽");
+        m.insert("sans:e", "𝖾");
+        m.insert("sans:f", "𝖿");
+        m.insert("sans:g", "𝗀");
+        m.insert("sans:h", "𝗁");
+        m.insert("sans:i", "𝗂");
+        m.insert("sans:j", "𝗃");
+        m.insert("sans:k", "𝗄");
+        m.insert("sans:l", "𝗅");
+        m.insert("sans:m", "𝗆");
+        m.insert("sans:n", "𝗇");
+        m.insert("sans:o", "𝗈");
+        m.insert("sans:p", "𝗉");
+        m.insert("sans:q", "𝗊");
+        m.insert("sans:r", "𝗋");
+        m.insert("sans:s", "𝗌");
+        m.insert("sans:t", "𝗍");
+        m.insert("sans:u", "𝗎");
+        m.insert("sans:v", "𝗏");
+        m.insert("sans:w", "𝗐");
+        m.insert("sans:x", "𝗑");
+        m.insert("sans:y", "𝗒");
+        m.insert("sans:z", "𝗓");
+        m.insert("mono:A", "𝙰");
+        m.insert("mono:B", "𝙱");
+        m.insert("mono:C", "𝙲");
+        m.insert("mono:D", "𝙳");
+        m.insert("mono:E", "𝙴");
+        m.insert("mono:F", "𝙵");
+        m.insert("mono:G", "𝙶");
+        m.insert("mono:H", "𝙷");
+        m.insert("mono:I", "𝙸");
+        m.insert("mono:J", "𝙹");
+        m.insert("mono:K", "𝙺");
+        m.insert("mono:L", "𝙻");
+        m.insert("mono:M", "𝙼");
+        m.insert("mono:N", "𝙽");
+        m.insert("mono:O", "𝙾");
+        m.insert("mono:P", "𝙿");
+        m.insert("mono:Q", "𝚀");
+        m.insert("mono:R", "𝚁");
+        m.insert("mono:S", "𝚂");
+        m.insert("mono:T", "𝚃");
+        m.insert("mono:U", "𝚄");
+        m.insert("mono:V", "𝚅");
+        m.insert("mono:W", "𝚆");
+        m.insert("mono:X", "𝚇");
+        m.insert("mono:Y", "𝚈");
+        m.insert("mono:Z", "𝚉");
+        m.insert("mono:a", "𝚊");
+        m.insert("mono:b", "𝚋");
+        m.insert("mono:c", "𝚌");
+        m.insert("mono:d", "𝚍");
+        m.insert("mono:e", "𝚎");
+        m.insert("mono:f", "𝚏");
+        m.insert("mono:g", "𝚐");
+        m.insert("mono:h", "𝚑");
+        m.insert("mono:i", "𝚒");
+        m.insert("mono:j", "𝚓");
+        m.insert("mono:k", "𝚔");
+        m.insert("mono:l", "𝚕");
+        m.insert("mono:m", "𝚖");
+        m.insert("mono:n", "𝚗");
+        m.insert("mono:o", "𝚘");
+        m.insert("mono:p", "𝚙");
+        m.insert("mono:q", "𝚚");
+        m.insert("mono:r", "𝚛");
+        m.insert("mono:s", "𝚜");
+        m.insert("mono:t", "𝚝");
+        m.insert("mono:u", "𝚞");
+        m.insert("mono:v", "𝚟");
+        m.insert("mono:w", "𝚠");
+        m.insert("mono:x", "𝚡");
+        m.insert("mono:y", "𝚢");
+        m.insert("mono:z", "𝚣");
+        m.insert("bb:A", "𝔸");
+        m.insert("bb:B", "𝔹");
+        m.insert("bb:C", "ℂ");
+        m.insert("bb:D", "𝔻");
+        m.insert("bb:E", "𝔼");
+        m.insert("bb:F", "𝔽");
+        m.insert("bb:G", "𝔾");
+        m.insert("bb:H", "ℍ");
+        m.insert("bb:I", "𝕀");
+        m.insert("bb:J", "𝕁");
+        m.insert("bb:K", "𝕂");
+        m.insert("bb:L", "𝕃");
+        m.insert("bb:M", "𝕄");
+        m.insert("bb:N", "ℕ");
+        m.insert("bb:O", "𝕆");
+        m.insert("bb:P", "ℙ");
+        m.insert("bb:Q", "ℚ");
+        m.insert("bb:R", "ℝ");
+        m.insert("bb:S", "𝕊");
+        m.insert("bb:T", "𝕋");
+        m.insert("bb:U", "𝕌");
+        m.insert("bb:V", "𝕍");
+        m.insert("bb:W", "𝕎");
+        m.insert("bb:X", "𝕏");
+        m.insert("bb:Y", "𝕐");
+        m.insert("bb:Z", "ℤ");
+        m.insert("script:A", "𝒜");
+        m.insert("script:B", "ℬ");
+        m.insert("script:C", "𝒞");
+        m.insert("script:D", "𝒟");
+        m.insert("script:E", "ℰ");
+        m.insert("script:F", "ℱ");
+        m.insert("script:G", "𝒢");
+        m.insert("script:H", "ℋ");
+        m.insert("script:I", "ℐ");
+        m.insert("script:J", "𝒥");
+        m.insert("script:K", "𝒦");
+        m.insert("script:L", "ℒ");
+        m.insert("script:M", "ℳ");
+        m.insert("script:N", "𝒩");
+        m.insert("script:O", "𝒪");
+        m.insert("script:P", "𝒫");
+        m.insert("script:Q", "𝒬");
+        m.insert("script:R", "ℛ");
+        m.insert("script:S", "𝒮");
+        m.insert("script:T", "𝒯");
+        m.insert("script:U", "𝒰");
+        m.insert("script:V", "𝒱");
+        m.insert("script:W", "𝒲");
+        m.insert("script:X", "𝒳");
+        m.insert("script:Y", "𝒴");
+        m.insert("script:Z", "𝒵");
+        m.insert("frak:A", "𝔄");
+        m.insert("frak:B", "𝔅");
+        m.insert("frak:C", "ℭ");
+        m.insert("frak:D", "𝔇");
+        m.insert("frak:E", "𝔈");
+        m.insert("frak:F", "𝔉");
+        m.insert("frak:G", "𝔊");
+        m.insert("frak:H", "ℌ");
+        m.insert("frak:I", "ℑ");
+        m.insert("frak:J", "𝔍");
+        m.insert("frak:K", "𝔎");
+        m.insert("frak:L", "𝔏");
+        m.insert("frak:M", "𝔐");
+        m.insert("frak:N", "𝔑");
+        m.insert("frak:O", "𝔒");
+        m.insert("frak:P", "𝔓");
+        m.insert("frak:Q", "𝔔");
+        m.insert("frak:R", "ℜ");
+        m.insert("frak:S", "𝔖");
+        m.insert("frak:T", "𝔗");
+        m.insert("frak:U", "𝔘");
+        m.insert("frak:V", "𝔙");
+        m.insert("frak:W", "𝔚");
+        m.insert("frak:X", "𝔛");
+        m.insert("frak:Y", "𝔜");
+        m.insert("frak:Z", "ℨ");
+        m.insert("frak:a", "𝔞");
+        m.insert("frak:b", "𝔟");
+        m.insert("frak:c", "𝔠");
+        m.insert("frak:d", "𝔡");
+        m.insert("frak:e", "𝔢");
+        m.insert("frak:f", "𝔣");
+        m.insert("frak:g", "𝔤");
+        m.insert("frak:h", "𝔥");
+        m.insert("frak:i", "𝔦");
+        m.insert("frak:j", "𝔧");
+        m.insert("frak:k", "𝔨");
+        m.insert("frak:l", "𝔩");
+        m.insert("frak:m", "𝔪");
+        m.insert("frak:n", "𝔫");
+        m.insert("frak:o", "𝔬");
+        m.insert("frak:p", "𝔭");
+        m.insert("frak:q", "𝔮");
+        m.insert("frak:r", "𝔯");
+        m.insert("frak:s", "𝔰");
+        m.insert("frak:t", "𝔱");
+        m.insert("frak:u", "𝔲");
+        m.insert("frak:v", "𝔳");
+        m.insert("frak:w", "𝔴");
+        m.insert("frak:x", "𝔵");
+        m.insert("frak:y", "𝔶");
+        m.insert("frak:z", "𝔷");
+        m.insert("double:0", "𝟘");
+        m.insert("double:1", "𝟙");
+        m.insert("double:2", "𝟚");
+        m.insert("double:3", "𝟛");
+        m.insert("double:4", "𝟜");
+        m.insert("double:5", "𝟝");
+        m.insert("double:6", "𝟞");
+        m.insert("double:7", "𝟟");
+        m.insert("double:8", "𝟠");
+        m.insert("double:9", "𝟡");
         m
     };
 }
 
 // Return the actual Unicode character or the original string
-pub fn lookup_math_symbol(s: &str) -> String {
-    MATH_SYMBOLS.get(s).copied().unwrap_or(s).to_string()
+pub fn lookup_math_symbol(s: &str) -> &str {
+    MATH_SYMBOLS.get(s).copied().unwrap_or(s)
 }
 
 // Return the font-styled character based on font type
-pub fn lookup_font_symbol(text: &str, font_type: &str) -> String {
-    let symbol_map = match font_type {
-        "bold" => &*BOLD_SYMBOLS,
-        "italic" => &*ITALIC_SYMBOLS,
-        "sans" => &*SANS_SYMBOLS,
-        "mono" => &*MONO_SYMBOLS,
-        "bb" | "blackboard" => &*BLACKBOARD_SYMBOLS,
-        "cal" | "script" => &*SCRIPT_SYMBOLS,
-        "frak" | "fraktur" => &*FRAKTUR_SYMBOLS,
-        "double" => &*DOUBLE_STRUCK_SYMBOLS,
-        _ => return text.to_string(), // Return original if unknown font type
-    };
-
-    symbol_map.get(text).copied().unwrap_or(text).to_string()
+pub fn lookup_font_symbol<'a>(text: &'a str, font_type: &'a str) -> &'a str {
+    let key = format!("{font_type}:{text}");
+    UNIFIED_FONT_SYMBOLS
+        .get(key.as_str())
+        .copied()
+        .unwrap_or(text)
 }
