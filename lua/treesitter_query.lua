@@ -85,34 +85,37 @@ local function lua_func(match, _, source, predicate, metadata)
   local key = predicate[3]
   local value = predicate[4]
 
-  -- Early exits for invalid parameters
   if not capture_id or not match[capture_id] or not key then
     return
   end
 
   local node = match[capture_id]
 
-  -- Initialize metadata table once
   if type(metadata[capture_id]) ~= "table" then
     metadata[capture_id] = {}
   end
 
-  -- Get node text once and cache it
   local node_text = vim.treesitter.get_node_text(node, source)
-
-  -- Handle font case
-  if value == "font" then
-    local function_name_id = predicate[3] -- @function_name is the 3rd element
-    local function_name_node = match[function_name_id]
-    local function_name_text = function_name_node and vim.treesitter.get_node_text(function_name_node, source) or "cal"
-
-    metadata[capture_id]["conceal"] = M.get_mathfont_conceal(node_text, "font", function_name_text)
-  elseif key == "conceal" then
-    metadata[capture_id][key] = M.get_mathfont_conceal(node_text, "conceal", value)
-  elseif key == "sub" then
-    metadata[capture_id]["conceal"] = M.get_mathfont_conceal(node_text, "sub", value)
-  elseif key == "sup" then
-    metadata[capture_id]["conceal"] = M.get_mathfont_conceal(node_text, "sup", value)
+  local actions = {
+    font = function()
+      local function_name_id = predicate[3] -- @function_name is the 3rd element
+      local function_name_node = match[function_name_id]
+      local function_name_text = function_name_node and vim.treesitter.get_node_text(function_name_node, source)
+        or "cal"
+      metadata[capture_id]["conceal"] = M.get_mathfont_conceal(node_text, "font", function_name_text)
+    end,
+    conceal = function()
+      metadata[capture_id][key] = M.get_mathfont_conceal(node_text, "conceal", value)
+    end,
+    sub = function()
+      metadata[capture_id]["conceal"] = M.get_mathfont_conceal(node_text, "sub", value)
+    end,
+    sup = function()
+      metadata[capture_id]["conceal"] = M.get_mathfont_conceal(node_text, "sup", value)
+    end,
+  }
+  if actions[key] then
+    actions[key]()
   else
     metadata[capture_id][key] = node_text
   end
