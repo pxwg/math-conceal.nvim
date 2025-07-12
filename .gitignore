@@ -4,3 +4,4 @@ build/
 tree_builder.log
 release/
 target/
+scripts/

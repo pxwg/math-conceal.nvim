@@ -695,11 +695,9 @@ lazy_static! {
         m.insert("A", "ℒ");
         m
     };
-    // pub static ref UNIFIED_FONT_SYMBOLS: FxHashMap<&'static str, &'static str> = {
-    //     let mut m = FxHashMap::with_capacity_and_hasher(50, Default::default());
-    //
-    //     m
-    // };
+
+    //// Unified Font Symbols
+    //// A collection of symbols that are commonly used in mathematical typesetting,
     pub static ref UNIFIED_FONT_SYMBOLS: FxHashMap<&'static str, &'static str> = {
         let mut m = FxHashMap::with_capacity_and_hasher(407, Default::default());
         m.insert("bold:A", "𝐀");
@@ -1127,4 +1125,9 @@ pub fn lookup_font_symbol<'a>(text: &'a str, font_type: &'a str) -> &'a str {
         .get(key.as_str())
         .copied()
         .unwrap_or(text)
+}
+
+// Return the actual Unicode character for the given field
+pub fn lookup_field_symbol(s: &str) -> &str {
+    UNIFIED_FONT_SYMBOLS.get(s).copied().unwrap_or(s)
 }
