@@ -109,6 +109,10 @@ local function lua_func(match, _, source, predicate, metadata)
     metadata[capture_id]["conceal"] = M.get_mathfont_conceal(node_text, "font", function_name_text)
   elseif key == "conceal" then
     metadata[capture_id][key] = M.get_mathfont_conceal(node_text, "conceal", value)
+  elseif key == "sub" then
+    metadata[capture_id]["conceal"] = M.get_mathfont_conceal(node_text, "sub", value)
+  elseif key == "sup" then
+    metadata[capture_id]["conceal"] = M.get_mathfont_conceal(node_text, "sup", value)
   else
     metadata[capture_id][key] = node_text
   end
