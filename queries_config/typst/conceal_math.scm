@@ -31,18 +31,21 @@
  (#lua_func! @typ_math_symbol "conceal")
  (#set! priority 1000))
 
-
-; Superscript and subscript handling
-((group  "(" @_open_paren)
- (#set! conceal "" @_open_paren))
-
-((group ")"  @_close_paren)
- (#set! conceal "" @_close_paren))
-
 ; Special symbols in math mode
 ((symbol) @symbol
 (#any-of? @symbol "+" "-" "*" "/" "=" "<" ">" "(" ")" "[" "]" "{" "}")
 (#has-ancestor? @symbol math formula)
 (#set! priority 90))
 
-; TODO: Conceal frac(a, b) to (a/b) conversion
+; Conceal "frac" and replace with opening parenthesis
+((call
+  item: (ident) @_frac_name
+  (#eq? @_frac_name "frac"))
+ (#set! conceal "" @_frac_name))
+
+; Replace comma with division slash
+((call
+  item: (ident)
+  (_) .  "," @_comma
+  (_))
+ (#set! conceal "/" @_comma))
