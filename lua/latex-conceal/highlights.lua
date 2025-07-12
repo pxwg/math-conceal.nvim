@@ -21,7 +21,7 @@ local function set_highlights()
     ["@typ_math_font"] = { fg = "#f9e2af" }, -- Yellow
     ["@typ_math_symbol"] = { fg = "#a6adc8" }, -- Subtext 0
     ["@typ_phy_symbol"] = { fg = "#a6e3a1" }, -- Green
-    ["@conceal"] = { fg = "#f5e0dc" }, -- Rosewater
+    ["@conceal"] = { fg = "#74c7ec" }, -- Rosewater
     ["@open1"] = { fg = "#6c7086" }, -- Overlay 0
     ["@open2"] = { fg = "#45475a" }, -- Surface 1
     ["@close1"] = { fg = "#313244" }, -- Surface 0
