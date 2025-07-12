@@ -1,4 +1,5 @@
 local M = {}
+local highlights = require("latex-conceal.highlights")
 
 --- TODO: add custum_function setup
 
@@ -16,7 +17,7 @@ local default_opts = {
   enabled = true,
   conceal = {
     "greek",
-    "script",
+    -- "script",
     "math",
     "font",
     "delim",
@@ -27,6 +28,7 @@ local default_opts = {
 local autocmd = require("latex-conceal.autocmd")
 
 function M.setup(opts)
+  highlights.set_highlights()
   M.opts = vim.tbl_deep_extend("force", default_opts, opts or {})
   if M.opts.enabled then
     local success = require("utils.latex_conceal").initialize()
