@@ -116,6 +116,8 @@ local function lua_func(match, _, source, predicate, metadata)
   }
   if actions[key] then
     actions[key]()
+  elseif actions[value] then
+    actions[value]()
   else
     metadata[capture_id][key] = node_text
   end
