@@ -21,7 +21,7 @@ local function set_highlights()
     ["@typ_math_font"] = { fg = "#f9e2b0" },
     ["@typ_math_symbol"] = { fg = "#74c7ed" },
     ["@typ_phy_symbol"] = { fg = "#a6e3a2" },
-    ["@conceal"] = { fg = "#6c7087" },
+    ["@conceal"] = { fg = "#89b4fa" },
     ["@open1"] = { fg = "#7f849d" },
     ["@open2"] = { fg = "#7f849d" },
     ["@close1"] = { fg = "#7f849d" },
