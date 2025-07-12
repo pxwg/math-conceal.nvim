@@ -2,25 +2,25 @@
 
 ; Physics constants and symbols
 (call
-  item: (ident) @conceal
-  (#any-of? @conceal
+  item: (ident) @typ_phy_symbol
+  (#any-of? @typ_phy_symbol
    "hbar" "planck" "boltzmann" "avogadro" "gas" "electron" "proton"
    "neutron" "muon" "tau" "charge" "mass" "energy" "momentum"
    "angular" "spin" "magnetic" "electric" "permittivity" "permeability"
    "speed" "light" "gravity" "acceleration" "force" "pressure"
    "temperature" "entropy" "enthalpy" "helmholtz" "gibbs")
-  ; (#has-ancestor? @conceal math formula)
-  (#lua_func! @conceal "conceal"))
+  ; (#has-ancestor? @typ_phy_symbol math formula)
+  (#lua_func! @typ_phy_symbol "conceal"))
 
 ; Physics units and quantities
-((ident) @conceal
-(#any-of? @conceal
+((ident) @typ_phy_symbol
+(#any-of? @typ_phy_symbol
  "hbar" "planck" "boltzmann" "avogadro" "electron" "proton" "neutron"
  "speed" "light" "gravity" "charge" "mass" "energy" "momentum"
  "angular" "spin" "magnetic" "electric" "force" "pressure"
  "temperature" "entropy" "enthalpy" "helmholtz" "gibbs")
-; (#has-ancestor? @conceal math formula)
-(#lua_func! @conceal "conceal"))
+; (#has-ancestor? @typ_phy_symbol math formula)
+(#lua_func! @typ_phy_symbol "conceal"))
 
 ; Vector and tensor notation
 ((ident) @func

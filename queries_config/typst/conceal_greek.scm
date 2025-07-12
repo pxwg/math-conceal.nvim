@@ -2,8 +2,8 @@
 
 ; Greek letters as function calls
 (call
-  item: ((ident) @conceal
-  (#any-of? @conceal
+  item: ((ident) @typ_greek_symbol
+  (#any-of? @typ_greek_symbol
    "alpha" "beta" "gamma" "delta" "epsilon" "varepsilon" "zeta" "eta" 
    "theta" "vartheta" "iota" "kappa" "lambda" "mu" "nu" "xi" 
    "pi" "varpi" "rho" "varrho" "sigma" "varsigma" "tau" "upsilon" 
@@ -15,8 +15,8 @@
   ; (#lua_func! @conceal "conceal"))
 
 ; Greek letters as direct identifiers  
-(((ident) @conceal
-(#any-of? @conceal
+(((ident) @typ_greek_symbol
+(#any-of? @typ_greek_symbol
  "alpha" "beta" "gamma" "delta" "epsilon" "varepsilon" "zeta" "eta"
  "theta" "vartheta" "iota" "kappa" "lambda" "mu" "nu" "xi"
  "pi" "varpi" "rho" "varrho" "sigma" "varsigma" "tau" "upsilon"
@@ -25,5 +25,5 @@
  "Phi" "Chi" "Psi" "Omega"))
 ; (#has-ancestor? @conceal math formula)
 ; (#set! @conceal "m"))
-(#lua_func! @conceal "conceal"))
+(#lua_func! @typ_greek_symbol "conceal"))
 

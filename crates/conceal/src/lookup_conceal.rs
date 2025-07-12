@@ -52,6 +52,7 @@ lazy_static! {
 
         // Typst math operators and symbols
         m.insert("sum", "∑");
+        m.insert("sqrt", "√");
         m.insert("product", "∏");
         m.insert("integral", "∫");
         m.insert("nabla", "∇");

@@ -3,23 +3,16 @@
 
 ; Math function calls with special symbols
 (call
-  item: (ident) @func
-  (#any-of? @func  "sqrt" "root" "sum" "product" "integral")
+  item: (ident) @typ_math_symbol
+  (#any-of? @typ_math_symbol "root" "sum" "product" "integral")
   ; (#has-ancestor? @func math formula)
-  (#lua_func @conceal "conceal"))
+  (#lua_func! @typ_math_symbol "conceal"))
 
-(((ident) @conceal
-  (#any-of? @conceal "sqrt" "root" "sum" "product" "integral"))
+(((ident) @typ_math_symbol
+  (#any-of? @typ_math_symbol "root" "sum" "product" "integral"))
 ; (#has-ancestor? @conceal math formula)
 ; (#set! @conceal "m"))
-(#lua_func! @conceal "conceal"))
-
-; (((ident) @conceal_l
-;   (#any-of? @conceal "paren.b" "brace.l" "brace.r" "brace.t" "brace.b" "bracket.l" "bracket.l.double" "bracket.r" "bracket.r.double" "bracket.t" "bracket.b" "turtle.l" "turtle.r" "turtle.t " "turtle.b" "bar.v"))
-; ; (#has-ancestor? @conceal math formula)
-; ; (#set! @conceal_l "m"))
-; (#lua_func! @conceal_l "conceal"))
-
+(#lua_func! @typ_math_symbol "conceal"))
 
 ; Superscript and subscript handling
 (attach
@@ -33,27 +26,7 @@
   (#set! priority 110))
 
 ; Special symbols in math mode
-(symbol) @symbol
+((symbol) @symbol
 (#any-of? @symbol "+" "-" "*" "/" "=" "<" ">" "(" ")" "[" "]" "{" "}")
 (#has-ancestor? @symbol math formula)
-(#set! priority 90)
-;
-; ; Math delimiters
-; (group
-;   "(" @open
-;   ")" @close
-;   (#has-ancestor? @open math formula)
-;   (#set! priority 95))
-;
-; (group
-;   "[" @open
-;   "]" @close
-;   (#has-ancestor? @open math formula)
-;   (#set! priority 95))
-;
-; (group
-;   "{" @open
-;   "}" @close
-;   (#has-ancestor? @open math formula)
-;   (#set! priority 95))
-;
+(#set! priority 90))

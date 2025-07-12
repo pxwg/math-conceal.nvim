@@ -2,14 +2,14 @@
 
 ; Bold math symbols
 (call
-  item: (ident) @function_name
-  (#any-of? @function_name "bold" "italic" "cal" "script" "bb" "sans" "mono" "frak" "double")
-  (#set! @function_name conceal "")
+  item: (ident) @typ_font_name
+  (#any-of? @typ_font_name "bold" "italic" "cal" "script" "bb" "sans" "mono" "frak" "double")
+  (#set! @typ_font_name conceal "")
   "(" @left_paren
   (#set! @left_paren conceal "")
   (formula 
     (letter) @letter 
-    (#lua_func! @letter @function_name "font"))
+    (#lua_func! @letter @typ_font_name "font"))
   ")" @right_paren
   (#set! @right_paren conceal ""))
 
@@ -69,13 +69,13 @@
 
 ; Math function calls with special symbols
 (call
-  item: (ident) @func
-  (#any-of? @func "dif")
+  item: (ident) @typ_math_font
+  (#any-of? @typ_math_font "dif")
   ; (#has-ancestor? @func math formula)
   (#set! conceal ""))
 
-(((ident) @math_font
-  (#any-of? @math_font "dif"))
+(((ident) @typ_math_font
+  (#any-of? @typ_math_font "dif"))
 ; (#has-ancestor? @conceal math formula)
 ; (#set! @conceal "m"))
-(#lua_func! @math_font "conceal"))
+(#lua_func! @typ_math_font "conceal"))
