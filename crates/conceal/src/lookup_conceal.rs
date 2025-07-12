@@ -134,6 +134,7 @@ lazy_static! {
         m.insert("turtle.t", "⏠");
         m.insert("turtle.b", "⏡");
         m.insert("bar.v", "|");
+        m.insert("dots", "…");
 
         // Typst delimiters
         m.insert("langle", "⟨");

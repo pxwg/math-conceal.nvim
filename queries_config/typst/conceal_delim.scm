@@ -34,6 +34,14 @@
 (#has-ancestor? @typ_math_delim math formula)
 (#lua_func! @typ_math_delim "conceal"))
 
+; Inline math dollars and quotes
 (math
   "$" @typ_inline_dollar
+  (#set! conceal ""))
+
+(string
+  "\"" @typ_inline_quote
+  (#set! conceal ""))
+(strong
+  "*" @typ_inline_asterisk
   (#set! conceal ""))
