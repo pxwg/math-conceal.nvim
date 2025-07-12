@@ -1,4 +1,5 @@
 local M = {}
+local highlights = require("latex-conceal.highlights")
 
 --- TODO: add custum_function setup
 
@@ -8,7 +9,7 @@ local M = {}
 --- @class LaTeXConcealOptions
 --- @field enabled boolean: Enable or disable LaTeX conceal. Default is true.
 --- @field conceal string[]?: Enable or disable math symbol concealment. You can add your own custom conceal types here. Default is {"greek", "script", "math", "font", "delim"}.
---- @field ft string[]: A list of filetypes to enable LaTeX conceal. Default is {"tex", "latex", "markdown"}.
+--- @field ft string[]: A list of filetypes to enable LaTeX conceal. Default is {"tex", "latex", "markdown", "typst"}.
 
 -- Default options
 --- @type LaTeXConcealOptions
@@ -16,17 +17,18 @@ local default_opts = {
   enabled = true,
   conceal = {
     "greek",
-    "script",
+    -- "script",
     "math",
     "font",
     "delim",
     "phy",
   },
-  ft = { "tex", "latex", "markdown" },
+  ft = { "*.tex", "*.md", "*.typ" },
 }
 local autocmd = require("latex-conceal.autocmd")
 
 function M.setup(opts)
+  highlights.set_highlights()
   M.opts = vim.tbl_deep_extend("force", default_opts, opts or {})
   if M.opts.enabled then
     local success = require("utils.latex_conceal").initialize()

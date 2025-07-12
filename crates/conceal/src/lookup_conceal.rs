@@ -1,528 +1,1842 @@
 use lazy_static::lazy_static;
-use std::collections::HashMap;
-
+use phf::phf_map;
 // TODO: Add custumizeable math symbols with treesitter
 
 lazy_static! {
-    pub static ref MATH_SYMBOLS: HashMap<&'static str, &'static str> = {
-        let mut m = HashMap::new();
-        m.insert("\\mathbb{A}", "𝔸");
-        m.insert("\\mathbb{B}", "𝔹");
-        m.insert("\\mathbb{C}", "ℂ");
-        m.insert("\\mathbb{D}", "𝔻");
-        m.insert("\\mathbb{E}", "𝔼");
-        m.insert("\\mathbb{F}", "𝔽");
-        m.insert("\\mathbb{G}", "𝔾");
-        m.insert("\\mathbb{H}", "ℍ");
-        m.insert("\\mathbb{I}", "𝕀");
-        m.insert("\\mathbb{J}", "𝕁");
-        m.insert("\\mathbb{K}", "𝕂");
-        m.insert("\\mathbb{L}", "𝕃");
-        m.insert("\\mathbb{M}", "𝕄");
-        m.insert("\\mathbb{N}", "ℕ");
-        m.insert("\\mathbb{O}", "𝕆");
-        m.insert("\\mathbb{P}", "ℙ");
-        m.insert("\\mathbb{Q}", "ℚ");
-        m.insert("\\mathbb{R}", "ℝ");
-        m.insert("\\mathbb{S}", "𝕊");
-        m.insert("\\mathbb{T}", "𝕋");
-        m.insert("\\mathbb{U}", "𝕌");
-        m.insert("\\mathbb{V}", "𝕍");
-        m.insert("\\mathbb{W}", "𝕎");
-        m.insert("\\mathbb{X}", "𝕏");
-        m.insert("\\mathbb{Y}", "𝕐");
-        m.insert("\\mathbb{Z}", "ℤ");
-        m.insert("\\mathsf{a}", "𝖺");
-        m.insert("\\mathsf{b}", "𝖻");
-        m.insert("\\mathsf{c}", "𝖼");
-        m.insert("\\mathsf{d}", "𝖽");
-        m.insert("\\mathsf{e}", "𝖾");
-        m.insert("\\mathsf{f}", "𝖿");
-        m.insert("\\mathsf{g}", "𝗀");
-        m.insert("\\mathsf{h}", "𝗁");
-        m.insert("\\mathsf{i}", "𝗂");
-        m.insert("\\mathsf{j}", "𝗃");
-        m.insert("\\mathsf{k}", "𝗄");
-        m.insert("\\mathsf{l}", "𝗅");
-        m.insert("\\mathsf{m}", "𝗆");
-        m.insert("\\mathsf{n}", "𝗇");
-        m.insert("\\mathsf{o}", "𝗈");
-        m.insert("\\mathsf{p}", "𝗉");
-        m.insert("\\mathsf{q}", "𝗊");
-        m.insert("\\mathsf{r}", "𝗋");
-        m.insert("\\mathsf{s}", "𝗌");
-        m.insert("\\mathsf{t}", "𝗍");
-        m.insert("\\mathsf{u}", "𝗎");
-        m.insert("\\mathsf{v}", "𝗏");
-        m.insert("\\mathsf{w}", "𝗐");
-        m.insert("\\mathsf{x}", "𝗑");
-        m.insert("\\mathsf{y}", "𝗒");
-        m.insert("\\mathsf{z}", "𝗓");
-        m.insert("\\mathsf{A}", "𝖠");
-        m.insert("\\mathsf{B}", "𝖡");
-        m.insert("\\mathsf{C}", "𝖢");
-        m.insert("\\mathsf{D}", "𝖣");
-        m.insert("\\mathsf{E}", "𝖤");
-        m.insert("\\mathsf{F}", "𝖥");
-        m.insert("\\mathsf{G}", "𝖦");
-        m.insert("\\mathsf{H}", "𝖧");
-        m.insert("\\mathsf{I}", "𝖨");
-        m.insert("\\mathsf{J}", "𝖩");
-        m.insert("\\mathsf{K}", "𝖪");
-        m.insert("\\mathsf{L}", "𝖫");
-        m.insert("\\mathsf{M}", "𝖬");
-        m.insert("\\mathsf{N}", "𝖭");
-        m.insert("\\mathsf{O}", "𝖮");
-        m.insert("\\mathsf{P}", "𝖯");
-        m.insert("\\mathsf{Q}", "𝖰");
-        m.insert("\\mathsf{R}", "𝖱");
-        m.insert("\\mathsf{S}", "𝖲");
-        m.insert("\\mathsf{T}", "𝖳");
-        m.insert("\\mathsf{U}", "𝖴");
-        m.insert("\\mathsf{V}", "𝖵");
-        m.insert("\\mathsf{W}", "𝖶");
-        m.insert("\\mathsf{X}", "𝖷");
-        m.insert("\\mathsf{Y}", "𝖸");
-        m.insert("\\mathsf{Z}", "𝖹");
-        m.insert("\\mathfrak{a}", "𝔞");
-        m.insert("\\mathfrak{b}", "𝔟");
-        m.insert("\\mathfrak{c}", "𝔠");
-        m.insert("\\mathfrak{d}", "𝔡");
-        m.insert("\\mathfrak{e}", "𝔢");
-        m.insert("\\mathfrak{f}", "𝔣");
-        m.insert("\\mathfrak{g}", "𝔤");
-        m.insert("\\mathfrak{h}", "𝔥");
-        m.insert("\\mathfrak{i}", "𝔦");
-        m.insert("\\mathfrak{j}", "𝔧");
-        m.insert("\\mathfrak{k}", "𝔨");
-        m.insert("\\mathfrak{l}", "𝔩");
-        m.insert("\\mathfrak{m}", "𝔪");
-        m.insert("\\mathfrak{n}", "𝔫");
-        m.insert("\\mathfrak{o}", "𝔬");
-        m.insert("\\mathfrak{p}", "𝔭");
-        m.insert("\\mathfrak{q}", "𝔮");
-        m.insert("\\mathfrak{r}", "𝔯");
-        m.insert("\\mathfrak{s}", "𝔰");
-        m.insert("\\mathfrak{t}", "𝔱");
-        m.insert("\\mathfrak{u}", "𝔲");
-        m.insert("\\mathfrak{v}", "𝔳");
-        m.insert("\\mathfrak{w}", "𝔴");
-        m.insert("\\mathfrak{x}", "𝔵");
-        m.insert("\\mathfrak{y}", "𝔶");
-        m.insert("\\mathfrak{z}", "𝔷");
-        m.insert("\\mathfrak{A}", "𝔄");
-        m.insert("\\mathfrak{B}", "𝔅");
-        m.insert("\\mathfrak{C}", "ℭ");
-        m.insert("\\mathfrak{D}", "𝔇");
-        m.insert("\\mathfrak{E}", "𝔈");
-        m.insert("\\mathfrak{F}", "𝔉");
-        m.insert("\\mathfrak{G}", "𝔊");
-        m.insert("\\mathfrak{H}", "ℌ");
-        m.insert("\\mathfrak{I}", "ℑ");
-        m.insert("\\mathfrak{J}", "𝔍");
-        m.insert("\\mathfrak{K}", "𝔎");
-        m.insert("\\mathfrak{L}", "𝔏");
-        m.insert("\\mathfrak{M}", "𝔐");
-        m.insert("\\mathfrak{N}", "𝔑");
-        m.insert("\\mathfrak{O}", "𝔒");
-        m.insert("\\mathfrak{P}", "𝔓");
-        m.insert("\\mathfrak{Q}", "𝔔");
-        m.insert("\\mathfrak{R}", "ℜ");
-        m.insert("\\mathfrak{S}", "𝔖");
-        m.insert("\\mathfrak{T}", "𝔗");
-        m.insert("\\mathfrak{U}", "𝔘");
-        m.insert("\\mathfrak{V}", "𝔙");
-        m.insert("\\mathfrak{W}", "𝔚");
-        m.insert("\\mathfrak{X}", "𝔛");
-        m.insert("\\mathfrak{Y}", "𝔜");
-        m.insert("\\mathfrak{Z}", "ℨ");
-        m.insert("\\mathscr{A}", "𝓐");
-        m.insert("\\mathscr{B}", "𝓑");
-        m.insert("\\mathscr{C}", "𝓒");
-        m.insert("\\mathscr{D}", "𝓓");
-        m.insert("\\mathscr{E}", "𝓔");
-        m.insert("\\mathscr{F}", "𝓕");
-        m.insert("\\mathscr{G}", "𝓖");
-        m.insert("\\mathscr{H}", "𝓗");
-        m.insert("\\mathscr{I}", "𝓘");
-        m.insert("\\mathscr{J}", "𝓙");
-        m.insert("\\mathscr{K}", "𝓚");
-        m.insert("\\mathscr{L}", "𝓛");
-        m.insert("\\mathscr{M}", "𝓜");
-        m.insert("\\mathscr{N}", "𝓝");
-        m.insert("\\mathscr{O}", "𝓞");
-        m.insert("\\mathscr{P}", "𝓟");
-        m.insert("\\mathscr{Q}", "𝓠");
-        m.insert("\\mathscr{R}", "𝓡");
-        m.insert("\\mathscr{S}", "𝓢");
-        m.insert("\\mathscr{T}", "𝓣");
-        m.insert("\\mathscr{U}", "𝓤");
-        m.insert("\\mathscr{V}", "𝓥");
-        m.insert("\\mathscr{W}", "𝓦");
-        m.insert("\\mathscr{X}", "𝓧");
-        m.insert("\\mathscr{Y}", "𝓨");
-        m.insert("\\mathscr{Z}", "𝓩");
-        m.insert("\\mathcal{A}", "𝓐");
-        m.insert("\\mathcal{B}", "𝓑");
-        m.insert("\\mathcal{C}", "𝓒");
-        m.insert("\\mathcal{D}", "𝓓");
-        m.insert("\\mathcal{E}", "𝓔");
-        m.insert("\\mathcal{F}", "𝓕");
-        m.insert("\\mathcal{G}", "𝓖");
-        m.insert("\\mathcal{H}", "𝓗");
-        m.insert("\\mathcal{I}", "𝓘");
-        m.insert("\\mathcal{J}", "𝓙");
-        m.insert("\\mathcal{K}", "𝓚");
-        m.insert("\\mathcal{L}", "𝓛");
-        m.insert("\\mathcal{M}", "𝓜");
-        m.insert("\\mathcal{N}", "𝓝");
-        m.insert("\\mathcal{O}", "𝓞");
-        m.insert("\\mathcal{P}", "𝓟");
-        m.insert("\\mathcal{Q}", "𝓠");
-        m.insert("\\mathcal{R}", "𝓡");
-        m.insert("\\mathcal{S}", "𝓢");
-        m.insert("\\mathcal{T}", "𝓣");
-        m.insert("\\mathcal{U}", "𝓤");
-        m.insert("\\mathcal{V}", "𝓥");
-        m.insert("\\mathcal{W}", "𝓦");
-        m.insert("\\mathcal{X}", "𝓧");
-        m.insert("\\mathcal{Y}", "𝓨");
-        m.insert("\\mathcal{Z}", "𝓩");
-        m.insert("\\alpha", "α");
-        m.insert("\\beta", "β");
-        m.insert("\\gamma", "γ");
-        m.insert("\\delta", "δ");
-        m.insert("\\epsilon", "ϵ");
-        m.insert("\\varepsilon", "ε");
-        m.insert("\\zeta", "ζ");
-        m.insert("\\eta", "η");
-        m.insert("\\theta", "θ");
-        m.insert("\\vartheta", "ϑ");
-        m.insert("\\iota", "ι");
-        m.insert("\\kappa", "κ");
-        m.insert("\\lambda", "λ");
-        m.insert("\\mu", "μ");
-        m.insert("\\nu", "ν");
-        m.insert("\\xi", "ξ");
-        m.insert("\\pi", "π");
-        m.insert("\\varpi", "ϖ");
-        m.insert("\\rho", "ρ");
-        m.insert("\\varrho", "ϱ");
-        m.insert("\\sigma", "σ");
-        m.insert("\\varsigma", "ς");
-        m.insert("\\tau", "τ");
-        m.insert("\\upsilon", "υ");
-        m.insert("\\phi", "ϕ");
-        m.insert("\\varphi", "φ");
-        m.insert("\\chi", "χ");
-        m.insert("\\psi", "ψ");
-        m.insert("\\omega", "ω");
-        m.insert("\\Gamma", "Γ");
-        m.insert("\\Delta", "Δ");
-        m.insert("\\Theta", "Θ");
-        m.insert("\\Lambda", "Λ");
-        m.insert("\\Xi", "Ξ");
-        m.insert("\\Pi", "Π");
-        m.insert("\\Sigma", "Σ");
-        m.insert("\\Upsilon", "Υ");
-        m.insert("\\Phi", "Φ");
-        m.insert("\\Chi", "Χ");
-        m.insert("\\Psi", "Ψ");
-        m.insert("\\Omega", "Ω");
-        m.insert("\\|", "‖");
-        m.insert("\\amalg", "∐");
-        m.insert("\\angle", "∠");
-        m.insert("\\approx", "≈");
-        m.insert("\\ast", "∗");
-        m.insert("\\asymp", "≍");
-        m.insert("\\backslash", "∖");
-        m.insert("\\bigcap", "∩");
-        m.insert("\\bigcirc", "○");
-        m.insert("\\bigcup", "∪");
-        m.insert("\\bigodot", "⊙");
-        m.insert("\\bigoplus", "⊕");
-        m.insert("\\bigotimes", "⊗");
-        m.insert("\\bigsqcup", "⊔");
-        m.insert("\\bigtriangledown", "∇");
-        m.insert("\\bigtriangleup", "∆");
-        m.insert("\\bigvee", "⋁");
-        m.insert("\\bigwedge", "⋀");
-        m.insert("\\bot", "⊥");
-        m.insert("\\bowtie", "⋈");
-        m.insert("\\bullet", "•");
-        m.insert("\\cap", "∩");
-        m.insert("\\cdot", "·");
-        m.insert("\\cdots", "⋯");
-        m.insert("\\circ", "∘");
-        m.insert("\\cong", "≅");
-        m.insert("\\coprod", "∐");
-        m.insert("\\copyright", "©");
-        m.insert("\\cup", "∪");
-        m.insert("\\dagger", "†");
-        m.insert("\\dashv", "⊣");
-        m.insert("\\ddagger", "‡");
-        m.insert("\\ddots", "⋱");
-        m.insert("\\diamond", "⋄");
-        m.insert("\\div", "÷");
-        m.insert("\\doteq", "≐");
-        m.insert("\\dots", "…");
-        m.insert("\\downarrow", "↓");
-        m.insert("\\Downarrow", "⇓");
-        m.insert("\\equiv", "≡");
-        m.insert("\\exists", "∃");
-        m.insert("\\flat", "♭");
-        m.insert("\\forall", "∀");
-        m.insert("\\frown", "⁔");
-        m.insert("\\ge", "≥");
-        m.insert("\\geq", "≥");
-        m.insert("\\gets", "←");
-        m.insert("\\gg", "⟫");
-        m.insert("\\hookleftarrow", "↩");
-        m.insert("\\hookrightarrow", "↪");
-        m.insert("\\iff", "⇔");
-        m.insert("\\Im", "ℑ");
-        m.insert("\\in", "∈");
-        m.insert("\\int", "∫");
-        m.insert("\\jmath", "𝚥");
-        m.insert("\\land", "∧");
-        m.insert("\\lceil", "⌈");
-        m.insert("\\ldots", "…");
-        m.insert("\\le", "≤");
-        m.insert("\\left", "");
-        m.insert("\\leftarrow", "←");
-        m.insert("\\Leftarrow", "⇐");
-        m.insert("\\leftharpoondown", "↽");
-        m.insert("\\leftharpoonup", "↼");
-        m.insert("\\leftrightarrow", "↔");
-        m.insert("\\Leftrightarrow", "⇔");
-        m.insert("\\leq", "≤");
-        m.insert("\\lfloor", "⌊");
-        m.insert("\\ll", "≪");
-        m.insert("\\lmoustache", "╭");
-        m.insert("\\lor", "∨");
-        m.insert("\\mapsto", "↦");
-        m.insert("\\mid", "∣");
-        m.insert("\\models", "╞");
-        m.insert("\\mp", "∓");
-        m.insert("\\nabla", "∇");
-        m.insert("\\natural", "♮");
-        m.insert("\\ne", "≠");
-        m.insert("\\nearrow", "↗");
-        m.insert("\\neg", "¬");
-        m.insert("\\neq", "≠");
-        m.insert("\\ni", "∋");
-        m.insert("\\notin", "∉");
-        m.insert("\\nwarrow", "↖");
-        m.insert("\\odot", "⊙");
-        m.insert("\\oint", "∮");
-        m.insert("\\ominus", "⊖");
-        m.insert("\\oplus", "⊕");
-        m.insert("\\oslash", "⊘");
-        m.insert("\\otimes", "⊗");
-        m.insert("\\owns", "∋");
-        m.insert("\\P", "¶");
-        m.insert("\\parallel", "║");
-        m.insert("\\partial", "∂");
-        m.insert("\\perp", "⊥");
-        m.insert("\\pm", "±");
-        m.insert("\\prec", "≺");
-        m.insert("\\preceq", "⪯");
-        m.insert("\\prime", "′");
-        m.insert("\\prod", "∏");
-        m.insert("\\propto", "∝");
-        m.insert("\\rceil", "⌉");
-        m.insert("\\Re", "ℜ");
-        m.insert("\\quad", " ");
-        m.insert("\\qquad", " ");
-        m.insert("\\rfloor", "⌋");
-        m.insert("\\right", "");
-        m.insert("\\rightarrow", "→");
-        m.insert("\\Rightarrow", "⇒");
-        m.insert("\\rightleftharpoons", "⇌");
-        m.insert("\\rmoustache", "╮");
-        m.insert("\\S", "§");
-        m.insert("\\searrow", "↘");
-        m.insert("\\setminus", "∖");
-        m.insert("\\sharp", "♯");
-        m.insert("\\sim", "∼");
-        m.insert("\\simeq", "⋍");
-        m.insert("\\smile", "‿");
-        m.insert("\\sqcap", "⊓");
-        m.insert("\\sqcup", "⊔");
-        m.insert("\\sqsubset", "⊏");
-        m.insert("\\sqsubseteq", "⊑");
-        m.insert("\\sqsupset", "⊐");
-        m.insert("\\sqsupseteq", "⊒");
-        m.insert("\\star", "✫");
-        m.insert("\\subset", "⊂");
-        m.insert("\\subseteq", "⊆");
-        m.insert("\\succ", "≻");
-        m.insert("\\succeq", "⪰");
-        m.insert("\\sum", "∑");
-        m.insert("\\supset", "⊃");
-        m.insert("\\supseteq", "⊇");
-        m.insert("\\surd", "√");
-        m.insert("\\swarrow", "↙");
-        m.insert("\\times", "×");
-        m.insert("\\to", "→");
-        m.insert("\\top", "⊤");
-        m.insert("\\triangle", "∆");
-        m.insert("\\triangleleft", "⊲");
-        m.insert("\\triangleright", "⊳");
-        m.insert("\\uparrow", "↑");
-        m.insert("\\Uparrow", "⇑");
-        m.insert("\\updownarrow", "↕");
-        m.insert("\\Updownarrow", "⇕");
-        m.insert("\\vdash", "⊢");
-        m.insert("\\vdots", "⋮");
-        m.insert("\\vee", "∨");
-        m.insert("\\wedge", "∧");
-        m.insert("\\wp", "℘");
-        m.insert("\\wr", "≀");
-        m.insert("\\langle", "⟨");
-        m.insert("\\rangle", "⟩");
-        m.insert("\\{", "{");
-        m.insert("\\}", "}");
-        m.insert("\\aleph", "ℵ");
-        m.insert("\\clubsuit", "♣");
-        m.insert("\\diamondsuit", "♢");
-        m.insert("\\heartsuit", "♡");
-        m.insert("\\spadesuit", "♠");
-        m.insert("\\ell", "ℓ");
-        m.insert("\\emptyset", "∅");
-        m.insert("\\varnothing", "∅");
-        m.insert("\\hbar", "ℏ");
-        m.insert("\\imath", "ɩ");
-        m.insert("\\infty", "∞");
-        m.insert("_0", "₀");
-        m.insert("_1", "₁");
-        m.insert("_2", "₂");
-        m.insert("_3", "₃");
-        m.insert("_4", "₄");
-        m.insert("_5", "₅");
-        m.insert("_6", "₆");
-        m.insert("_7", "₇");
-        m.insert("_8", "₈");
-        m.insert("_9", "₉");
-        m.insert("_a", "ₐ");
-        m.insert("_e", "ₑ");
-        m.insert("_h", "ₕ");
-        m.insert("_i", "ᵢ");
-        m.insert("_j", "ⱼ");
-        m.insert("_k", "ₖ");
-        m.insert("_l", "ₗ");
-        m.insert("_m", "ₘ");
-        m.insert("_n", "ₙ");
-        m.insert("_o", "ₒ");
-        m.insert("_p", "ₚ");
-        m.insert("_r", "ᵣ");
-        m.insert("_s", "ₛ");
-        m.insert("_t", "ₜ");
-        m.insert("_u", "ᵤ");
-        m.insert("_v", "ᵥ");
-        m.insert("_x", "ₓ");
-        m.insert("_\\.", "‸");
-        m.insert("_+", "₊");
-        m.insert("_-", "₋");
-        m.insert("_/", "ˏ");
-        m.insert("0", "₀");
-        m.insert("1", "₁");
-        m.insert("2", "₂");
-        m.insert("3", "₃");
-        m.insert("4", "₄");
-        m.insert("5", "₅");
-        m.insert("6", "₆");
-        m.insert("7", "₇");
-        m.insert("8", "₈");
-        m.insert("9", "₉");
-        m.insert("a", "ₐ");
-        m.insert("e", "ₑ");
-        m.insert("h", "ₕ");
-        m.insert("i", "ᵢ");
-        m.insert("j", "ⱼ");
-        m.insert("k", "ₖ");
-        m.insert("l", "ₗ");
-        m.insert("m", "ₘ");
-        m.insert("n", "ₙ");
-        m.insert("o", "ₒ");
-        m.insert("p", "ₚ");
-        m.insert("r", "ᵣ");
-        m.insert("s", "ₛ");
-        m.insert("t", "ₜ");
-        m.insert("u", "ᵤ");
-        m.insert("v", "ᵥ");
-        m.insert("x", "ₓ");
-        m.insert("+", "₊");
-        m.insert("-", "₋");
-        m.insert("/", "ˏ");
-        m.insert("^0", "⁰");
-        m.insert("^1", "¹");
-        m.insert("^2", "²");
-        m.insert("^3", "³");
-        m.insert("^4", "⁴");
-        m.insert("^5", "⁵");
-        m.insert("^6", "⁶");
-        m.insert("^7", "⁷");
-        m.insert("^8", "⁸");
-        m.insert("^9", "⁹");
-        m.insert("^a", "ᵃ");
-        m.insert("^b", "ᵇ");
-        m.insert("^c", "ᶜ");
-        m.insert("^d", "ᵈ");
-        m.insert("^e", "ᵉ");
-        m.insert("^f", "ᶠ");
-        m.insert("^g", "ᵍ");
-        m.insert("^h", "ʰ");
-        m.insert("^i", "ⁱ");
-        m.insert("^j", "ʲ");
-        m.insert("^k", "ᵏ");
-        m.insert("^l", "ˡ");
-        m.insert("^m", "ᵐ");
-        m.insert("^n", "ⁿ");
-        m.insert("^o", "ᵒ");
-        m.insert("^p", "ᵖ");
-        m.insert("^r", "ʳ");
-        m.insert("^s", "ˢ");
-        m.insert("^t", "ᵗ");
-        m.insert("^u", "ᵘ");
-        m.insert("^v", "ᵛ");
-        m.insert("^w", "ʷ");
-        m.insert("^x", "ˣ");
-        m.insert("^y", "ʸ");
-        m.insert("^z", "ᶻ");
-        m.insert("^A", "ᴬ");
-        m.insert("^B", "ᴮ");
-        m.insert("^D", "ᴰ");
-        m.insert("^E", "ᴱ");
-        m.insert("^G", "ᴳ");
-        m.insert("^H", "ᴴ");
-        m.insert("^I", "ᴵ");
-        m.insert("^J", "ᴶ");
-        m.insert("^K", "ᴷ");
-        m.insert("^L", "ᴸ");
-        m.insert("^M", "ᴹ");
-        m.insert("^N", "ᴺ");
-        m.insert("^O", "ᴼ");
-        m.insert("^P", "ᴾ");
-        m.insert("^R", "ᴿ");
-        m.insert("^T", "ᵀ");
-        m.insert("^U", "ᵁ");
-        m.insert("^V", "ⱽ");
-        m.insert("^W", "ᵂ");
-        m.insert("^+", "⁺");
-        m.insert("^-", "⁻");
-        m.insert("^<", "˂");
-        m.insert("^>", "˃");
-        m.insert("^/", "ˊ");
-        m.insert("^\\.", "˙");
-        m.insert("^=", "˭");
-        m.insert("\\,", "");
-        m.insert("\\circ", "∘");
-        m
+    pub static ref MATH_SYMBOLS: phf::Map<&'static str, &'static str> = phf_map! {
+        // "div" => "÷",
+        r"+" => "₊",
+        r"-" => "₋",
+        r"/" => "ˏ",
+        r"0" => "₀",
+        r"1" => "₁",
+        r"2" => "₂",
+        r"3" => "₃",
+        r"4" => "₄",
+        r"5" => "₅",
+        r"6" => "₆",
+        r"7" => "₇",
+        r"8" => "₈",
+        r"9" => "₉",
+        r"A" => "ℒ",
+        r"AA" => "𝔸",
+        r"Alpha" => "Α",
+        r"BB" => "𝔹",
+        r"Beta" => "Β",
+        r"CC" => "ℂ",
+        r"Chi" => "Χ",
+        r"DD" => "𝔻",
+        r"Delta" => "Δ",
+        r"EE" => "𝔼",
+        r"Epsilon" => "Ε",
+        r"Eta" => "Η",
+        r"FF" => "𝔽",
+        r"GG" => "𝔾",
+        r"Gamma" => "Γ",
+        r"HH" => "ℍ",
+        r"II" => "𝕀",
+        r"Im" => "ℑ",
+        r"Iota" => "Ι",
+        r"JJ" => "𝕁",
+        r"KK" => "𝕂",
+        r"Kai" => "Ϗ",
+        r"Kappa" => "Κ",
+        r"LL" => "𝕃",
+        r"Lambda" => "Λ",
+        r"MM" => "𝕄",
+        r"Mu" => "Μ",
+        r"NN" => "ℕ",
+        r"Nu" => "Ν",
+        r"OO" => "𝕆",
+        r"Omega" => "Ω",
+        r"Omicron" => "Ο",
+        r"PP" => "ℙ",
+        r"Phi" => "Φ",
+        r"Pi" => "Π",
+        r"Psi" => "Ψ",
+        r"QQ" => "ℚ",
+        r"RR" => "ℝ",
+        r"Re" => "ℜ",
+        r"SS" => "𝕊",
+        r"TT" => "𝕋",
+        r"UU" => "𝕌",
+        r"VV" => "𝕍",
+        r"WW" => "𝕎",
+        r"XX" => "𝕏",
+        r"YY" => "𝕐",
+        r"ZZ" => "ℤ",
+        r"\\Chi" => "Χ",
+        r"\\Delta" => "Δ",
+        r"\\Downarrow" => "⇓",
+        r"\\Gamma" => "Γ",
+        r"\\Im" => "ℑ",
+        r"\\Lambda" => "Λ",
+        r"\\Leftarrow" => "⇐",
+        r"\\Leftrightarrow" => "⇔",
+        r"\\Omega" => "Ω",
+        r"\\P" => "¶",
+        r"\\Phi" => "Φ",
+        r"\\Pi" => "Π",
+        r"\\Psi" => "Ψ",
+        r"\\Re" => "ℜ",
+        r"\\Rightarrow" => "⇒",
+        r"\\S" => "§",
+        r"\\Sigma" => "Σ",
+        r"\\Theta" => "Θ",
+        r"\\Uparrow" => "⇑",
+        r"\\Updownarrow" => "⇕",
+        r"\\Upsilon" => "Υ",
+        r"\\Xi" => "Ξ",
+        r"\\aleph" => "ℵ",
+        r"\\alpha" => "α",
+        r"\\amalg" => "∐",
+        r"\\angle" => "∠",
+        r"\\approx" => "≈",
+        r"\\ast" => "∗",
+        r"\\asymp" => "≍",
+        r"\\backslash" => "∖",
+        r"\\beta" => "β",
+        r"\\bigcap" => "∩",
+        r"\\bigcirc" => "○",
+        r"\\bigcup" => "∪",
+        r"\\bigodot" => "⊙",
+        r"\\bigoplus" => "⊕",
+        r"\\bigotimes" => "⊗",
+        r"\\bigsqcup" => "⊔",
+        r"\\bigtriangledown" => "∇",
+        r"\\bigtriangleup" => "∆",
+        r"\\bigvee" => "⋁",
+        r"\\bigwedge" => "⋀",
+        r"\\bot" => "⊥",
+        r"\\bowtie" => "⋈",
+        r"\\bullet" => "•",
+        r"\\cap" => "∩",
+        r"\\cdot" => "·",
+        r"\\cdots" => "⋯",
+        r"\\chi" => "χ",
+        r"\\circ" => "∘",
+        r"\\clubsuit" => "♣",
+        r"\\cong" => "≅",
+        r"\\coprod" => "∐",
+        r"\\copyright" => "©",
+        r"\\cup" => "∪",
+        r"\\dagger" => "†",
+        r"\\dashint" => "⨍",
+        r"\\dashv" => "⊣",
+        r"\\ddagger" => "‡",
+        r"\\ddots" => "⋱",
+        r"\\delta" => "δ",
+        r"\\diamond" => "⋄",
+        r"\\diamondsuit" => "♢",
+        r"\\div" => "÷",
+        r"\\doteq" => "≐",
+        r"\\dots" => "…",
+        r"\\downarrow" => "↓",
+        r"\\ell" => "ℓ",
+        r"\\emptyset" => "∅",
+        r"\\epsilon" => "ϵ",
+        r"\\equiv" => "≡",
+        r"\\eta" => "η",
+        r"\\exists" => "∃",
+        r"\\flat" => "♭",
+        r"\\forall" => "∀",
+        r"\\frown" => "⁔",
+        r"\\gamma" => "γ",
+        r"\\ge" => "≥",
+        r"\\geq" => "≥",
+        r"\\gets" => "←",
+        r"\\gg" => "⟫",
+        r"\\hbar" => "ℏ",
+        r"\\heartsuit" => "♡",
+        r"\\hookleftarrow" => "↩",
+        r"\\hookrightarrow" => "↪",
+        r"\\iff" => "⇔",
+        r"\\imath" => "ɩ",
+        r"\\in" => "∈",
+        r"\\infty" => "∞",
+        r"\\int" => "∫",
+        r"\\iota" => "ι",
+        r"\\jmath" => "𝚥",
+        r"\\kappa" => "κ",
+        r"\\lambda" => "λ",
+        r"\\land" => "∧",
+        r"\\langle" => "⟨",
+        r"\\lceil" => "⌈",
+        r"\\ldots" => "…",
+        r"\\le" => "≤",
+        r"\\leftarrow" => "←",
+        r"\\leftharpoondown" => "↽",
+        r"\\leftharpoonup" => "↼",
+        r"\\leftrightarrow" => "↔",
+        r"\\leq" => "≤",
+        r"\\lfloor" => "⌊",
+        r"\\ll" => "≪",
+        r"\\lmoustache" => "╭",
+        r"\\lor" => "∨",
+        r"\\mapsto" => "↦",
+        r"\\mathbb{A}" => "𝔸",
+        r"\\mathbb{B}" => "𝔹",
+        r"\\mathbb{C}" => "ℂ",
+        r"\\mathbb{D}" => "𝔻",
+        r"\\mathbb{E}" => "𝔼",
+        r"\\mathbb{F}" => "𝔽",
+        r"\\mathbb{G}" => "𝔾",
+        r"\\mathbb{H}" => "ℍ",
+        r"\\mathbb{I}" => "𝕀",
+        r"\\mathbb{J}" => "𝕁",
+        r"\\mathbb{K}" => "𝕂",
+        r"\\mathbb{L}" => "𝕃",
+        r"\\mathbb{M}" => "𝕄",
+        r"\\mathbb{N}" => "ℕ",
+        r"\\mathbb{O}" => "𝕆",
+        r"\\mathbb{P}" => "ℙ",
+        r"\\mathbb{Q}" => "ℚ",
+        r"\\mathbb{R}" => "ℝ",
+        r"\\mathbb{S}" => "𝕊",
+        r"\\mathbb{T}" => "𝕋",
+        r"\\mathbb{U}" => "𝕌",
+        r"\\mathbb{V}" => "𝕍",
+        r"\\mathbb{W}" => "𝕎",
+        r"\\mathbb{X}" => "𝕏",
+        r"\\mathbb{Y}" => "𝕐",
+        r"\\mathbb{Z}" => "ℤ",
+        r"\\mathcal{A}" => "𝓐",
+        r"\\mathcal{B}" => "𝓑",
+        r"\\mathcal{C}" => "𝓒",
+        r"\\mathcal{D}" => "𝓓",
+        r"\\mathcal{E}" => "𝓔",
+        r"\\mathcal{F}" => "𝓕",
+        r"\\mathcal{G}" => "𝓖",
+        r"\\mathcal{H}" => "𝓗",
+        r"\\mathcal{I}" => "𝓘",
+        r"\\mathcal{J}" => "𝓙",
+        r"\\mathcal{K}" => "𝓚",
+        r"\\mathcal{L}" => "𝓛",
+        r"\\mathcal{M}" => "𝓜",
+        r"\\mathcal{N}" => "𝓝",
+        r"\\mathcal{O}" => "𝓞",
+        r"\\mathcal{P}" => "𝓟",
+        r"\\mathcal{Q}" => "𝓠",
+        r"\\mathcal{R}" => "𝓡",
+        r"\\mathcal{S}" => "𝓢",
+        r"\\mathcal{T}" => "𝓣",
+        r"\\mathcal{U}" => "𝓤",
+        r"\\mathcal{V}" => "𝓥",
+        r"\\mathcal{W}" => "𝓦",
+        r"\\mathcal{X}" => "𝓧",
+        r"\\mathcal{Y}" => "𝓨",
+        r"\\mathcal{Z}" => "𝓩",
+        r"\\mathfrak{A}" => "𝔄",
+        r"\\mathfrak{B}" => "𝔅",
+        r"\\mathfrak{C}" => "ℭ",
+        r"\\mathfrak{D}" => "𝔇",
+        r"\\mathfrak{E}" => "𝔈",
+        r"\\mathfrak{F}" => "𝔉",
+        r"\\mathfrak{G}" => "𝔊",
+        r"\\mathfrak{H}" => "ℌ",
+        r"\\mathfrak{I}" => "ℑ",
+        r"\\mathfrak{J}" => "𝔍",
+        r"\\mathfrak{K}" => "𝔎",
+        r"\\mathfrak{L}" => "𝔏",
+        r"\\mathfrak{M}" => "𝔐",
+        r"\\mathfrak{N}" => "𝔑",
+        r"\\mathfrak{O}" => "𝔒",
+        r"\\mathfrak{P}" => "𝔓",
+        r"\\mathfrak{Q}" => "𝔔",
+        r"\\mathfrak{R}" => "ℜ",
+        r"\\mathfrak{S}" => "𝔖",
+        r"\\mathfrak{T}" => "𝔗",
+        r"\\mathfrak{U}" => "𝔘",
+        r"\\mathfrak{V}" => "𝔙",
+        r"\\mathfrak{W}" => "𝔚",
+        r"\\mathfrak{X}" => "𝔛",
+        r"\\mathfrak{Y}" => "𝔜",
+        r"\\mathfrak{Z}" => "ℨ",
+        r"\\mathfrak{a}" => "𝔞",
+        r"\\mathfrak{b}" => "𝔟",
+        r"\\mathfrak{c}" => "𝔠",
+        r"\\mathfrak{d}" => "𝔡",
+        r"\\mathfrak{e}" => "𝔢",
+        r"\\mathfrak{f}" => "𝔣",
+        r"\\mathfrak{g}" => "𝔤",
+        r"\\mathfrak{h}" => "𝔥",
+        r"\\mathfrak{i}" => "𝔦",
+        r"\\mathfrak{j}" => "𝔧",
+        r"\\mathfrak{k}" => "𝔨",
+        r"\\mathfrak{l}" => "𝔩",
+        r"\\mathfrak{m}" => "𝔪",
+        r"\\mathfrak{n}" => "𝔫",
+        r"\\mathfrak{o}" => "𝔬",
+        r"\\mathfrak{p}" => "𝔭",
+        r"\\mathfrak{q}" => "𝔮",
+        r"\\mathfrak{r}" => "𝔯",
+        r"\\mathfrak{s}" => "𝔰",
+        r"\\mathfrak{t}" => "𝔱",
+        r"\\mathfrak{u}" => "𝔲",
+        r"\\mathfrak{v}" => "𝔳",
+        r"\\mathfrak{w}" => "𝔴",
+        r"\\mathfrak{x}" => "𝔵",
+        r"\\mathfrak{y}" => "𝔶",
+        r"\\mathfrak{z}" => "𝔷",
+        r"\\mathscr{A}" => "𝓐",
+        r"\\mathscr{B}" => "𝓑",
+        r"\\mathscr{C}" => "𝓒",
+        r"\\mathscr{D}" => "𝓓",
+        r"\\mathscr{E}" => "𝓔",
+        r"\\mathscr{F}" => "𝓕",
+        r"\\mathscr{G}" => "𝓖",
+        r"\\mathscr{H}" => "𝓗",
+        r"\\mathscr{I}" => "𝓘",
+        r"\\mathscr{J}" => "𝓙",
+        r"\\mathscr{K}" => "𝓚",
+        r"\\mathscr{L}" => "𝓛",
+        r"\\mathscr{M}" => "𝓜",
+        r"\\mathscr{N}" => "𝓝",
+        r"\\mathscr{O}" => "𝓞",
+        r"\\mathscr{P}" => "𝓟",
+        r"\\mathscr{Q}" => "𝓠",
+        r"\\mathscr{R}" => "𝓡",
+        r"\\mathscr{S}" => "𝓢",
+        r"\\mathscr{T}" => "𝓣",
+        r"\\mathscr{U}" => "𝓤",
+        r"\\mathscr{V}" => "𝓥",
+        r"\\mathscr{W}" => "𝓦",
+        r"\\mathscr{X}" => "𝓧",
+        r"\\mathscr{Y}" => "𝓨",
+        r"\\mathscr{Z}" => "𝓩",
+        r"\\mathsf{A}" => "𝖠",
+        r"\\mathsf{B}" => "𝖡",
+        r"\\mathsf{C}" => "𝖢",
+        r"\\mathsf{D}" => "𝖣",
+        r"\\mathsf{E}" => "𝖤",
+        r"\\mathsf{F}" => "𝖥",
+        r"\\mathsf{G}" => "𝖦",
+        r"\\mathsf{H}" => "𝖧",
+        r"\\mathsf{I}" => "𝖨",
+        r"\\mathsf{J}" => "𝖩",
+        r"\\mathsf{K}" => "𝖪",
+        r"\\mathsf{L}" => "𝖫",
+        r"\\mathsf{M}" => "𝖬",
+        r"\\mathsf{N}" => "𝖭",
+        r"\\mathsf{O}" => "𝖮",
+        r"\\mathsf{P}" => "𝖯",
+        r"\\mathsf{Q}" => "𝖰",
+        r"\\mathsf{R}" => "𝖱",
+        r"\\mathsf{S}" => "𝖲",
+        r"\\mathsf{T}" => "𝖳",
+        r"\\mathsf{U}" => "𝖴",
+        r"\\mathsf{V}" => "𝖵",
+        r"\\mathsf{W}" => "𝖶",
+        r"\\mathsf{X}" => "𝖷",
+        r"\\mathsf{Y}" => "𝖸",
+        r"\\mathsf{Z}" => "𝖹",
+        r"\\mathsf{a}" => "𝖺",
+        r"\\mathsf{b}" => "𝖻",
+        r"\\mathsf{c}" => "𝖼",
+        r"\\mathsf{d}" => "𝖽",
+        r"\\mathsf{e}" => "𝖾",
+        r"\\mathsf{f}" => "𝖿",
+        r"\\mathsf{g}" => "𝗀",
+        r"\\mathsf{h}" => "𝗁",
+        r"\\mathsf{i}" => "𝗂",
+        r"\\mathsf{j}" => "𝗃",
+        r"\\mathsf{k}" => "𝗄",
+        r"\\mathsf{l}" => "𝗅",
+        r"\\mathsf{m}" => "𝗆",
+        r"\\mathsf{n}" => "𝗇",
+        r"\\mathsf{o}" => "𝗈",
+        r"\\mathsf{p}" => "𝗉",
+        r"\\mathsf{q}" => "𝗊",
+        r"\\mathsf{r}" => "𝗋",
+        r"\\mathsf{s}" => "𝗌",
+        r"\\mathsf{t}" => "𝗍",
+        r"\\mathsf{u}" => "𝗎",
+        r"\\mathsf{v}" => "𝗏",
+        r"\\mathsf{w}" => "𝗐",
+        r"\\mathsf{x}" => "𝗑",
+        r"\\mathsf{y}" => "𝗒",
+        r"\\mathsf{z}" => "𝗓",
+        r"\\mid" => "∣",
+        r"\\models" => "╞",
+        r"\\mp" => "∓",
+        r"\\mu" => "μ",
+        r"\\nabla" => "∇",
+        r"\\natural" => "♮",
+        r"\\ne" => "≠",
+        r"\\nearrow" => "↗",
+        r"\\neg" => "¬",
+        r"\\neq" => "≠",
+        r"\\ni" => "∋",
+        r"\\notin" => "∉",
+        r"\\nu" => "ν",
+        r"\\nwarrow" => "↖",
+        r"\\odot" => "⊙",
+        r"\\oint" => "∮",
+        r"\\omega" => "ω",
+        r"\\ominus" => "⊖",
+        r"\\oplus" => "⊕",
+        r"\\oslash" => "⊘",
+        r"\\otimes" => "⊗",
+        r"\\owns" => "∋",
+        r"\\parallel" => "║",
+        r"\\partial" => "∂",
+        r"\\perp" => "⊥",
+        r"\\phi" => "ϕ",
+        r"\\pi" => "π",
+        r"\\pm" => "±",
+        r"\\prec" => "≺",
+        r"\\preceq" => "⪯",
+        r"\\prime" => "′",
+        r"\\prod" => "∏",
+        r"\\propto" => "∝",
+        r"\\psi" => "ψ",
+        r"\\qquad" => " ",
+        r"\\quad" => " ",
+        r"\\rangle" => "⟩",
+        r"\\rceil" => "⌉",
+        r"\\rfloor" => "⌋",
+        r"\\rho" => "ρ",
+        r"\\rightarrow" => "→",
+        r"\\rightleftharpoons" => "⇌",
+        r"\\rmoustache" => "╮",
+        r"\\searrow" => "↘",
+        r"\\setminus" => "∖",
+        r"\\sharp" => "♯",
+        r"\\sigma" => "σ",
+        r"\\sim" => "∼",
+        r"\\simeq" => "⋍",
+        r"\\smile" => "‿",
+        r"\\spadesuit" => "♠",
+        r"\\sqcap" => "⊓",
+        r"\\sqcup" => "⊔",
+        r"\\sqsubset" => "⊏",
+        r"\\sqsubseteq" => "⊑",
+        r"\\sqsupset" => "⊐",
+        r"\\sqsupseteq" => "⊒",
+        r"\\star" => "✫",
+        r"\\subset" => "⊂",
+        r"\\subseteq" => "⊆",
+        r"\\succ" => "≻",
+        r"\\succeq" => "⪰",
+        r"\\sum" => "∑",
+        r"\\supset" => "⊃",
+        r"\\supseteq" => "⊇",
+        r"\\surd" => "√",
+        r"\\swarrow" => "↙",
+        r"\\tau" => "τ",
+        r"\\theta" => "θ",
+        r"\\times" => "×",
+        r"\\to" => "→",
+        r"\\top" => "⊤",
+        r"\\triangle" => "∆",
+        r"\\triangleleft" => "⊲",
+        r"\\triangleright" => "⊳",
+        r"\\uparrow" => "↑",
+        r"\\updownarrow" => "↕",
+        r"\\upsilon" => "υ",
+        r"\\varepsilon" => "ε",
+        r"\\varnothing" => "∅",
+        r"\\varphi" => "φ",
+        r"\\varpi" => "ϖ",
+        r"\\varrho" => "ϱ",
+        r"\\varsigma" => "ς",
+        r"\\vartheta" => "ϑ",
+        r"\\vdash" => "⊢",
+        r"\\vdots" => "⋮",
+        r"\\vee" => "∨",
+        r"\\wedge" => "∧",
+        r"\\wp" => "℘",
+        r"\\wr" => "≀",
+        r"\\xi" => "ξ",
+        r"\\zeta" => "ζ",
+        r"\\{" => "{",
+        r"\\|" => "‖",
+        r"\\}" => "}",
+        r"^+" => "⁺",
+        r"^-" => "⁻",
+        r"^/" => "ˊ",
+        r"^0" => "⁰",
+        r"^1" => "¹",
+        r"^2" => "²",
+        r"^3" => "³",
+        r"^4" => "⁴",
+        r"^5" => "⁵",
+        r"^6" => "⁶",
+        r"^7" => "⁷",
+        r"^8" => "⁸",
+        r"^9" => "⁹",
+        r"^<" => "˂",
+        r"^=" => "˭",
+        r"^>" => "˃",
+        r"^A" => "ᴬ",
+        r"^B" => "ᴮ",
+        r"^D" => "ᴰ",
+        r"^E" => "ᴱ",
+        r"^G" => "ᴳ",
+        r"^H" => "ᴴ",
+        r"^I" => "ᴵ",
+        r"^J" => "ᴶ",
+        r"^K" => "ᴷ",
+        r"^L" => "ᴸ",
+        r"^M" => "ᴹ",
+        r"^N" => "ᴺ",
+        r"^O" => "ᴼ",
+        r"^P" => "ᴾ",
+        r"^R" => "ᴿ",
+        r"^T" => "ᵀ",
+        r"^U" => "ᵁ",
+        r"^V" => "ⱽ",
+        r"^W" => "ᵂ",
+        r"^\\." => "˙",
+        r"^a" => "ᵃ",
+        r"^b" => "ᵇ",
+        r"^c" => "ᶜ",
+        r"^d" => "ᵈ",
+        r"^e" => "ᵉ",
+        r"^f" => "ᶠ",
+        r"^g" => "ᵍ",
+        r"^h" => "ʰ",
+        r"^i" => "ⁱ",
+        r"^j" => "ʲ",
+        r"^k" => "ᵏ",
+        r"^l" => "ˡ",
+        r"^m" => "ᵐ",
+        r"^n" => "ⁿ",
+        r"^o" => "ᵒ",
+        r"^p" => "ᵖ",
+        r"^r" => "ʳ",
+        r"^s" => "ˢ",
+        r"^t" => "ᵗ",
+        r"^u" => "ᵘ",
+        r"^v" => "ᵛ",
+        r"^w" => "ʷ",
+        r"^x" => "ˣ",
+        r"^y" => "ʸ",
+        r"^z" => "ᶻ",
+        r"_+" => "₊",
+        r"_-" => "₋",
+        r"_/" => "ˏ",
+        r"_0" => "₀",
+        r"_1" => "₁",
+        r"_2" => "₂",
+        r"_3" => "₃",
+        r"_4" => "₄",
+        r"_5" => "₅",
+        r"_6" => "₆",
+        r"_7" => "₇",
+        r"_8" => "₈",
+        r"_9" => "₉",
+        r"_\\." => "‸",
+        r"_a" => "ₐ",
+        r"_e" => "ₑ",
+        r"_h" => "ₕ",
+        r"_i" => "ᵢ",
+        r"_j" => "ⱼ",
+        r"_k" => "ₖ",
+        r"_l" => "ₗ",
+        r"_m" => "ₘ",
+        r"_n" => "ₙ",
+        r"_o" => "ₒ",
+        r"_p" => "ₚ",
+        r"_r" => "ᵣ",
+        r"_s" => "ₛ",
+        r"_t" => "ₜ",
+        r"_u" => "ᵤ",
+        r"_v" => "ᵥ",
+        r"_x" => "ₓ",
+        r"a" => "ₐ",
+        r"abs" => "|",
+        r"acute" => "´",
+        r"acute.double" => "˝",
+        r"alpha" => "α",
+        r"amp" => "&",
+        r"amp.inv" => "⅋",
+        r"and" => "∧",
+        r"and.big" => "⋀",
+        r"and.curly" => "⋏",
+        r"and.dot" => "⟑",
+        r"and.double" => "⩓",
+        r"angle" => "∠",
+        r"angle.acute" => "⦟",
+        r"angle.arc" => "∡",
+        r"angle.arc.rev" => "⦛",
+        r"angle.l" => "⟨",
+        r"angle.l.double" => "《",
+        r"angle.r" => "⟩",
+        r"angle.r.double" => "》",
+        r"angle.rev" => "⦣",
+        r"angle.right" => "∟",
+        r"angle.right.arc" => "⊾",
+        r"angle.right.dot" => "⦝",
+        r"angle.right.rev" => "⯾",
+        r"angle.right.sq" => "⦜",
+        r"angle.spatial" => "⟀",
+        r"angle.spheric" => "∢",
+        r"angle.spheric.rev" => "⦠",
+        r"angle.spheric.top" => "⦡",
+        r"angstrom" => "Å",
+        r"angular" => "L",
+        r"approx" => "≈",
+        r"approx.eq" => "≊",
+        r"approx.not" => "≉",
+        r"arrow.b" => "↓",
+        r"arrow.b.bar" => "↧",
+        r"arrow.b.curve" => "⤵",
+        r"arrow.b.dashed" => "⇣",
+        r"arrow.b.double" => "⇓",
+        r"arrow.b.filled" => "⬇",
+        r"arrow.b.quad" => "⟱",
+        r"arrow.b.stop" => "⤓",
+        r"arrow.b.stroked" => "⇩",
+        r"arrow.b.triple" => "⤋",
+        r"arrow.b.twohead" => "↡",
+        r"arrow.bl" => "↙",
+        r"arrow.bl.double" => "⇙",
+        r"arrow.bl.filled" => "⬋",
+        r"arrow.bl.hook" => "⤦",
+        r"arrow.bl.stroked" => "⬃",
+        r"arrow.br" => "↘",
+        r"arrow.br.double" => "⇘",
+        r"arrow.br.filled" => "⬊",
+        r"arrow.br.hook" => "⤥",
+        r"arrow.br.stroked" => "⬂",
+        r"arrow.ccw" => "↺",
+        r"arrow.ccw.half" => "↶",
+        r"arrow.cw" => "↻",
+        r"arrow.cw.half" => "↷",
+        r"arrow.l" => "←",
+        r"arrow.l.bar" => "↤",
+        r"arrow.l.curve" => "⤶",
+        r"arrow.l.dashed" => "⇠",
+        r"arrow.l.dotted" => "⬸",
+        r"arrow.l.double" => "⇐",
+        r"arrow.l.double.bar" => "⤆",
+        r"arrow.l.double.long" => "⟸",
+        r"arrow.l.double.long.bar" => "⟽",
+        r"arrow.l.double.not" => "⇍",
+        r"arrow.l.filled" => "⬅",
+        r"arrow.l.hook" => "↩",
+        r"arrow.l.long" => "⟵",
+        r"arrow.l.long.bar" => "⟻",
+        r"arrow.l.long.squiggly" => "⬳",
+        r"arrow.l.loop" => "↫",
+        r"arrow.l.not" => "↚",
+        r"arrow.l.quad" => "⭅",
+        r"arrow.l.r" => "↔",
+        r"arrow.l.r.double" => "⇔",
+        r"arrow.l.r.double.long" => "⟺",
+        r"arrow.l.r.double.not" => "⇎",
+        r"arrow.l.r.filled" => "⬌",
+        r"arrow.l.r.long" => "⟷",
+        r"arrow.l.r.not" => "↮",
+        r"arrow.l.r.stroked" => "⬄",
+        r"arrow.l.r.wave" => "↭",
+        r"arrow.l.squiggly" => "⇜",
+        r"arrow.l.stop" => "⇤",
+        r"arrow.l.stroked" => "⇦",
+        r"arrow.l.tail" => "↢",
+        r"arrow.l.triple" => "⇚",
+        r"arrow.l.twohead" => "↞",
+        r"arrow.l.twohead.bar" => "⬶",
+        r"arrow.l.wave" => "↜",
+        r"arrow.r" => "→",
+        r"arrow.r.bar" => "↦",
+        r"arrow.r.curve" => "⤷",
+        r"arrow.r.dashed" => "⇢",
+        r"arrow.r.dotted" => "⤑",
+        r"arrow.r.double" => "⇒",
+        r"arrow.r.double.bar" => "⤇",
+        r"arrow.r.double.long" => "⟹",
+        r"arrow.r.double.long.bar" => "⟾",
+        r"arrow.r.double.not" => "⇏",
+        r"arrow.r.filled" => "➡",
+        r"arrow.r.hook" => "↪",
+        r"arrow.r.long" => "⟶",
+        r"arrow.r.long.bar" => "⟼",
+        r"arrow.r.long.squiggly" => "⟿",
+        r"arrow.r.loop" => "↬",
+        r"arrow.r.not" => "↛",
+        r"arrow.r.quad" => "⭆",
+        r"arrow.r.squiggly" => "⇝",
+        r"arrow.r.stop" => "⇥",
+        r"arrow.r.stroked" => "⇨",
+        r"arrow.r.tail" => "↣",
+        r"arrow.r.triple" => "⇛",
+        r"arrow.r.twohead" => "↠",
+        r"arrow.r.twohead.bar" => "⤅",
+        r"arrow.r.wave" => "↝",
+        r"arrow.t" => "↑",
+        r"arrow.t.b" => "↕",
+        r"arrow.t.b.double" => "⇕",
+        r"arrow.t.b.filled" => "⬍",
+        r"arrow.t.b.stroked" => "⇳",
+        r"arrow.t.bar" => "↥",
+        r"arrow.t.curve" => "⤴",
+        r"arrow.t.dashed" => "⇡",
+        r"arrow.t.double" => "⇑",
+        r"arrow.t.filled" => "⬆",
+        r"arrow.t.quad" => "⟰",
+        r"arrow.t.stop" => "⤒",
+        r"arrow.t.stroked" => "⇧",
+        r"arrow.t.triple" => "⤊",
+        r"arrow.t.twohead" => "↟",
+        r"arrow.tl" => "↖",
+        r"arrow.tl.br" => "⤡",
+        r"arrow.tl.double" => "⇖",
+        r"arrow.tl.filled" => "⬉",
+        r"arrow.tl.hook" => "⤣",
+        r"arrow.tl.stroked" => "⬁",
+        r"arrow.tr" => "↗",
+        r"arrow.tr.bl" => "⤢",
+        r"arrow.tr.double" => "⇗",
+        r"arrow.tr.filled" => "⬈",
+        r"arrow.tr.hook" => "⤤",
+        r"arrow.tr.stroked" => "⬀",
+        r"arrow.zigzag" => "↯",
+        r"arrowhead.b" => "⌄",
+        r"arrowhead.t" => "⌃",
+        r"arrows.bb" => "⇊",
+        r"arrows.bt" => "⇵",
+        r"arrows.ll" => "⇇",
+        r"arrows.lll" => "⬱",
+        r"arrows.lr" => "⇆",
+        r"arrows.lr.stop" => "↹",
+        r"arrows.rl" => "⇄",
+        r"arrows.rr" => "⇉",
+        r"arrows.rrr" => "⇶",
+        r"arrows.tb" => "⇅",
+        r"arrows.tt" => "⇈",
+        r"ast" => "∗",
+        r"ast.basic" => "*",
+        r"ast.circle" => "⊛",
+        r"ast.double" => "⁑",
+        r"ast.low" => "⁎",
+        r"ast.op" => "∗",
+        r"ast.small" => "﹡",
+        r"ast.square" => "⧆",
+        r"ast.triple" => "⁂",
+        r"at" => "@",
+        r"avogadro" => "N",
+        r"backslash" => "\\",
+        r"backslash.circle" => "⦸",
+        r"backslash.not" => "⧷",
+        r"ballot" => "☐",
+        r"ballot.x" => "☒",
+        r"bar.h" => "―",
+        r"bar.v" => "|",
+        r"bar.v.broken" => "¦",
+        r"bar.v.circle" => "⦶",
+        r"bar.v.double" => "‖",
+        r"bar.v.triple" => "⦀",
+        r"bb:A" => "𝔸",
+        r"bb:B" => "𝔹",
+        r"bb:C" => "ℂ",
+        r"bb:D" => "𝔻",
+        r"bb:E" => "𝔼",
+        r"bb:F" => "𝔽",
+        r"bb:G" => "𝔾",
+        r"bb:H" => "ℍ",
+        r"bb:I" => "𝕀",
+        r"bb:J" => "𝕁",
+        r"bb:K" => "𝕂",
+        r"bb:L" => "𝕃",
+        r"bb:M" => "𝕄",
+        r"bb:N" => "ℕ",
+        r"bb:O" => "𝕆",
+        r"bb:P" => "ℙ",
+        r"bb:Q" => "ℚ",
+        r"bb:R" => "ℝ",
+        r"bb:S" => "𝕊",
+        r"bb:T" => "𝕋",
+        r"bb:U" => "𝕌",
+        r"bb:V" => "𝕍",
+        r"bb:W" => "𝕎",
+        r"bb:X" => "𝕏",
+        r"bb:Y" => "𝕐",
+        r"bb:Z" => "ℤ",
+        r"because" => "∵",
+        r"bet" => "ב",
+        r"beta" => "β",
+        r"beta.alt" => "ϐ",
+        r"beth" => "ב",
+        r"bitcoin" => "₿",
+        r"bold:A" => "𝐀",
+        r"bold:B" => "𝐁",
+        r"bold:C" => "𝐂",
+        r"bold:D" => "𝐃",
+        r"bold:E" => "𝐄",
+        r"bold:F" => "𝐅",
+        r"bold:G" => "𝐆",
+        r"bold:H" => "𝐇",
+        r"bold:I" => "𝐈",
+        r"bold:J" => "𝐉",
+        r"bold:K" => "𝐊",
+        r"bold:L" => "𝐋",
+        r"bold:M" => "𝐌",
+        r"bold:N" => "𝐍",
+        r"bold:O" => "𝐎",
+        r"bold:P" => "𝐏",
+        r"bold:Q" => "𝐐",
+        r"bold:R" => "𝐑",
+        r"bold:S" => "𝐒",
+        r"bold:T" => "𝐓",
+        r"bold:U" => "𝐔",
+        r"bold:V" => "𝐕",
+        r"bold:W" => "𝐖",
+        r"bold:X" => "𝐗",
+        r"bold:Y" => "𝐘",
+        r"bold:Z" => "𝐙",
+        r"bold:\\Chi" => "𝚾",
+        r"bold:\\Delta" => "𝚫",
+        r"bold:\\Gamma" => "𝚪",
+        r"bold:\\Lambda" => "𝚲",
+        r"bold:\\Omega" => "𝛀",
+        r"bold:\\Phi" => "𝚽",
+        r"bold:\\Pi" => "𝚷",
+        r"bold:\\Psi" => "𝚿",
+        r"bold:\\Sigma" => "𝚺",
+        r"bold:\\Theta" => "𝚯",
+        r"bold:\\Upsilon" => "𝚼",
+        r"bold:\\Xi" => "𝚵",
+        r"bold:\\alpha" => "𝛂",
+        r"bold:\\beta" => "𝛃",
+        r"bold:\\chi" => "𝛘",
+        r"bold:\\delta" => "𝛅",
+        r"bold:\\epsilon" => "𝛆",
+        r"bold:\\eta" => "𝛈",
+        r"bold:\\gamma" => "𝛄",
+        r"bold:\\iota" => "𝛊",
+        r"bold:\\kappa" => "𝛋",
+        r"bold:\\lambda" => "𝛌",
+        r"bold:\\mu" => "𝛍",
+        r"bold:\\nu" => "𝛎",
+        r"bold:\\omega" => "𝛚",
+        r"bold:\\phi" => "𝛗",
+        r"bold:\\pi" => "𝛑",
+        r"bold:\\psi" => "𝛙",
+        r"bold:\\rho" => "𝛒",
+        r"bold:\\sigma" => "𝛔",
+        r"bold:\\tau" => "𝛕",
+        r"bold:\\theta" => "𝛉",
+        r"bold:\\upsilon" => "𝛖",
+        r"bold:\\xi" => "𝛏",
+        r"bold:\\zeta" => "𝛇",
+        r"bold:a" => "𝐚",
+        r"bold:b" => "𝐛",
+        r"bold:c" => "𝐜",
+        r"bold:d" => "𝐝",
+        r"bold:e" => "𝐞",
+        r"bold:f" => "𝐟",
+        r"bold:g" => "𝐠",
+        r"bold:h" => "𝐡",
+        r"bold:i" => "𝐢",
+        r"bold:j" => "𝐣",
+        r"bold:k" => "𝐤",
+        r"bold:l" => "𝐥",
+        r"bold:m" => "𝐦",
+        r"bold:n" => "𝐧",
+        r"bold:o" => "𝐨",
+        r"bold:p" => "𝐩",
+        r"bold:q" => "𝐪",
+        r"bold:r" => "𝐫",
+        r"bold:s" => "𝐬",
+        r"bold:t" => "𝐭",
+        r"bold:u" => "𝐮",
+        r"bold:v" => "𝐯",
+        r"bold:w" => "𝐰",
+        r"bold:x" => "𝐱",
+        r"bold:y" => "𝐲",
+        r"bold:z" => "𝐳",
+        r"boltzmann" => "k",
+        r"bot" => "⊥",
+        r"brace.b" => "⏟",
+        r"brace.l" => "{",
+        r"brace.r" => "}",
+        r"brace.t" => "⏞",
+        r"bracket.b" => "⎵",
+        r"bracket.l" => "{",
+        r"bracket.l.double" => "⟦",
+        r"bracket.r" => "}",
+        r"bracket.r.double" => "⟧",
+        r"bracket.t" => "⎴",
+        r"breve" => "˘",
+        r"bullet" => "•",
+        r"cap" => "∩",
+        r"caret" => "‸",
+        r"caron" => "ˇ",
+        r"cdot" => "·",
+        r"charge" => "q",
+        r"checkmark" => "✓",
+        r"checkmark.light" => "🗸",
+        r"chi" => "χ",
+        r"circ" => "∘",
+        r"circle.dotted" => "◌",
+        r"circle.filled" => "●",
+        r"circle.filled.big" => "⬤",
+        r"circle.filled.small" => "∙",
+        r"circle.filled.tiny" => "⦁",
+        r"circle.nested" => "⊚",
+        r"circle.stroked" => "○",
+        r"circle.stroked.big" => "◯",
+        r"circle.stroked.small" => "⚬",
+        r"circle.stroked.tiny" => "∘",
+        r"clubs" => "♣",
+        r"co" => "℅",
+        r"colon" => ":",
+        r"colon.double.eq" => "⩴",
+        r"colon.eq" => "≔",
+        r"comma" => ",",
+        r"complement" => "∁",
+        r"compose" => "∘",
+        r"convolve" => "∗",
+        r"copyright" => "©",
+        r"copyright.sound" => "℗",
+        r"cup" => "∪",
+        r"curl" => "∇×",
+        r"dagger" => "†",
+        r"dagger.double" => "‡",
+        r"dash.circle" => "⊝",
+        r"dash.colon" => "∹",
+        r"dash.em" => "—",
+        r"dash.en" => "–",
+        r"dash.fig" => "‒",
+        r"dash.wave" => "〜",
+        r"dash.wave.double" => "〰",
+        r"ddagger" => "‡",
+        r"degree" => "°",
+        r"degree.c" => "℃",
+        r"degree.f" => "℉",
+        r"delta" => "δ",
+        r"diaer" => "¨",
+        r"diameter" => "⌀",
+        r"diamond" => "◊",
+        r"diamond.filled" => "◆",
+        r"diamond.filled.medium" => "⬥",
+        r"diamond.filled.small" => "⬩",
+        r"diamond.stroked" => "◇",
+        r"diamond.stroked.dot" => "⟐",
+        r"diamond.stroked.medium" => "⬦",
+        r"diamond.stroked.small" => "⋄",
+        r"diamonds" => "♢",
+        r"dif" => "d",
+        r"diff" => "∂",
+        r"div" => "÷",
+        // r"div" => "∇·",
+        r"div.circle" => "⨸",
+        r"divides" => "∣",
+        r"divides.not" => "∤",
+        r"dollar" => "$",
+        r"dot" => "·",
+        r"dot.basic" => ".",
+        r"dot.c" => "·",
+        r"dot.circle" => "⊙",
+        r"dot.circle.big" => "⨀",
+        r"dot.double" => "¨",
+        r"dot.op" => "⋅",
+        r"dot.square" => "⊡",
+        r"dotless.i" => "𝚤",
+        r"dotless.j" => "𝚥",
+        r"dots" => "…",
+        r"dots.down" => "⋱",
+        r"dots.h" => "…",
+        r"dots.h.c" => "⋯",
+        r"dots.up" => "⋰",
+        r"dots.v" => "⋮",
+        r"double:0" => "𝟘",
+        r"double:1" => "𝟙",
+        r"double:2" => "𝟚",
+        r"double:3" => "𝟛",
+        r"double:4" => "𝟜",
+        r"double:5" => "𝟝",
+        r"double:6" => "𝟞",
+        r"double:7" => "𝟟",
+        r"double:8" => "𝟠",
+        r"double:9" => "𝟡",
+        r"e" => "ₑ",
+        r"electric" => "E",
+        r"electron" => "e",
+        r"element" => "∈",
+        r"ell" => "ℓ",
+        r"ellipse.filled.h" => "⬬",
+        r"ellipse.filled.v" => "⬮",
+        r"ellipse.stroked.h" => "⬭",
+        r"ellipse.stroked.v" => "⬯",
+        r"emptyset" => "∅",
+        r"emptyset.rev" => "⦰",
+        r"energy" => "E",
+        r"enthalpy" => "H",
+        r"entropy" => "S",
+        r"epsilon" => "ε",
+        r"epsilon.alt" => "ϵ",
+        r"eq" => "=",
+        r"eq.circle" => "⊜",
+        r"eq.colon" => "≕",
+        r"eq.def" => "≝",
+        r"eq.delta" => "≜",
+        r"eq.equi" => "≚",
+        r"eq.est" => "≙",
+        r"eq.gt" => "⋝",
+        r"eq.lt" => "⋜",
+        r"eq.m" => "≞",
+        r"eq.not" => "≠",
+        r"eq.prec" => "⋞",
+        r"eq.quad" => "≣",
+        r"eq.quest" => "≟",
+        r"eq.small" => "﹦",
+        r"eq.star" => "≛",
+        r"eq.succ" => "⋟",
+        r"eq.triple" => "≡",
+        r"equiv" => "≡",
+        r"equiv.not" => "≢",
+        r"eta" => "η",
+        r"euro" => "€",
+        r"excl" => "!",
+        r"excl.double" => "‼",
+        r"excl.inv" => "¡",
+        r"excl.quest" => "⁉",
+        r"exists" => "∃",
+        r"exists.not" => "∄",
+        r"fence.dotted" => "⦙",
+        r"fence.l" => "⧘",
+        r"fence.l.double" => "⧚",
+        r"fence.r" => "⧙",
+        r"fence.r.double" => "⧛",
+        r"flat" => "♭",
+        r"floral" => "❦",
+        r"floral.l" => "☙",
+        r"floral.r" => "❧",
+        r"forall" => "∀",
+        r"force" => "F",
+        r"frak:A" => "𝔄",
+        r"frak:B" => "𝔅",
+        r"frak:C" => "ℭ",
+        r"frak:D" => "𝔇",
+        r"frak:E" => "𝔈",
+        r"frak:F" => "𝔉",
+        r"frak:G" => "𝔊",
+        r"frak:H" => "ℌ",
+        r"frak:I" => "ℑ",
+        r"frak:J" => "𝔍",
+        r"frak:K" => "𝔎",
+        r"frak:L" => "𝔏",
+        r"frak:M" => "𝔐",
+        r"frak:N" => "𝔑",
+        r"frak:O" => "𝔒",
+        r"frak:P" => "𝔓",
+        r"frak:Q" => "𝔔",
+        r"frak:R" => "ℜ",
+        r"frak:S" => "𝔖",
+        r"frak:T" => "𝔗",
+        r"frak:U" => "𝔘",
+        r"frak:V" => "𝔙",
+        r"frak:W" => "𝔚",
+        r"frak:X" => "𝔛",
+        r"frak:Y" => "𝔜",
+        r"frak:Z" => "ℨ",
+        r"frak:a" => "𝔞",
+        r"frak:b" => "𝔟",
+        r"frak:c" => "𝔠",
+        r"frak:d" => "𝔡",
+        r"frak:e" => "𝔢",
+        r"frak:f" => "𝔣",
+        r"frak:g" => "𝔤",
+        r"frak:h" => "𝔥",
+        r"frak:i" => "𝔦",
+        r"frak:j" => "𝔧",
+        r"frak:k" => "𝔨",
+        r"frak:l" => "𝔩",
+        r"frak:m" => "𝔪",
+        r"frak:n" => "𝔫",
+        r"frak:o" => "𝔬",
+        r"frak:p" => "𝔭",
+        r"frak:q" => "𝔮",
+        r"frak:r" => "𝔯",
+        r"frak:s" => "𝔰",
+        r"frak:t" => "𝔱",
+        r"frak:u" => "𝔲",
+        r"frak:v" => "𝔳",
+        r"frak:w" => "𝔴",
+        r"frak:x" => "𝔵",
+        r"frak:y" => "𝔶",
+        r"frak:z" => "𝔷",
+        r"franc" => "₣",
+        r"gamma" => "γ",
+        r"geq" => "≥",
+        r"gg" => "≫",
+        r"gibbs" => "G",
+        r"gimel" => "ג",
+        r"gimmel" => "ג",
+        r"grad" => "∇",
+        r"grave" => "`",
+        r"gravity" => "g",
+        r"gt" => ">",
+        r"gt.circle" => "⧁",
+        r"gt.curly" => "≻",
+        r"gt.curly.approx" => "⪸",
+        r"gt.curly.double" => "⪼",
+        r"gt.curly.eq" => "≽",
+        r"gt.curly.eq.not" => "⋡",
+        r"gt.curly.equiv" => "⪴",
+        r"gt.curly.napprox" => "⪺",
+        r"gt.curly.nequiv" => "⪶",
+        r"gt.curly.not" => "⊁",
+        r"gt.curly.ntilde" => "⋩",
+        r"gt.curly.tilde" => "≿",
+        r"gt.dot" => "⋗",
+        r"gt.double" => "≫",
+        r"gt.eq" => "≥",
+        r"gt.eq.lt" => "⋛",
+        r"gt.eq.not" => "≱",
+        r"gt.eq.slant" => "⩾",
+        r"gt.equiv" => "≧",
+        r"gt.lt" => "≷",
+        r"gt.lt.not" => "≹",
+        r"gt.nequiv" => "≩",
+        r"gt.not" => "≯",
+        r"gt.ntilde" => "⋧",
+        r"gt.small" => "﹥",
+        r"gt.tilde" => "≳",
+        r"gt.tilde.not" => "≵",
+        r"gt.tri" => "⊳",
+        r"gt.tri.eq" => "⊵",
+        r"gt.tri.eq.not" => "⋭",
+        r"gt.tri.not" => "⋫",
+        r"gt.triple" => "⋙",
+        r"gt.triple.nested" => "⫸",
+        r"h" => "ₕ",
+        r"harpoon.bl" => "⇃",
+        r"harpoon.bl.bar" => "⥡",
+        r"harpoon.bl.stop" => "⥙",
+        r"harpoon.br" => "⇂",
+        r"harpoon.br.bar" => "⥝",
+        r"harpoon.br.stop" => "⥕",
+        r"harpoon.lb" => "↽",
+        r"harpoon.lb.bar" => "⥞",
+        r"harpoon.lb.rb" => "⥐",
+        r"harpoon.lb.rt" => "⥋",
+        r"harpoon.lb.stop" => "⥖",
+        r"harpoon.lt" => "↼",
+        r"harpoon.lt.bar" => "⥚",
+        r"harpoon.lt.rb" => "⥊",
+        r"harpoon.lt.rt" => "⥎",
+        r"harpoon.lt.stop" => "⥒",
+        r"harpoon.rb" => "⇁",
+        r"harpoon.rb.bar" => "⥟",
+        r"harpoon.rb.stop" => "⥗",
+        r"harpoon.rt" => "⇀",
+        r"harpoon.rt.bar" => "⥛",
+        r"harpoon.rt.stop" => "⥓",
+        r"harpoon.tl" => "↿",
+        r"harpoon.tl.bar" => "⥠",
+        r"harpoon.tl.bl" => "⥑",
+        r"harpoon.tl.br" => "⥍",
+        r"harpoon.tl.stop" => "⥘",
+        r"harpoon.tr" => "↾",
+        r"harpoon.tr.bar" => "⥜",
+        r"harpoon.tr.bl" => "⥌",
+        r"harpoon.tr.br" => "⥏",
+        r"harpoon.tr.stop" => "⥔",
+        r"harpoons.blbr" => "⥥",
+        r"harpoons.bltr" => "⥯",
+        r"harpoons.lbrb" => "⥧",
+        r"harpoons.ltlb" => "⥢",
+        r"harpoons.ltrb" => "⇋",
+        r"harpoons.ltrt" => "⥦",
+        r"harpoons.rblb" => "⥩",
+        r"harpoons.rtlb" => "⇌",
+        r"harpoons.rtlt" => "⥨",
+        r"harpoons.rtrb" => "⥤",
+        r"harpoons.tlbr" => "⥮",
+        r"harpoons.tltr" => "⥣",
+        r"hash" => "#",
+        r"hat" => "^",
+        r"hbar" => "ℏ",
+        r"hearts" => "♡",
+        r"helmholtz" => "F",
+        r"hexa.filled" => "⬢",
+        r"hexa.stroked" => "⬡",
+        r"hyph" => "‐",
+        r"hyph.minus" => "-",
+        r"hyph.nobreak" => "‑",
+        r"hyph.point" => "‧",
+        r"hyph.soft" => "­",
+        r"i" => "ᵢ",
+        r"iff" => "⇔",
+        r"implies" => "⇒",
+        r"in" => "∈",
+        r"in.not" => "∉",
+        r"in.rev" => "∋",
+        r"in.rev.not" => "∌",
+        r"in.rev.small" => "∍",
+        r"in.small" => "∊",
+        r"infinity" => "∞",
+        r"integral" => "∫",
+        r"integral.arrow.hook" => "⨗",
+        r"integral.ccw" => "⨑",
+        r"integral.cont" => "∮",
+        r"integral.cont.ccw" => "∳",
+        r"integral.cont.cw" => "∲",
+        r"integral.cw" => "∱",
+        r"integral.double" => "∬",
+        r"integral.quad" => "⨌",
+        r"integral.sect" => "⨙",
+        r"integral.square" => "⨖",
+        r"integral.surf" => "∯",
+        r"integral.times" => "⨘",
+        r"integral.triple" => "∭",
+        r"integral.union" => "⨚",
+        r"integral.vol" => "∰",
+        r"interrobang" => "‽",
+        r"intersection" => "∩",
+        r"iota" => "ι",
+        r"italic:A" => "𝐴",
+        r"italic:B" => "𝐵",
+        r"italic:C" => "𝐶",
+        r"italic:D" => "𝐷",
+        r"italic:E" => "𝐸",
+        r"italic:F" => "𝐹",
+        r"italic:G" => "𝐺",
+        r"italic:H" => "𝐻",
+        r"italic:I" => "𝐼",
+        r"italic:J" => "𝐽",
+        r"italic:K" => "𝐾",
+        r"italic:L" => "𝐿",
+        r"italic:M" => "𝑀",
+        r"italic:N" => "𝑁",
+        r"italic:O" => "𝑂",
+        r"italic:P" => "𝑃",
+        r"italic:Q" => "𝑄",
+        r"italic:R" => "𝑅",
+        r"italic:S" => "𝑆",
+        r"italic:T" => "𝑇",
+        r"italic:U" => "𝑈",
+        r"italic:V" => "𝑉",
+        r"italic:W" => "𝑊",
+        r"italic:X" => "𝑋",
+        r"italic:Y" => "𝑌",
+        r"italic:Z" => "𝑍",
+        r"italic:a" => "𝑎",
+        r"italic:b" => "𝑏",
+        r"italic:c" => "𝑐",
+        r"italic:d" => "𝑑",
+        r"italic:e" => "𝑒",
+        r"italic:f" => "𝑓",
+        r"italic:g" => "𝑔",
+        r"italic:h" => "ℎ",
+        r"italic:i" => "𝑖",
+        r"italic:j" => "𝑗",
+        r"italic:k" => "𝑘",
+        r"italic:l" => "𝑙",
+        r"italic:m" => "𝑚",
+        r"italic:n" => "𝑛",
+        r"italic:o" => "𝑜",
+        r"italic:p" => "𝑝",
+        r"italic:q" => "𝑞",
+        r"italic:r" => "𝑟",
+        r"italic:s" => "𝑠",
+        r"italic:t" => "𝑡",
+        r"italic:u" => "𝑢",
+        r"italic:v" => "𝑣",
+        r"italic:w" => "𝑤",
+        r"italic:x" => "𝑥",
+        r"italic:y" => "𝑦",
+        r"italic:z" => "𝑧",
+        r"j" => "ⱼ",
+        r"join" => "⨝",
+        r"join.l" => "⟕",
+        r"join.l.r" => "⟗",
+        r"join.r" => "⟖",
+        r"k" => "ₖ",
+        r"kai" => "ϗ",
+        r"kappa" => "κ",
+        r"kappa.alt" => "ϰ",
+        r"kelvin" => "K",
+        r"l" => "ₗ",
+        r"lambda" => "λ",
+        r"langle" => "⟨",
+        r"laplace" => "∆",
+        r"laplacian" => "∇²",
+        r"lceil" => "⌈",
+        r"leq" => "≤",
+        r"lfloor" => "⌊",
+        r"light" => "c",
+        r"lira" => "₺",
+        r"ll" => "≪",
+        r"lozenge.filled" => "⧫",
+        r"lozenge.filled.medium" => "⬧",
+        r"lozenge.filled.small" => "⬪",
+        r"lozenge.stroked" => "◊",
+        r"lozenge.stroked.medium" => "⬨",
+        r"lozenge.stroked.small" => "⬫",
+        r"lt" => "<",
+        r"lt.circle" => "⧀",
+        r"lt.curly" => "≺",
+        r"lt.curly.approx" => "⪷",
+        r"lt.curly.double" => "⪻",
+        r"lt.curly.eq" => "≼",
+        r"lt.curly.eq.not" => "⋠",
+        r"lt.curly.equiv" => "⪳",
+        r"lt.curly.napprox" => "⪹",
+        r"lt.curly.nequiv" => "⪵",
+        r"lt.curly.not" => "⊀",
+        r"lt.curly.ntilde" => "⋨",
+        r"lt.curly.tilde" => "≾",
+        r"lt.dot" => "⋖",
+        r"lt.double" => "≪",
+        r"lt.eq" => "≤",
+        r"lt.eq.gt" => "⋚",
+        r"lt.eq.not" => "≰",
+        r"lt.eq.slant" => "⩽",
+        r"lt.equiv" => "≦",
+        r"lt.gt" => "≶",
+        r"lt.gt.not" => "≸",
+        r"lt.nequiv" => "≨",
+        r"lt.not" => "≮",
+        r"lt.ntilde" => "⋦",
+        r"lt.small" => "﹤",
+        r"lt.tilde" => "≲",
+        r"lt.tilde.not" => "≴",
+        r"lt.tri" => "⊲",
+        r"lt.tri.eq" => "⊴",
+        r"lt.tri.eq.not" => "⋬",
+        r"lt.tri.not" => "⋪",
+        r"lt.triple" => "⋘",
+        r"lt.triple.nested" => "⫷",
+        r"m" => "ₘ",
+        r"macron" => "¯",
+        r"magnetic" => "B",
+        r"maltese" => "✠",
+        r"mass" => "m",
+        r"minus" => "−",
+        r"minus.circle" => "⊖",
+        r"minus.dot" => "∸",
+        r"minus.plus" => "∓",
+        r"minus.square" => "⊟",
+        r"minus.tilde" => "≂",
+        r"minus.triangle" => "⨺",
+        r"models" => "⊧",
+        r"momentum" => "p",
+        r"mono:A" => "𝙰",
+        r"mono:B" => "𝙱",
+        r"mono:C" => "𝙲",
+        r"mono:D" => "𝙳",
+        r"mono:E" => "𝙴",
+        r"mono:F" => "𝙵",
+        r"mono:G" => "𝙶",
+        r"mono:H" => "𝙷",
+        r"mono:I" => "𝙸",
+        r"mono:J" => "𝙹",
+        r"mono:K" => "𝙺",
+        r"mono:L" => "𝙻",
+        r"mono:M" => "𝙼",
+        r"mono:N" => "𝙽",
+        r"mono:O" => "𝙾",
+        r"mono:P" => "𝙿",
+        r"mono:Q" => "𝚀",
+        r"mono:R" => "𝚁",
+        r"mono:S" => "𝚂",
+        r"mono:T" => "𝚃",
+        r"mono:U" => "𝚄",
+        r"mono:V" => "𝚅",
+        r"mono:W" => "𝚆",
+        r"mono:X" => "𝚇",
+        r"mono:Y" => "𝚈",
+        r"mono:Z" => "𝚉",
+        r"mono:a" => "𝚊",
+        r"mono:b" => "𝚋",
+        r"mono:c" => "𝚌",
+        r"mono:d" => "𝚍",
+        r"mono:e" => "𝚎",
+        r"mono:f" => "𝚏",
+        r"mono:g" => "𝚐",
+        r"mono:h" => "𝚑",
+        r"mono:i" => "𝚒",
+        r"mono:j" => "𝚓",
+        r"mono:k" => "𝚔",
+        r"mono:l" => "𝚕",
+        r"mono:m" => "𝚖",
+        r"mono:n" => "𝚗",
+        r"mono:o" => "𝚘",
+        r"mono:p" => "𝚙",
+        r"mono:q" => "𝚚",
+        r"mono:r" => "𝚛",
+        r"mono:s" => "𝚜",
+        r"mono:t" => "𝚝",
+        r"mono:u" => "𝚞",
+        r"mono:v" => "𝚟",
+        r"mono:w" => "𝚠",
+        r"mono:x" => "𝚡",
+        r"mono:y" => "𝚢",
+        r"mono:z" => "𝚣",
+        r"mp" => "∓",
+        r"mu" => "μ",
+        r"multimap" => "⊸",
+        r"n" => "ₙ",
+        r"nabla" => "∇",
+        r"natural" => "♮",
+        r"neg" => "¬",
+        r"neq" => "≠",
+        r"neutron" => "n",
+        r"norm" => "‖",
+        r"not" => "¬",
+        r"notes.down" => "🎝",
+        r"notes.up" => "🎜",
+        r"nothing" => "∅",
+        r"nothing.rev" => "⦰",
+        r"notin" => "∉",
+        r"nu" => "ν",
+        r"o" => "ₒ",
+        r"odot" => "⊙",
+        r"ohm" => "Ω",
+        r"ohm.inv" => "℧",
+        r"omega" => "ω",
+        r"omicron" => "ο",
+        r"ominus" => "⊖",
+        r"oo" => "∞",
+        r"oplus" => "⊕",
+        r"or" => "∨",
+        r"or.big" => "⋁",
+        r"or.curly" => "⋎",
+        r"or.dot" => "⟇",
+        r"or.double" => "⩔",
+        r"oslash" => "⊘",
+        r"otimes" => "⊗",
+        r"p" => "ₚ",
+        r"parallel" => "∥",
+        r"parallel.circle" => "⦷",
+        r"parallel.not" => "∦",
+        r"paren.b" => "⏝",
+        r"paren.l" => "(",
+        r"paren.r" => ")",
+        r"paren.t" => "⏜",
+        r"partial" => "∂",
+        r"penta.filled" => "⬟",
+        r"penta.stroked" => "⬠",
+        r"percent" => "%",
+        r"permille" => "‰",
+        r"perp" => "⊥",
+        r"perp.circle" => "⦹",
+        r"peso" => "₱",
+        r"phi" => "φ",
+        r"phi.alt" => "ϕ",
+        r"pi" => "π",
+        r"pi.alt" => "ϖ",
+        r"pilcrow" => "¶",
+        r"pilcrow.rev" => "⁋",
+        r"planck" => "ℎ",
+        r"planck.reduce" => "ℏ",
+        r"plus" => "+",
+        r"plus.circle" => "⊕",
+        r"plus.circle.arrow" => "⟴",
+        r"plus.circle.big" => "⨁",
+        r"plus.dot" => "∔",
+        r"plus.minus" => "±",
+        r"plus.small" => "﹢",
+        r"plus.square" => "⊞",
+        r"plus.triangle" => "⨹",
+        r"pm" => "±",
+        r"pound" => "£",
+        r"prec" => "≺",
+        r"prec.approx" => "⪷",
+        r"prec.double" => "⪻",
+        r"prec.eq" => "≼",
+        r"prec.eq.not" => "⋠",
+        r"prec.equiv" => "⪳",
+        r"prec.napprox" => "⪹",
+        r"prec.nequiv" => "⪵",
+        r"prec.not" => "⊀",
+        r"prec.ntilde" => "⋨",
+        r"prec.tilde" => "≾",
+        r"pressure" => "P",
+        r"prime" => "′",
+        r"prime.double" => "″",
+        r"prime.double.rev" => "‶",
+        r"prime.quad" => "⁗",
+        r"prime.rev" => "‵",
+        r"prime.triple" => "‴",
+        r"prime.triple.rev" => "‷",
+        r"product" => "∏",
+        r"product.co" => "∐",
+        r"prop" => "∝",
+        r"proton" => "p",
+        r"psi" => "ψ",
+        r"qed" => "∎",
+        r"quad" => " ",
+        r"quest" => "?",
+        r"quest.double" => "⁇",
+        r"quest.excl" => "⁈",
+        r"quest.inv" => "¿",
+        r"quote.angle.l.double" => "«",
+        r"quote.angle.l.single" => "‹",
+        r"quote.angle.r.double" => "»",
+        r"quote.angle.r.single" => "›",
+        r"quote.double" => "\"",
+        r"quote.high.double" => "‟",
+        r"quote.high.single" => "‛",
+        r"quote.l.double" => "“",
+        r"quote.l.single" => "‘",
+        r"quote.low.double" => "„",
+        r"quote.low.single" => "‚",
+        r"quote.r.double" => "”",
+        r"quote.r.single" => "’",
+        r"r" => "ᵣ",
+        r"rangle" => "⟩",
+        r"ratio" => "∶",
+        r"rceil" => "⌉",
+        r"rect.filled.h" => "▬",
+        r"rect.filled.v" => "▮",
+        r"rect.stroked.h" => "▭",
+        r"rect.stroked.v" => "▯",
+        r"refmark" => "※",
+        r"rfloor" => "⌋",
+        r"rho" => "ρ",
+        r"rho.alt" => "ϱ",
+        r"ruble" => "₽",
+        r"rupee" => "₹",
+        r"s" => "ₛ",
+        r"sans:A" => "𝖠",
+        r"sans:B" => "𝖡",
+        r"sans:C" => "𝖢",
+        r"sans:D" => "𝖣",
+        r"sans:E" => "𝖤",
+        r"sans:F" => "𝖥",
+        r"sans:G" => "𝖦",
+        r"sans:H" => "𝖧",
+        r"sans:I" => "𝖨",
+        r"sans:J" => "𝖩",
+        r"sans:K" => "𝖪",
+        r"sans:L" => "𝖫",
+        r"sans:M" => "𝖬",
+        r"sans:N" => "𝖭",
+        r"sans:O" => "𝖮",
+        r"sans:P" => "𝖯",
+        r"sans:Q" => "𝖰",
+        r"sans:R" => "𝖱",
+        r"sans:S" => "𝖲",
+        r"sans:T" => "𝖳",
+        r"sans:U" => "𝖴",
+        r"sans:V" => "𝖵",
+        r"sans:W" => "𝖶",
+        r"sans:X" => "𝖷",
+        r"sans:Y" => "𝖸",
+        r"sans:Z" => "𝖹",
+        r"sans:a" => "𝖺",
+        r"sans:b" => "𝖻",
+        r"sans:c" => "𝖼",
+        r"sans:d" => "𝖽",
+        r"sans:e" => "𝖾",
+        r"sans:f" => "𝖿",
+        r"sans:g" => "𝗀",
+        r"sans:h" => "𝗁",
+        r"sans:i" => "𝗂",
+        r"sans:j" => "𝗃",
+        r"sans:k" => "𝗄",
+        r"sans:l" => "𝗅",
+        r"sans:m" => "𝗆",
+        r"sans:n" => "𝗇",
+        r"sans:o" => "𝗈",
+        r"sans:p" => "𝗉",
+        r"sans:q" => "𝗊",
+        r"sans:r" => "𝗋",
+        r"sans:s" => "𝗌",
+        r"sans:t" => "𝗍",
+        r"sans:u" => "𝗎",
+        r"sans:v" => "𝗏",
+        r"sans:w" => "𝗐",
+        r"sans:x" => "𝗑",
+        r"sans:y" => "𝗒",
+        r"sans:z" => "𝗓",
+        r"script:A" => "𝒜",
+        r"script:B" => "ℬ",
+        r"script:C" => "𝒞",
+        r"script:D" => "𝒟",
+        r"script:E" => "ℰ",
+        r"script:F" => "ℱ",
+        r"script:G" => "𝒢",
+        r"script:H" => "ℋ",
+        r"script:I" => "ℐ",
+        r"script:J" => "𝒥",
+        r"script:K" => "𝒦",
+        r"script:L" => "ℒ",
+        r"script:M" => "ℳ",
+        r"script:N" => "𝒩",
+        r"script:O" => "𝒪",
+        r"script:P" => "𝒫",
+        r"script:Q" => "𝒬",
+        r"script:R" => "ℛ",
+        r"script:S" => "𝒮",
+        r"script:T" => "𝒯",
+        r"script:U" => "𝒰",
+        r"script:V" => "𝒱",
+        r"script:W" => "𝒲",
+        r"script:X" => "𝒳",
+        r"script:Y" => "𝒴",
+        r"script:Z" => "𝒵",
+        r"sect" => "∩",
+        r"sect.and" => "⩄",
+        r"sect.big" => "⋂",
+        r"sect.dot" => "⩀",
+        r"sect.double" => "⋒",
+        r"sect.sq" => "⊓",
+        r"sect.sq.big" => "⨅",
+        r"sect.sq.double" => "⩎",
+        r"section" => "§",
+        r"semi" => ";",
+        r"semi.rev" => "⁏",
+        r"servicemark" => "℠",
+        r"sharp" => "♯",
+        r"shin" => "ש",
+        r"sigma" => "σ",
+        r"sigma.alt" => "ς",
+        r"slash" => "/",
+        r"slash.big" => "⧸",
+        r"slash.double" => "⫽",
+        r"slash.triple" => "⫻",
+        r"smash" => "⨳",
+        r"spades" => "♠",
+        r"speed" => "c",
+        r"spin" => "S",
+        r"sqcap" => "⊓",
+        r"sqcup" => "⊔",
+        r"sqrt" => "√",
+        r"square" => "□",
+        r"square.filled" => "■",
+        r"square.filled.big" => "⬛",
+        r"square.filled.medium" => "◼",
+        r"square.filled.small" => "◾",
+        r"square.filled.tiny" => "▪",
+        r"square.stroked" => "□",
+        r"square.stroked.big" => "⬜",
+        r"square.stroked.dotted" => "⬚",
+        r"square.stroked.medium" => "◻",
+        r"square.stroked.rounded" => "▢",
+        r"square.stroked.small" => "◽",
+        r"square.stroked.tiny" => "▫",
+        r"star" => "⋆",
+        r"star.filled" => "★",
+        r"star.op" => "⋆",
+        r"star.stroked" => "★",
+        r"subset" => "⊂",
+        r"subset.dot" => "⪽",
+        r"subset.double" => "⋐",
+        r"subset.eq" => "⊆",
+        r"subset.eq.not" => "⊈",
+        r"subset.eq.sq" => "⊑",
+        r"subset.eq.sq.not" => "⋢",
+        r"subset.neq" => "⊊",
+        r"subset.not" => "⊄",
+        r"subset.sq" => "⊏",
+        r"subset.sq.neq" => "⋤",
+        r"succ" => "≻",
+        r"succ.approx" => "⪸",
+        r"succ.double" => "⪼",
+        r"succ.eq" => "≽",
+        r"succ.eq.not" => "⋡",
+        r"succ.equiv" => "⪴",
+        r"succ.napprox" => "⪺",
+        r"succ.nequiv" => "⪶",
+        r"succ.not" => "⊁",
+        r"succ.ntilde" => "⋩",
+        r"succ.tilde" => "≿",
+        r"suit.club" => "♣",
+        r"suit.diamond" => "♦",
+        r"suit.heart" => "♥",
+        r"suit.spade" => "♠",
+        r"sum" => "∑",
+        r"sum.integral" => "⨋",
+        r"superset" => "⊃",
+        r"supset" => "⊃",
+        r"supset.dot" => "⪾",
+        r"supset.double" => "⋑",
+        r"supset.eq" => "⊇",
+        r"supset.eq.not" => "⊉",
+        r"supset.eq.sq" => "⊒",
+        r"supset.eq.sq.not" => "⋣",
+        r"supset.neq" => "⊋",
+        r"supset.not" => "⊅",
+        r"supset.sq" => "⊐",
+        r"supset.sq.neq" => "⋥",
+        r"t" => "ₜ",
+        r"tack.b" => "⊤",
+        r"tack.b.big" => "⟙",
+        r"tack.b.double" => "⫪",
+        r"tack.b.short" => "⫟",
+        r"tack.l" => "⊣",
+        r"tack.l.double" => "⫤",
+        r"tack.l.long" => "⟞",
+        r"tack.l.r" => "⟛",
+        r"tack.l.short" => "⫞",
+        r"tack.r" => "⊢",
+        r"tack.r.double" => "⊨",
+        r"tack.r.double.not" => "⊭",
+        r"tack.r.long" => "⟝",
+        r"tack.r.not" => "⊬",
+        r"tack.r.short" => "⊦",
+        r"tack.t" => "⊥",
+        r"tack.t.big" => "⟘",
+        r"tack.t.double" => "⫫",
+        r"tack.t.short" => "⫠",
+        r"tau" => "τ",
+        r"temperature" => "T",
+        r"therefore" => "∴",
+        r"theta" => "θ",
+        r"theta.alt" => "ϑ",
+        r"tilde.basic" => "~",
+        r"tilde.eq" => "≃",
+        r"tilde.eq.not" => "≄",
+        r"tilde.eq.rev" => "⋍",
+        r"tilde.equiv" => "≅",
+        r"tilde.equiv.not" => "≇",
+        r"tilde.nequiv" => "≆",
+        r"tilde.not" => "≁",
+        r"tilde.op" => "∼",
+        r"tilde.rev" => "∽",
+        r"tilde.rev.equiv" => "≌",
+        r"tilde.triple" => "≋",
+        r"times" => "×",
+        r"times.big" => "⨉",
+        r"times.circle" => "⊗",
+        r"times.circle.big" => "⨂",
+        r"times.div" => "⋇",
+        r"times.l" => "⋉",
+        r"times.r" => "⋊",
+        r"times.square" => "⊠",
+        r"times.three.l" => "⋋",
+        r"times.three.r" => "⋌",
+        r"times.triangle" => "⨻",
+        r"top" => "⊤",
+        r"triangle" => "△",
+        r"triangle.filled.b" => "▼",
+        r"triangle.filled.bl" => "◣",
+        r"triangle.filled.br" => "◢",
+        r"triangle.filled.l" => "◀",
+        r"triangle.filled.r" => "▶",
+        r"triangle.filled.small.b" => "▾",
+        r"triangle.filled.small.l" => "◂",
+        r"triangle.filled.small.r" => "▸",
+        r"triangle.filled.small.t" => "▴",
+        r"triangle.filled.t" => "▲",
+        r"triangle.filled.tl" => "◤",
+        r"triangle.filled.tr" => "◥",
+        r"triangle.stroked.b" => "▽",
+        r"triangle.stroked.bl" => "◺",
+        r"triangle.stroked.br" => "◿",
+        r"triangle.stroked.dot" => "◬",
+        r"triangle.stroked.l" => "◁",
+        r"triangle.stroked.nested" => "⟁",
+        r"triangle.stroked.r" => "▷",
+        r"triangle.stroked.rounded" => "🛆",
+        r"triangle.stroked.small.b" => "▿",
+        r"triangle.stroked.small.l" => "◃",
+        r"triangle.stroked.small.r" => "▹",
+        r"triangle.stroked.small.t" => "▵",
+        r"triangle.stroked.t" => "△",
+        r"triangle.stroked.tl" => "◸",
+        r"triangle.stroked.tr" => "◹",
+        r"turtle.b" => "⏡",
+        r"turtle.l" => "〔",
+        r"turtle.r" => "〕",
+        r"turtle.t" => "⏠",
+        r"u" => "ᵤ",
+        r"union" => "∪",
+        r"union.arrow" => "⊌",
+        r"union.big" => "⋃",
+        r"union.dot" => "⊍",
+        r"union.dot.big" => "⨃",
+        r"union.double" => "⋓",
+        r"union.minus" => "⩁",
+        r"union.or" => "⩅",
+        r"union.plus" => "⊎",
+        r"union.plus.big" => "⨄",
+        r"union.sq" => "⊔",
+        r"union.sq.big" => "⨆",
+        r"union.sq.double" => "⩏",
+        r"upright:A" => "A",
+        r"upright:B" => "B",
+        r"upright:C" => "C",
+        r"upright:D" => "D",
+        r"upright:E" => "E",
+        r"upright:F" => "F",
+        r"upright:G" => "G",
+        r"upright:H" => "H",
+        r"upright:I" => "I",
+        r"upright:J" => "J",
+        r"upright:K" => "K",
+        r"upright:L" => "L",
+        r"upright:M" => "M",
+        r"upright:N" => "N",
+        r"upright:O" => "O",
+        r"upright:P" => "P",
+        r"upright:Q" => "Q",
+        r"upright:R" => "R",
+        r"upright:S" => "S",
+        r"upright:T" => "T",
+        r"upright:U" => "U",
+        r"upright:V" => "V",
+        r"upright:W" => "W",
+        r"upright:X" => "X",
+        r"upright:Y" => "Y",
+        r"upright:Z" => "Z",
+        r"upright:a" => "a",
+        r"upright:b" => "b",
+        r"upright:c" => "c",
+        r"upright:d" => "d",
+        r"upright:e" => "e",
+        r"upright:f" => "f",
+        r"upright:g" => "g",
+        r"upright:h" => "h",
+        r"upright:i" => "i",
+        r"upright:j" => "j",
+        r"upright:k" => "k",
+        r"upright:l" => "l",
+        r"upright:m" => "m",
+        r"upright:n" => "n",
+        r"upright:o" => "o",
+        r"upright:p" => "p",
+        r"upright:q" => "q",
+        r"upright:r" => "r",
+        r"upright:s" => "s",
+        r"upright:t" => "t",
+        r"upright:u" => "u",
+        r"upright:v" => "v",
+        r"upright:w" => "w",
+        r"upright:x" => "x",
+        r"upright:y" => "y",
+        r"upright:z" => "z",
+        r"upsilon" => "υ",
+        r"v" => "ᵥ",
+        r"varepsilon" => "ϵ",
+        r"varphi" => "ϕ",
+        r"varpi" => "ϖ",
+        r"varrho" => "ϱ",
+        r"varsigma" => "ς",
+        r"vartheta" => "ϑ",
+        r"vee" => "∨",
+        r"wedge" => "∧",
+        r"without" => "∖",
+        r"won" => "₩",
+        r"wreath" => "≀",
+        r"x" => "ₓ",
+        r"xi" => "ξ",
+        r"xor" => "⊕",
+        r"xor.big" => "⨁",
+        r"yen" => "¥",
+        r"zeta" => "ζ",
     };
 }
 
 // Return the actual Unicode character or the original string
-pub fn lookup_math_symbol(s: &str) -> String {
-    MATH_SYMBOLS.get(s).copied().unwrap_or(s).to_string()
+pub fn lookup_math_symbol(s: &str) -> &str {
+    MATH_SYMBOLS.get(s).copied().unwrap_or(s)
 }
+
+// Return the font-styled character based on font type
+pub fn lookup_font_symbol<'a>(text: &'a str, font_type: &'a str) -> &'a str {
+    let key = format!("{font_type}:{text}");
+    MATH_SYMBOLS.get(key.as_str()).copied().unwrap_or(text)
+}
+
+// Return the actual Unicode character for the given field
+// pub fn lookup_field_symbol(s: &str) -> &str {
+//     UNIFIED_FONT_SYMBOLS.get(s).copied().unwrap_or(s)
+// }
