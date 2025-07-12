@@ -4,7 +4,7 @@ local function set_highlights()
     ["@_cmd"] = { fg = "#b4befe", bold = true }, -- Lavender
     ["@cmd"] = { fg = "#f5c2e7", bold = true }, -- Pink
     ["@func"] = { fg = "#89b4fa", italic = true }, -- Blue
-    ["@letter"] = { fg = "#cdd6f4" }, -- Text
+    ["@font_letter"] = { fg = "#89b4fa", bold = true }, -- Text
     ["@sub"] = { fg = "#94e2d5" }, -- Teal
     ["@sub_ident"] = { fg = "#a6e3a1" }, -- Green
     ["@sub_letter"] = { fg = "#bac2de" }, -- Subtext 1

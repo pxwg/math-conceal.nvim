@@ -17,7 +17,7 @@ local default_opts = {
   enabled = true,
   conceal = {
     "greek",
-    -- "script",
+    "script",
     "math",
     "font",
     "delim",
