@@ -16,20 +16,12 @@
 
 ; (((ident) @typ_math_symbol
  ; (#any-of? @typ_math_symbol
- ;   "sum" "sqrt" "product" "integral" "nabla" "partial" "infinity" "emptyset"
- ;   "aleph" "subset" "superset" "union" "intersection" "in" "notin" "element"
- ;   "forall" "exists" "neg" "and" "or" "implies" "iff" "equiv" "approx" "neq"
- ;   "leq" "geq" "ll" "gg" "pm" "mp" "times" "div" "cdot" "bullet" "circ" "ast"
- ;   "cap" "cup" "sqcap" "sqcup" "vee" "wedge" "oplus" "ominus" "otimes" "oslash"
- ;   "odot" "parallel" "perp" "angle" "triangle" "square" "diamond" "star"
- ;   "dagger" "ddagger" "sharp" "flat" "natural" "clubs" "diamonds" "hearts"
- ;   "spades" "dif" "diff" "quad"))
  ; (#lua_func! @typ_math_symbol "conceal"))
 
 ; Math operators and symbols
 (((ident) @typ_math_symbol
  (#any-of? @typ_math_symbol
-   "angle" "amp" "at" "backslash" "co" "colon" "comma" "dagger" "dot" "excl" "quest" "interrobang" "hash" "hyph" "percent" "copyright" "permille" "pilcrow" "section" "semi" "slash" "acute" "breve" "caret" "caron" "hat" "diaer" "grave" "macron" "prime" "plus" "minus" "div" "times" "ratio" "eq" "gt" "lt" "approx" "prec" "succ" "equiv" "prop" "emptyset" "nothing" "without" "complement" "in" "subset" "supset" "union" "sect" "infinity" "oo" "diff" "nabla" "sum" "product" "integral" "laplace" "forall" "exists" "top" "bot" "not" "and" "or" "xor" "models" "therefore" "because" "qed" "compose" "convolve" "multimap" "divides" "wreath" "parallel" "perp" "diameter" "join" "degree" "smash" "bitcoin" "dollar" "euro" "franc" "lira" "peso" "pound" "ruble" "rupee" "won" "yen" "ballot" "checkmark" "floral" "refmark" "servicemark" "maltese" "bullet" "alpha" "beta" "chi" "delta" "epsilon" "eta" "gamma" "iota" "kai" "kappa" "lambda" "mu" "nu" "ohm" "omega" "omicron" "phi" "pi" "psi" "rho" "sigma" "tau" "theta" "upsilon" "xi" "zeta" "Alpha" "Beta" "Chi" "Delta" "Epsilon" "Eta" "Gamma" "Iota" "Kai" "Kappa" "Lambda" "Mu" "Nu" "Omega" "Omicron" "Phi" "Pi" "Psi" "Rho" "Sigma" "Tau" "Theta" "Upsilon" "Xi" "Zeta" "aleph" "alef" "beth" "bet" "gimmel" "gimel" "shin" "AA" "BB" "CC" "DD" "EE" "FF" "GG" "HH" "II" "JJ" "KK" "LL" "MM" "NN" "OO" "PP" "QQ" "RR" "SS" "TT" "UU" "VV" "WW" "XX" "YY" "ZZ" "ell" "planck" "angstrom" "kelvin" "Re" "Im"))
+   "sum" "sqrt" "product" "integral" "nabla" "partial" "infinity" "emptyset" "aleph" "subset" "superset" "union" "intersection" "in" "notin" "element" "forall" "exists" "neg" "and" "or" "implies" "iff" "equiv" "approx" "neq" "leq" "geq" "ll" "gg" "pm" "mp" "times" "div" "cdot" "bullet" "circ" "ast" "cap" "cup" "sqcap" "sqcup" "vee" "wedge" "oplus" "ominus" "otimes" "oslash" "odot" "parallel" "perp" "angle" "triangle" "square" "diamond" "star" "dagger" "ddagger" "sharp" "flat" "natural" "clubs" "diamonds" "hearts" "spades" "dif" "diff" "quad" "angle" "amp" "at" "backslash" "co" "colon" "comma" "dagger" "dot" "excl" "quest" "interrobang" "hash" "hyph" "percent" "copyright" "permille" "pilcrow" "section" "semi" "slash" "acute" "breve" "caret" "caron" "hat" "diaer" "grave" "macron" "prime" "plus" "minus" "div" "times" "ratio" "eq" "gt" "lt" "approx" "prec" "succ" "equiv" "prop" "emptyset" "nothing" "without" "complement" "in" "subset" "supset" "union" "sect" "infinity" "oo" "diff" "nabla" "sum" "product" "integral" "laplace" "forall" "exists" "top" "bot" "not" "and" "or" "xor" "models" "therefore" "because" "qed" "compose" "convolve" "multimap" "divides" "wreath" "parallel" "perp" "diameter" "join" "degree" "smash" "bitcoin" "dollar" "euro" "franc" "lira" "peso" "pound" "ruble" "rupee" "won" "yen" "ballot" "checkmark" "floral" "refmark" "servicemark" "maltese" "bullet" "alpha" "beta" "chi" "delta" "epsilon" "eta" "gamma" "iota" "kai" "kappa" "lambda" "mu" "nu" "ohm" "omega" "omicron" "phi" "pi" "psi" "rho" "sigma" "tau" "theta" "upsilon" "xi" "zeta" "Alpha" "Beta" "Chi" "Delta" "Epsilon" "Eta" "Gamma" "Iota" "Kai" "Kappa" "Lambda" "Mu" "Nu" "Omega" "Omicron" "Phi" "Pi" "Psi" "Rho" "Sigma" "Tau" "Theta" "Upsilon" "Xi" "Zeta" "aleph" "alef" "beth" "bet" "gimmel" "gimel" "shin" "AA" "BB" "CC" "DD" "EE" "FF" "GG" "HH" "II" "JJ" "KK" "LL" "MM" "NN" "OO" "PP" "QQ" "RR" "SS" "TT" "UU" "VV" "WW" "XX" "YY" "ZZ" "ell" "planck" "angstrom" "kelvin" "Re" "Im"))
  (#lua_func! @typ_math_symbol "conceal"))
 
 
