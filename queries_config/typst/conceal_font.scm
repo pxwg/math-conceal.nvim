@@ -8,8 +8,8 @@
   "(" @left_paren
   (#set! @left_paren conceal "")
   (formula 
-    (letter) @letter 
-    (#lua_func! @letter @typ_font_name "font"))
+    (letter) @font_letter 
+    (#lua_func! @font_letter @typ_font_name "font"))
   ")" @right_paren
   (#set! @right_paren conceal ""))
 
