@@ -8,7 +8,7 @@ local function subscribe_autocmd(opts)
     return
   end
   local ft = opts.ft
-  autocmd("FileType", {
+  autocmd({ "BufEnter", "BufReadPre" }, {
     pattern = ft,
     callback = function()
       vim.opt_local.conceallevel = 2

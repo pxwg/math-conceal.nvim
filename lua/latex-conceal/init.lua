@@ -23,7 +23,7 @@ local default_opts = {
     "delim",
     "phy",
   },
-  ft = { "tex", "latex", "markdown", "typst" },
+  ft = { "*.tex", "*.md", "*.typ" },
 }
 local autocmd = require("latex-conceal.autocmd")
 

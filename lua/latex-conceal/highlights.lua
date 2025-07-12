@@ -1,34 +1,34 @@
 local M = {}
 local function set_highlights()
   local highlights = {
-    ["@_cmd"] = { fg = "#b4beff", bold = true },
-    ["@cmd"] = { fg = "#b4beff", bold = true },
-    ["@func"] = { fg = "#89b4fb", italic = true },
-    ["@letter"] = { fg = "#cdd6f5" },
-    ["@sub"] = { fg = "#94e2d6" },
-    ["@sub_ident"] = { fg = "#94e2d6" },
-    ["@sub_letter"] = { fg = "#94e2d6" },
-    ["@sub_number"] = { fg = "#94e2d6" },
-    ["@sup"] = { fg = "#fab388" },
-    ["@sup_ident"] = { fg = "#fab388" },
-    ["@sup_letter"] = { fg = "#fab388" },
-    ["@sup_number"] = { fg = "#fab388" },
-    ["@symbol"] = { fg = "#74c7ed" },
-    ["@typ_font_name"] = { fg = "#cba6f8", italic = true },
-    ["@typ_greek_symbol"] = { fg = "#89b4fb" },
-    ["@typ_inline_dollar"] = { fg = "#7f849d" },
-    ["@typ_math_delim"] = { fg = "#9399b3" },
-    ["@typ_math_font"] = { fg = "#f9e2b0" },
-    ["@typ_math_symbol"] = { fg = "#74c7ed" },
-    ["@typ_phy_symbol"] = { fg = "#a6e3a2" },
-    ["@conceal"] = { fg = "#89b4fa" },
-    ["@open1"] = { fg = "#7f849d" },
-    ["@open2"] = { fg = "#7f849d" },
-    ["@close1"] = { fg = "#7f849d" },
-    ["@close2"] = { fg = "#7f849d" },
-    ["@punctuation"] = { fg = "#9399b3" },
-    ["@left_paren"] = { fg = "#7f849d" },
-    ["@right_paren"] = { fg = "#7f849d" },
+    ["@_cmd"] = { fg = "#b4befe", bold = true }, -- Lavender
+    ["@cmd"] = { fg = "#f5c2e7", bold = true }, -- Pink
+    ["@func"] = { fg = "#89b4fa", italic = true }, -- Blue
+    ["@letter"] = { fg = "#cdd6f4" }, -- Text
+    ["@sub"] = { fg = "#94e2d5" }, -- Teal
+    ["@sub_ident"] = { fg = "#a6e3a1" }, -- Green
+    ["@sub_letter"] = { fg = "#bac2de" }, -- Subtext 1
+    ["@sub_number"] = { fg = "#f9e2af" }, -- Yellow
+    ["@sup"] = { fg = "#fab387" }, -- Peach
+    ["@sup_ident"] = { fg = "#eba0ac" }, -- Maroon
+    ["@sup_letter"] = { fg = "#f38ba8" }, -- Red
+    ["@sup_number"] = { fg = "#f2cdcd" }, -- Flamingo
+    ["@symbol"] = { fg = "#74c7ec" }, -- Sapphire
+    ["@typ_font_name"] = { fg = "#cba6f7", italic = true }, -- Mauve
+    ["@typ_greek_symbol"] = { fg = "#cba6f7", bold = true }, -- Red (鲜艳)
+    ["@typ_inline_dollar"] = { fg = "#7f849c", bold = true }, -- Peach (鲜艳)
+    ["@typ_math_delim"] = { fg = "#9399b2" }, -- Overlay 2
+    ["@typ_math_font"] = { fg = "#f9e2af" }, -- Yellow
+    ["@typ_math_symbol"] = { fg = "#a6adc8" }, -- Subtext 0
+    ["@typ_phy_symbol"] = { fg = "#a6e3a1" }, -- Green
+    ["@conceal"] = { fg = "#f5e0dc" }, -- Rosewater
+    ["@open1"] = { fg = "#6c7086" }, -- Overlay 0
+    ["@open2"] = { fg = "#45475a" }, -- Surface 1
+    ["@close1"] = { fg = "#313244" }, -- Surface 0
+    ["@close2"] = { fg = "#585b70" }, -- Surface 2
+    ["@punctuation"] = { fg = "#9399b2" }, -- Overlay 2
+    ["@left_paren"] = { fg = "#7f849c" }, -- Overlay 1
+    ["@right_paren"] = { fg = "#7f849c" }, -- Overlay 1
   }
   for group, opts in pairs(highlights) do
     vim.api.nvim_set_hl(0, group, opts)
