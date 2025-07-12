@@ -176,6 +176,7 @@ lazy_static! {
         m.insert("div", "∇·");
         m.insert("curl", "∇×");
         m.insert("laplacian", "∇²");
+        m.insert("quad", " ");
 
         // LaTeX symbols (existing)
         m.insert("\\mathbb{A}", "𝔸");

@@ -24,7 +24,7 @@
    "cap" "cup" "sqcap" "sqcup" "vee" "wedge" "oplus" "ominus" "otimes" "oslash"
    "odot" "parallel" "perp" "angle" "triangle" "square" "diamond" "star"
    "dagger" "ddagger" "sharp" "flat" "natural" "clubs" "diamonds" "hearts"
-   "spades" "dif" "diff"))
+   "spades" "dif" "diff" "quad"))
  (#lua_func! @typ_math_symbol "conceal"))
 
 ; Superscript and subscript handling
