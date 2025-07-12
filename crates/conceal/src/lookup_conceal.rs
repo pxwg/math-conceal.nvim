@@ -1,1115 +1,1091 @@
 use lazy_static::lazy_static;
-use rustc_hash::FxHashMap;
-
+use phf::phf_map;
 // TODO: Add custumizeable math symbols with treesitter
 
 lazy_static! {
-    pub static ref MATH_SYMBOLS: FxHashMap<&'static str, &'static str> = {
-        let mut m = FxHashMap::with_capacity_and_hasher(1032, Default::default());
-
-        // Typst symbols - Greek letters
-        m.insert("alpha", "α");
-        m.insert("beta", "β");
-        m.insert("gamma", "γ");
-        m.insert("delta", "δ");
-        m.insert("epsilon", "ε");
-        m.insert("varepsilon", "ϵ");
-        m.insert("zeta", "ζ");
-        m.insert("eta", "η");
-        m.insert("theta", "θ");
-        m.insert("vartheta", "ϑ");
-        m.insert("iota", "ι");
-        m.insert("kappa", "κ");
-        m.insert("lambda", "λ");
-        m.insert("mu", "μ");
-        m.insert("nu", "ν");
-        m.insert("xi", "ξ");
-        m.insert("pi", "π");
-        m.insert("varpi", "ϖ");
-        m.insert("rho", "ρ");
-        m.insert("varrho", "ϱ");
-        m.insert("sigma", "σ");
-        m.insert("varsigma", "ς");
-        m.insert("tau", "τ");
-        m.insert("upsilon", "υ");
-        m.insert("phi", "φ");
-        m.insert("varphi", "ϕ");
-        m.insert("chi", "χ");
-        m.insert("psi", "ψ");
-        m.insert("omega", "ω");
-        m.insert("Gamma", "Γ");
-        m.insert("Delta", "Δ");
-        m.insert("Theta", "Θ");
-        m.insert("Lambda", "Λ");
-        m.insert("Xi", "Ξ");
-        m.insert("Pi", "Π");
-        m.insert("Sigma", "Σ");
-        m.insert("Upsilon", "Υ");
-        m.insert("Phi", "Φ");
-        m.insert("Chi", "Χ");
-        m.insert("Psi", "Ψ");
-        m.insert("Omega", "Ω");
-
-        // Typst math operators and symbols
-        m.insert("sum", "∑");
-        m.insert("sqrt", "√");
-        m.insert("product", "∏");
-        m.insert("integral", "∫");
-        m.insert("nabla", "∇");
-        m.insert("partial", "∂");
-        m.insert("infinity", "∞");
-        m.insert("emptyset", "∅");
-        m.insert("aleph", "ℵ");
-        m.insert("subset", "⊂");
-        m.insert("superset", "⊃");
-        m.insert("union", "∪");
-        m.insert("intersection", "∩");
-        m.insert("in", "∈");
-        m.insert("notin", "∉");
-        m.insert("element", "∈");
-        m.insert("forall", "∀");
-        m.insert("exists", "∃");
-        m.insert("neg", "¬");
-        m.insert("and", "∧");
-        m.insert("or", "∨");
-        m.insert("implies", "⇒");
-        m.insert("iff", "⇔");
-        m.insert("equiv", "≡");
-        m.insert("approx", "≈");
-        m.insert("neq", "≠");
-        m.insert("leq", "≤");
-        m.insert("geq", "≥");
-        m.insert("ll", "≪");
-        m.insert("gg", "≫");
-        m.insert("pm", "±");
-        m.insert("mp", "∓");
-        m.insert("times", "×");
-        m.insert("div", "÷");
-        m.insert("cdot", "·");
-        m.insert("bullet", "•");
-        m.insert("circ", "∘");
-        m.insert("ast", "∗");
-        m.insert("cap", "∩");
-        m.insert("cup", "∪");
-        m.insert("sqcap", "⊓");
-        m.insert("sqcup", "⊔");
-        m.insert("vee", "∨");
-        m.insert("wedge", "∧");
-        m.insert("oplus", "⊕");
-        m.insert("ominus", "⊖");
-        m.insert("otimes", "⊗");
-        m.insert("oslash", "⊘");
-        m.insert("odot", "⊙");
-        m.insert("parallel", "∥");
-        m.insert("perp", "⊥");
-        m.insert("angle", "∠");
-        m.insert("triangle", "△");
-        m.insert("square", "□");
-        m.insert("diamond", "◊");
-        m.insert("star", "⋆");
-        m.insert("dagger", "†");
-        m.insert("ddagger", "‡");
-        m.insert("sharp", "♯");
-        m.insert("flat", "♭");
-        m.insert("natural", "♮");
-        m.insert("clubs", "♣");
-        m.insert("diamonds", "♢");
-        m.insert("hearts", "♡");
-        m.insert("spades", "♠");
-        m.insert("dif", "d");
-        m.insert("diff", "∂");
-        m.insert("paren.b", "⏝");
-        m.insert("brace.l", "{");
-        m.insert("brace.r", "}");
-        m.insert("brace.t", "⏞");
-        m.insert("brace.b", "⏟");
-        m.insert("bracket.l", "{");
-        m.insert("bracket.l.double", "⟦");
-        m.insert("bracket.r", "}");
-        m.insert("bracket.r.double", "⟧");
-        m.insert("bracket.t", "⎴");
-        m.insert("bracket.b", "⎵");
-        m.insert("turtle.l", "〔");
-        m.insert("turtle.r", "〕");
-        m.insert("turtle.t", "⏠");
-        m.insert("turtle.b", "⏡");
-        m.insert("bar.v", "|");
-        m.insert("dots", "…");
-
-        // Typst delimiters
-        m.insert("langle", "⟨");
-        m.insert("rangle", "⟩");
-        m.insert("lfloor", "⌊");
-        m.insert("rfloor", "⌋");
-        m.insert("lceil", "⌈");
-        m.insert("rceil", "⌉");
-        m.insert("norm", "‖");
-        m.insert("abs", "|");
-
-        // Typst physics symbols
-        m.insert("hbar", "ℏ");
-        m.insert("planck", "ℎ");
-        m.insert("boltzmann", "k");
-        m.insert("avogadro", "N");
-        m.insert("electron", "e");
-        m.insert("proton", "p");
-        m.insert("neutron", "n");
-        m.insert("speed", "c");
-        m.insert("light", "c");
-        m.insert("gravity", "g");
-        m.insert("charge", "q");
-        m.insert("mass", "m");
-        m.insert("energy", "E");
-        m.insert("momentum", "p");
-        m.insert("angular", "L");
-        m.insert("spin", "S");
-        m.insert("magnetic", "B");
-        m.insert("electric", "E");
-        m.insert("force", "F");
-        m.insert("pressure", "P");
-        m.insert("temperature", "T");
-        m.insert("entropy", "S");
-        m.insert("enthalpy", "H");
-        m.insert("helmholtz", "F");
-        m.insert("gibbs", "G");
-        m.insert("grad", "∇");
-        m.insert("div", "∇·");
-        m.insert("curl", "∇×");
-        m.insert("laplacian", "∇²");
-        m.insert("quad", " ");
-
-        // LaTeX symbols (existing)
-        m.insert("\\mathbb{A}", "𝔸");
-        m.insert("\\mathbb{B}", "𝔹");
-        m.insert("\\mathbb{C}", "ℂ");
-        m.insert("\\mathbb{D}", "𝔻");
-        m.insert("\\mathbb{E}", "𝔼");
-        m.insert("\\mathbb{F}", "𝔽");
-        m.insert("\\mathbb{G}", "𝔾");
-        m.insert("\\mathbb{H}", "ℍ");
-        m.insert("\\mathbb{I}", "𝕀");
-        m.insert("\\mathbb{J}", "𝕁");
-        m.insert("\\mathbb{K}", "𝕂");
-        m.insert("\\mathbb{L}", "𝕃");
-        m.insert("\\mathbb{M}", "𝕄");
-        m.insert("\\mathbb{N}", "ℕ");
-        m.insert("\\mathbb{O}", "𝕆");
-        m.insert("\\mathbb{P}", "ℙ");
-        m.insert("\\mathbb{Q}", "ℚ");
-        m.insert("\\mathbb{R}", "ℝ");
-        m.insert("\\mathbb{S}", "𝕊");
-        m.insert("\\mathbb{T}", "𝕋");
-        m.insert("\\mathbb{U}", "𝕌");
-        m.insert("\\mathbb{V}", "𝕍");
-        m.insert("\\mathbb{W}", "𝕎");
-        m.insert("\\mathbb{X}", "𝕏");
-        m.insert("\\mathbb{Y}", "𝕐");
-        m.insert("\\mathbb{Z}", "ℤ");
-        m.insert("\\mathsf{a}", "𝖺");
-        m.insert("\\mathsf{b}", "𝖻");
-        m.insert("\\mathsf{c}", "𝖼");
-        m.insert("\\mathsf{d}", "𝖽");
-        m.insert("\\mathsf{e}", "𝖾");
-        m.insert("\\mathsf{f}", "𝖿");
-        m.insert("\\mathsf{g}", "𝗀");
-        m.insert("\\mathsf{h}", "𝗁");
-        m.insert("\\mathsf{i}", "𝗂");
-        m.insert("\\mathsf{j}", "𝗃");
-        m.insert("\\mathsf{k}", "𝗄");
-        m.insert("\\mathsf{l}", "𝗅");
-        m.insert("\\mathsf{m}", "𝗆");
-        m.insert("\\mathsf{n}", "𝗇");
-        m.insert("\\mathsf{o}", "𝗈");
-        m.insert("\\mathsf{p}", "𝗉");
-        m.insert("\\mathsf{q}", "𝗊");
-        m.insert("\\mathsf{r}", "𝗋");
-        m.insert("\\mathsf{s}", "𝗌");
-        m.insert("\\mathsf{t}", "𝗍");
-        m.insert("\\mathsf{u}", "𝗎");
-        m.insert("\\mathsf{v}", "𝗏");
-        m.insert("\\mathsf{w}", "𝗐");
-        m.insert("\\mathsf{x}", "𝗑");
-        m.insert("\\mathsf{y}", "𝗒");
-        m.insert("\\mathsf{z}", "𝗓");
-        m.insert("\\mathsf{A}", "𝖠");
-        m.insert("\\mathsf{B}", "𝖡");
-        m.insert("\\mathsf{C}", "𝖢");
-        m.insert("\\mathsf{D}", "𝖣");
-        m.insert("\\mathsf{E}", "𝖤");
-        m.insert("\\mathsf{F}", "𝖥");
-        m.insert("\\mathsf{G}", "𝖦");
-        m.insert("\\mathsf{H}", "𝖧");
-        m.insert("\\mathsf{I}", "𝖨");
-        m.insert("\\mathsf{J}", "𝖩");
-        m.insert("\\mathsf{K}", "𝖪");
-        m.insert("\\mathsf{L}", "𝖫");
-        m.insert("\\mathsf{M}", "𝖬");
-        m.insert("\\mathsf{N}", "𝖭");
-        m.insert("\\mathsf{O}", "𝖮");
-        m.insert("\\mathsf{P}", "𝖯");
-        m.insert("\\mathsf{Q}", "𝖰");
-        m.insert("\\mathsf{R}", "𝖱");
-        m.insert("\\mathsf{S}", "𝖲");
-        m.insert("\\mathsf{T}", "𝖳");
-        m.insert("\\mathsf{U}", "𝖴");
-        m.insert("\\mathsf{V}", "𝖵");
-        m.insert("\\mathsf{W}", "𝖶");
-        m.insert("\\mathsf{X}", "𝖷");
-        m.insert("\\mathsf{Y}", "𝖸");
-        m.insert("\\mathsf{Z}", "𝖹");
-        m.insert("\\mathfrak{a}", "𝔞");
-        m.insert("\\mathfrak{b}", "𝔟");
-        m.insert("\\mathfrak{c}", "𝔠");
-        m.insert("\\mathfrak{d}", "𝔡");
-        m.insert("\\mathfrak{e}", "𝔢");
-        m.insert("\\mathfrak{f}", "𝔣");
-        m.insert("\\mathfrak{g}", "𝔤");
-        m.insert("\\mathfrak{h}", "𝔥");
-        m.insert("\\mathfrak{i}", "𝔦");
-        m.insert("\\mathfrak{j}", "𝔧");
-        m.insert("\\mathfrak{k}", "𝔨");
-        m.insert("\\mathfrak{l}", "𝔩");
-        m.insert("\\mathfrak{m}", "𝔪");
-        m.insert("\\mathfrak{n}", "𝔫");
-        m.insert("\\mathfrak{o}", "𝔬");
-        m.insert("\\mathfrak{p}", "𝔭");
-        m.insert("\\mathfrak{q}", "𝔮");
-        m.insert("\\mathfrak{r}", "𝔯");
-        m.insert("\\mathfrak{s}", "𝔰");
-        m.insert("\\mathfrak{t}", "𝔱");
-        m.insert("\\mathfrak{u}", "𝔲");
-        m.insert("\\mathfrak{v}", "𝔳");
-        m.insert("\\mathfrak{w}", "𝔴");
-        m.insert("\\mathfrak{x}", "𝔵");
-        m.insert("\\mathfrak{y}", "𝔶");
-        m.insert("\\mathfrak{z}", "𝔷");
-        m.insert("\\mathfrak{A}", "𝔄");
-        m.insert("\\mathfrak{B}", "𝔅");
-        m.insert("\\mathfrak{C}", "ℭ");
-        m.insert("\\mathfrak{D}", "𝔇");
-        m.insert("\\mathfrak{E}", "𝔈");
-        m.insert("\\mathfrak{F}", "𝔉");
-        m.insert("\\mathfrak{G}", "𝔊");
-        m.insert("\\mathfrak{H}", "ℌ");
-        m.insert("\\mathfrak{I}", "ℑ");
-        m.insert("\\mathfrak{J}", "𝔍");
-        m.insert("\\mathfrak{K}", "𝔎");
-        m.insert("\\mathfrak{L}", "𝔏");
-        m.insert("\\mathfrak{M}", "𝔐");
-        m.insert("\\mathfrak{N}", "𝔑");
-        m.insert("\\mathfrak{O}", "𝔒");
-        m.insert("\\mathfrak{P}", "𝔓");
-        m.insert("\\mathfrak{Q}", "𝔔");
-        m.insert("\\mathfrak{R}", "ℜ");
-        m.insert("\\mathfrak{S}", "𝔖");
-        m.insert("\\mathfrak{T}", "𝔗");
-        m.insert("\\mathfrak{U}", "𝔘");
-        m.insert("\\mathfrak{V}", "𝔙");
-        m.insert("\\mathfrak{W}", "𝔚");
-        m.insert("\\mathfrak{X}", "𝔛");
-        m.insert("\\mathfrak{Y}", "𝔜");
-        m.insert("\\mathfrak{Z}", "ℨ");
-        m.insert("\\mathscr{A}", "𝓐");
-        m.insert("\\mathscr{B}", "𝓑");
-        m.insert("\\mathscr{C}", "𝓒");
-        m.insert("\\mathscr{D}", "𝓓");
-        m.insert("\\mathscr{E}", "𝓔");
-        m.insert("\\mathscr{F}", "𝓕");
-        m.insert("\\mathscr{G}", "𝓖");
-        m.insert("\\mathscr{H}", "𝓗");
-        m.insert("\\mathscr{I}", "𝓘");
-        m.insert("\\mathscr{J}", "𝓙");
-        m.insert("\\mathscr{K}", "𝓚");
-        m.insert("\\mathscr{L}", "𝓛");
-        m.insert("\\mathscr{M}", "𝓜");
-        m.insert("\\mathscr{N}", "𝓝");
-        m.insert("\\mathscr{O}", "𝓞");
-        m.insert("\\mathscr{P}", "𝓟");
-        m.insert("\\mathscr{Q}", "𝓠");
-        m.insert("\\mathscr{R}", "𝓡");
-        m.insert("\\mathscr{S}", "𝓢");
-        m.insert("\\mathscr{T}", "𝓣");
-        m.insert("\\mathscr{U}", "𝓤");
-        m.insert("\\mathscr{V}", "𝓥");
-        m.insert("\\mathscr{W}", "𝓦");
-        m.insert("\\mathscr{X}", "𝓧");
-        m.insert("\\mathscr{Y}", "𝓨");
-        m.insert("\\mathscr{Z}", "𝓩");
-        m.insert("\\mathcal{A}", "𝓐");
-        m.insert("\\mathcal{B}", "𝓑");
-        m.insert("\\mathcal{C}", "𝓒");
-        m.insert("\\mathcal{D}", "𝓓");
-        m.insert("\\mathcal{E}", "𝓔");
-        m.insert("\\mathcal{F}", "𝓕");
-        m.insert("\\mathcal{G}", "𝓖");
-        m.insert("\\mathcal{H}", "𝓗");
-        m.insert("\\mathcal{I}", "𝓘");
-        m.insert("\\mathcal{J}", "𝓙");
-        m.insert("\\mathcal{K}", "𝓚");
-        m.insert("\\mathcal{L}", "𝓛");
-        m.insert("\\mathcal{M}", "𝓜");
-        m.insert("\\mathcal{N}", "𝓝");
-        m.insert("\\mathcal{O}", "𝓞");
-        m.insert("\\mathcal{P}", "𝓟");
-        m.insert("\\mathcal{Q}", "𝓠");
-        m.insert("\\mathcal{R}", "𝓡");
-        m.insert("\\mathcal{S}", "𝓢");
-        m.insert("\\mathcal{T}", "𝓣");
-        m.insert("\\mathcal{U}", "𝓤");
-        m.insert("\\mathcal{V}", "𝓥");
-        m.insert("\\mathcal{W}", "𝓦");
-        m.insert("\\mathcal{X}", "𝓧");
-        m.insert("\\mathcal{Y}", "𝓨");
-        m.insert("\\mathcal{Z}", "𝓩");
-        m.insert("\\alpha", "α");
-        m.insert("\\beta", "β");
-        m.insert("\\gamma", "γ");
-        m.insert("\\delta", "δ");
-        m.insert("\\epsilon", "ϵ");
-        m.insert("\\varepsilon", "ε");
-        m.insert("\\zeta", "ζ");
-        m.insert("\\eta", "η");
-        m.insert("\\theta", "θ");
-        m.insert("\\vartheta", "ϑ");
-        m.insert("\\iota", "ι");
-        m.insert("\\kappa", "κ");
-        m.insert("\\lambda", "λ");
-        m.insert("\\mu", "μ");
-        m.insert("\\nu", "ν");
-        m.insert("\\xi", "ξ");
-        m.insert("\\pi", "π");
-        m.insert("\\varpi", "ϖ");
-        m.insert("\\rho", "ρ");
-        m.insert("\\varrho", "ϱ");
-        m.insert("\\sigma", "σ");
-        m.insert("\\varsigma", "ς");
-        m.insert("\\tau", "τ");
-        m.insert("\\upsilon", "υ");
-        m.insert("\\phi", "ϕ");
-        m.insert("\\varphi", "φ");
-        m.insert("\\chi", "χ");
-        m.insert("\\psi", "ψ");
-        m.insert("\\omega", "ω");
-        m.insert("\\Gamma", "Γ");
-        m.insert("\\Delta", "Δ");
-        m.insert("\\Theta", "Θ");
-        m.insert("\\Lambda", "Λ");
-        m.insert("\\Xi", "Ξ");
-        m.insert("\\Pi", "Π");
-        m.insert("\\Sigma", "Σ");
-        m.insert("\\Upsilon", "Υ");
-        m.insert("\\Phi", "Φ");
-        m.insert("\\Chi", "Χ");
-        m.insert("\\Psi", "Ψ");
-        m.insert("\\Omega", "Ω");
-        m.insert("\\|", "‖");
-        m.insert("\\amalg", "∐");
-        m.insert("\\angle", "∠");
-        m.insert("\\approx", "≈");
-        m.insert("\\ast", "∗");
-        m.insert("\\asymp", "≍");
-        m.insert("\\backslash", "∖");
-        m.insert("\\bigcap", "∩");
-        m.insert("\\bigcirc", "○");
-        m.insert("\\bigcup", "∪");
-        m.insert("\\bigodot", "⊙");
-        m.insert("\\bigoplus", "⊕");
-        m.insert("\\bigotimes", "⊗");
-        m.insert("\\bigsqcup", "⊔");
-        m.insert("\\bigtriangledown", "∇");
-        m.insert("\\bigtriangleup", "∆");
-        m.insert("\\bigvee", "⋁");
-        m.insert("\\bigwedge", "⋀");
-        m.insert("\\bot", "⊥");
-        m.insert("\\bowtie", "⋈");
-        m.insert("\\bullet", "•");
-        m.insert("\\cap", "∩");
-        m.insert("\\cdot", "·");
-        m.insert("\\cdots", "⋯");
-        m.insert("\\circ", "∘");
-        m.insert("\\cong", "≅");
-        m.insert("\\coprod", "∐");
-        m.insert("\\copyright", "©");
-        m.insert("\\cup", "∪");
-        m.insert("\\dagger", "†");
-        m.insert("\\dashv", "⊣");
-        m.insert("\\ddagger", "‡");
-        m.insert("\\ddots", "⋱");
-        m.insert("\\diamond", "⋄");
-        m.insert("\\div", "÷");
-        m.insert("\\doteq", "≐");
-        m.insert("\\dots", "…");
-        m.insert("\\downarrow", "↓");
-        m.insert("\\Downarrow", "⇓");
-        m.insert("\\equiv", "≡");
-        m.insert("\\exists", "∃");
-        m.insert("\\flat", "♭");
-        m.insert("\\forall", "∀");
-        m.insert("\\frown", "⁔");
-        m.insert("\\ge", "≥");
-        m.insert("\\geq", "≥");
-        m.insert("\\gets", "←");
-        m.insert("\\gg", "⟫");
-        m.insert("\\hookleftarrow", "↩");
-        m.insert("\\hookrightarrow", "↪");
-        m.insert("\\iff", "⇔");
-        m.insert("\\Im", "ℑ");
-        m.insert("\\in", "∈");
-        m.insert("\\int", "∫");
-        m.insert("\\jmath", "𝚥");
-        m.insert("\\land", "∧");
-        m.insert("\\lceil", "⌈");
-        m.insert("\\ldots", "…");
-        m.insert("\\le", "≤");
-        m.insert("\\left", "");
-        m.insert("\\leftarrow", "←");
-        m.insert("\\Leftarrow", "⇐");
-        m.insert("\\leftharpoondown", "↽");
-        m.insert("\\leftharpoonup", "↼");
-        m.insert("\\leftrightarrow", "↔");
-        m.insert("\\Leftrightarrow", "⇔");
-        m.insert("\\leq", "≤");
-        m.insert("\\lfloor", "⌊");
-        m.insert("\\ll", "≪");
-        m.insert("\\lmoustache", "╭");
-        m.insert("\\lor", "∨");
-        m.insert("\\mapsto", "↦");
-        m.insert("\\mid", "∣");
-        m.insert("\\models", "╞");
-        m.insert("\\mp", "∓");
-        m.insert("\\nabla", "∇");
-        m.insert("\\natural", "♮");
-        m.insert("\\ne", "≠");
-        m.insert("\\nearrow", "↗");
-        m.insert("\\neg", "¬");
-        m.insert("\\neq", "≠");
-        m.insert("\\ni", "∋");
-        m.insert("\\notin", "∉");
-        m.insert("\\nwarrow", "↖");
-        m.insert("\\odot", "⊙");
-        m.insert("\\oint", "∮");
-        m.insert("\\ominus", "⊖");
-        m.insert("\\oplus", "⊕");
-        m.insert("\\oslash", "⊘");
-        m.insert("\\otimes", "⊗");
-        m.insert("\\owns", "∋");
-        m.insert("\\P", "¶");
-        m.insert("\\parallel", "║");
-        m.insert("\\partial", "∂");
-        m.insert("\\perp", "⊥");
-        m.insert("\\pm", "±");
-        m.insert("\\prec", "≺");
-        m.insert("\\preceq", "⪯");
-        m.insert("\\prime", "′");
-        m.insert("\\prod", "∏");
-        m.insert("\\propto", "∝");
-        m.insert("\\rceil", "⌉");
-        m.insert("\\Re", "ℜ");
-        m.insert("\\quad", " ");
-        m.insert("\\qquad", " ");
-        m.insert("\\rfloor", "⌋");
-        m.insert("\\right", "");
-        m.insert("\\rightarrow", "→");
-        m.insert("\\Rightarrow", "⇒");
-        m.insert("\\rightleftharpoons", "⇌");
-        m.insert("\\rmoustache", "╮");
-        m.insert("\\S", "§");
-        m.insert("\\searrow", "↘");
-        m.insert("\\setminus", "∖");
-        m.insert("\\sharp", "♯");
-        m.insert("\\sim", "∼");
-        m.insert("\\simeq", "⋍");
-        m.insert("\\smile", "‿");
-        m.insert("\\sqcap", "⊓");
-        m.insert("\\sqcup", "⊔");
-        m.insert("\\sqsubset", "⊏");
-        m.insert("\\sqsubseteq", "⊑");
-        m.insert("\\sqsupset", "⊐");
-        m.insert("\\sqsupseteq", "⊒");
-        m.insert("\\star", "✫");
-        m.insert("\\subset", "⊂");
-        m.insert("\\subseteq", "⊆");
-        m.insert("\\succ", "≻");
-        m.insert("\\succeq", "⪰");
-        m.insert("\\sum", "∑");
-        m.insert("\\supset", "⊃");
-        m.insert("\\supseteq", "⊇");
-        m.insert("\\surd", "√");
-        m.insert("\\swarrow", "↙");
-        m.insert("\\times", "×");
-        m.insert("\\to", "→");
-        m.insert("\\top", "⊤");
-        m.insert("\\triangle", "∆");
-        m.insert("\\triangleleft", "⊲");
-        m.insert("\\triangleright", "⊳");
-        m.insert("\\uparrow", "↑");
-        m.insert("\\Uparrow", "⇑");
-        m.insert("\\updownarrow", "↕");
-        m.insert("\\Updownarrow", "⇕");
-        m.insert("\\vdash", "⊢");
-        m.insert("\\vdots", "⋮");
-        m.insert("\\vee", "∨");
-        m.insert("\\wedge", "∧");
-        m.insert("\\wp", "℘");
-        m.insert("\\wr", "≀");
-        m.insert("\\langle", "⟨");
-        m.insert("\\rangle", "⟩");
-        m.insert("\\{", "{");
-        m.insert("\\}", "}");
-        m.insert("\\aleph", "ℵ");
-        m.insert("\\clubsuit", "♣");
-        m.insert("\\diamondsuit", "♢");
-        m.insert("\\heartsuit", "♡");
-        m.insert("\\spadesuit", "♠");
-        m.insert("\\ell", "ℓ");
-        m.insert("\\emptyset", "∅");
-        m.insert("\\varnothing", "∅");
-        m.insert("\\hbar", "ℏ");
-        m.insert("\\imath", "ɩ");
-        m.insert("\\infty", "∞");
-        m.insert("_0", "₀");
-        m.insert("_1", "₁");
-        m.insert("_2", "₂");
-        m.insert("_3", "₃");
-        m.insert("_4", "₄");
-        m.insert("_5", "₅");
-        m.insert("_6", "₆");
-        m.insert("_7", "₇");
-        m.insert("_8", "₈");
-        m.insert("_9", "₉");
-        m.insert("_a", "ₐ");
-        m.insert("_e", "ₑ");
-        m.insert("_h", "ₕ");
-        m.insert("_i", "ᵢ");
-        m.insert("_j", "ⱼ");
-        m.insert("_k", "ₖ");
-        m.insert("_l", "ₗ");
-        m.insert("_m", "ₘ");
-        m.insert("_n", "ₙ");
-        m.insert("_o", "ₒ");
-        m.insert("_p", "ₚ");
-        m.insert("_r", "ᵣ");
-        m.insert("_s", "ₛ");
-        m.insert("_t", "ₜ");
-        m.insert("_u", "ᵤ");
-        m.insert("_v", "ᵥ");
-        m.insert("_x", "ₓ");
-        m.insert("_\\.", "‸");
-        m.insert("_+", "₊");
-        m.insert("_-", "₋");
-        m.insert("_/", "ˏ");
-        m.insert("0", "₀");
-        m.insert("1", "₁");
-        m.insert("2", "₂");
-        m.insert("3", "₃");
-        m.insert("4", "₄");
-        m.insert("5", "₅");
-        m.insert("6", "₆");
-        m.insert("7", "₇");
-        m.insert("8", "₈");
-        m.insert("9", "₉");
-        m.insert("a", "ₐ");
-        m.insert("e", "ₑ");
-        m.insert("h", "ₕ");
-        m.insert("i", "ᵢ");
-        m.insert("j", "ⱼ");
-        m.insert("k", "ₖ");
-        m.insert("l", "ₗ");
-        m.insert("m", "ₘ");
-        m.insert("n", "ₙ");
-        m.insert("o", "ₒ");
-        m.insert("p", "ₚ");
-        m.insert("r", "ᵣ");
-        m.insert("s", "ₛ");
-        m.insert("t", "ₜ");
-        m.insert("u", "ᵤ");
-        m.insert("v", "ᵥ");
-        m.insert("x", "ₓ");
-        m.insert("+", "₊");
-        m.insert("-", "₋");
-        m.insert("/", "ˏ");
-        m.insert("^0", "⁰");
-        m.insert("^1", "¹");
-        m.insert("^2", "²");
-        m.insert("^3", "³");
-        m.insert("^4", "⁴");
-        m.insert("^5", "⁵");
-        m.insert("^6", "⁶");
-        m.insert("^7", "⁷");
-        m.insert("^8", "⁸");
-        m.insert("^9", "⁹");
-        m.insert("^a", "ᵃ");
-        m.insert("^b", "ᵇ");
-        m.insert("^c", "ᶜ");
-        m.insert("^d", "ᵈ");
-        m.insert("^e", "ᵉ");
-        m.insert("^f", "ᶠ");
-        m.insert("^g", "ᵍ");
-        m.insert("^h", "ʰ");
-        m.insert("^i", "ⁱ");
-        m.insert("^j", "ʲ");
-        m.insert("^k", "ᵏ");
-        m.insert("^l", "ˡ");
-        m.insert("^m", "ᵐ");
-        m.insert("^n", "ⁿ");
-        m.insert("^o", "ᵒ");
-        m.insert("^p", "ᵖ");
-        m.insert("^r", "ʳ");
-        m.insert("^s", "ˢ");
-        m.insert("^t", "ᵗ");
-        m.insert("^u", "ᵘ");
-        m.insert("^v", "ᵛ");
-        m.insert("^w", "ʷ");
-        m.insert("^x", "ˣ");
-        m.insert("^y", "ʸ");
-        m.insert("^z", "ᶻ");
-        m.insert("^A", "ᴬ");
-        m.insert("^B", "ᴮ");
-        m.insert("^D", "ᴰ");
-        m.insert("^E", "ᴱ");
-        m.insert("^G", "ᴳ");
-        m.insert("^H", "ᴴ");
-        m.insert("^I", "ᴵ");
-        m.insert("^J", "ᴶ");
-        m.insert("^K", "ᴷ");
-        m.insert("^L", "ᴸ");
-        m.insert("^M", "ᴹ");
-        m.insert("^N", "ᴺ");
-        m.insert("^O", "ᴼ");
-        m.insert("^P", "ᴾ");
-        m.insert("^R", "ᴿ");
-        m.insert("^T", "ᵀ");
-        m.insert("^U", "ᵁ");
-        m.insert("^V", "ⱽ");
-        m.insert("^W", "ᵂ");
-        m.insert("^+", "⁺");
-        m.insert("^-", "⁻");
-        m.insert("^<", "˂");
-        m.insert("^>", "˃");
-        m.insert("^/", "ˊ");
-        m.insert("^\\.", "˙");
-        m.insert("^=", "˭");
-        m.insert("\\,", "");
-        m.insert("\\circ", "∘");
-        m.insert("\\dashint", "⨍");
-        m.insert("A", "ℒ");
-        m
-    };
-
-    //// Unified Font Symbols
-    //// A collection of symbols that are commonly used in mathematical typesetting,
-    pub static ref UNIFIED_FONT_SYMBOLS: FxHashMap<&'static str, &'static str> = {
-        let mut m = FxHashMap::with_capacity_and_hasher(407, Default::default());
-        m.insert("bold:A", "𝐀");
-        m.insert("bold:B", "𝐁");
-        m.insert("bold:C", "𝐂");
-        m.insert("bold:D", "𝐃");
-        m.insert("bold:E", "𝐄");
-        m.insert("bold:F", "𝐅");
-        m.insert("bold:G", "𝐆");
-        m.insert("bold:H", "𝐇");
-        m.insert("bold:I", "𝐈");
-        m.insert("bold:J", "𝐉");
-        m.insert("bold:K", "𝐊");
-        m.insert("bold:L", "𝐋");
-        m.insert("bold:M", "𝐌");
-        m.insert("bold:N", "𝐍");
-        m.insert("bold:O", "𝐎");
-        m.insert("bold:P", "𝐏");
-        m.insert("bold:Q", "𝐐");
-        m.insert("bold:R", "𝐑");
-        m.insert("bold:S", "𝐒");
-        m.insert("bold:T", "𝐓");
-        m.insert("bold:U", "𝐔");
-        m.insert("bold:V", "𝐕");
-        m.insert("bold:W", "𝐖");
-        m.insert("bold:X", "𝐗");
-        m.insert("bold:Y", "𝐘");
-        m.insert("bold:Z", "𝐙");
-        m.insert("bold:a", "𝐚");
-        m.insert("bold:b", "𝐛");
-        m.insert("bold:c", "𝐜");
-        m.insert("bold:d", "𝐝");
-        m.insert("bold:e", "𝐞");
-        m.insert("bold:f", "𝐟");
-        m.insert("bold:g", "𝐠");
-        m.insert("bold:h", "𝐡");
-        m.insert("bold:i", "𝐢");
-        m.insert("bold:j", "𝐣");
-        m.insert("bold:k", "𝐤");
-        m.insert("bold:l", "𝐥");
-        m.insert("bold:m", "𝐦");
-        m.insert("bold:n", "𝐧");
-        m.insert("bold:o", "𝐨");
-        m.insert("bold:p", "𝐩");
-        m.insert("bold:q", "𝐪");
-        m.insert("bold:r", "𝐫");
-        m.insert("bold:s", "𝐬");
-        m.insert("bold:t", "𝐭");
-        m.insert("bold:u", "𝐮");
-        m.insert("bold:v", "𝐯");
-        m.insert("bold:w", "𝐰");
-        m.insert("bold:x", "𝐱");
-        m.insert("bold:y", "𝐲");
-        m.insert("bold:z", "𝐳");
-        m.insert("bold:\\alpha", "𝛂");
-        m.insert("bold:\\beta", "𝛃");
-        m.insert("bold:\\gamma", "𝛄");
-        m.insert("bold:\\delta", "𝛅");
-        m.insert("bold:\\epsilon", "𝛆");
-        m.insert("bold:\\zeta", "𝛇");
-        m.insert("bold:\\eta", "𝛈");
-        m.insert("bold:\\theta", "𝛉");
-        m.insert("bold:\\iota", "𝛊");
-        m.insert("bold:\\kappa", "𝛋");
-        m.insert("bold:\\lambda", "𝛌");
-        m.insert("bold:\\mu", "𝛍");
-        m.insert("bold:\\nu", "𝛎");
-        m.insert("bold:\\xi", "𝛏");
-        m.insert("bold:\\pi", "𝛑");
-        m.insert("bold:\\rho", "𝛒");
-        m.insert("bold:\\sigma", "𝛔");
-        m.insert("bold:\\tau", "𝛕");
-        m.insert("bold:\\upsilon", "𝛖");
-        m.insert("bold:\\phi", "𝛗");
-        m.insert("bold:\\chi", "𝛘");
-        m.insert("bold:\\psi", "𝛙");
-        m.insert("bold:\\omega", "𝛚");
-        m.insert("bold:\\Gamma", "𝚪");
-        m.insert("bold:\\Delta", "𝚫");
-        m.insert("bold:\\Theta", "𝚯");
-        m.insert("bold:\\Lambda", "𝚲");
-        m.insert("bold:\\Xi", "𝚵");
-        m.insert("bold:\\Pi", "𝚷");
-        m.insert("bold:\\Sigma", "𝚺");
-        m.insert("bold:\\Upsilon", "𝚼");
-        m.insert("bold:\\Phi", "𝚽");
-        m.insert("bold:\\Chi", "𝚾");
-        m.insert("bold:\\Psi", "𝚿");
-        m.insert("bold:\\Omega", "𝛀");
-        m.insert("italic:A", "𝐴");
-        m.insert("italic:B", "𝐵");
-        m.insert("italic:C", "𝐶");
-        m.insert("italic:D", "𝐷");
-        m.insert("italic:E", "𝐸");
-        m.insert("italic:F", "𝐹");
-        m.insert("italic:G", "𝐺");
-        m.insert("italic:H", "𝐻");
-        m.insert("italic:I", "𝐼");
-        m.insert("italic:J", "𝐽");
-        m.insert("italic:K", "𝐾");
-        m.insert("italic:L", "𝐿");
-        m.insert("italic:M", "𝑀");
-        m.insert("italic:N", "𝑁");
-        m.insert("italic:O", "𝑂");
-        m.insert("italic:P", "𝑃");
-        m.insert("italic:Q", "𝑄");
-        m.insert("italic:R", "𝑅");
-        m.insert("italic:S", "𝑆");
-        m.insert("italic:T", "𝑇");
-        m.insert("italic:U", "𝑈");
-        m.insert("italic:V", "𝑉");
-        m.insert("italic:W", "𝑊");
-        m.insert("italic:X", "𝑋");
-        m.insert("italic:Y", "𝑌");
-        m.insert("italic:Z", "𝑍");
-        m.insert("italic:a", "𝑎");
-        m.insert("italic:b", "𝑏");
-        m.insert("italic:c", "𝑐");
-        m.insert("italic:d", "𝑑");
-        m.insert("italic:e", "𝑒");
-        m.insert("italic:f", "𝑓");
-        m.insert("italic:g", "𝑔");
-        m.insert("italic:h", "ℎ");
-        m.insert("italic:i", "𝑖");
-        m.insert("italic:j", "𝑗");
-        m.insert("italic:k", "𝑘");
-        m.insert("italic:l", "𝑙");
-        m.insert("italic:m", "𝑚");
-        m.insert("italic:n", "𝑛");
-        m.insert("italic:o", "𝑜");
-        m.insert("italic:p", "𝑝");
-        m.insert("italic:q", "𝑞");
-        m.insert("italic:r", "𝑟");
-        m.insert("italic:s", "𝑠");
-        m.insert("italic:t", "𝑡");
-        m.insert("italic:u", "𝑢");
-        m.insert("italic:v", "𝑣");
-        m.insert("italic:w", "𝑤");
-        m.insert("italic:x", "𝑥");
-        m.insert("italic:y", "𝑦");
-        m.insert("italic:z", "𝑧");
-        m.insert("sans:A", "𝖠");
-        m.insert("sans:B", "𝖡");
-        m.insert("sans:C", "𝖢");
-        m.insert("sans:D", "𝖣");
-        m.insert("sans:E", "𝖤");
-        m.insert("sans:F", "𝖥");
-        m.insert("sans:G", "𝖦");
-        m.insert("sans:H", "𝖧");
-        m.insert("sans:I", "𝖨");
-        m.insert("sans:J", "𝖩");
-        m.insert("sans:K", "𝖪");
-        m.insert("sans:L", "𝖫");
-        m.insert("sans:M", "𝖬");
-        m.insert("sans:N", "𝖭");
-        m.insert("sans:O", "𝖮");
-        m.insert("sans:P", "𝖯");
-        m.insert("sans:Q", "𝖰");
-        m.insert("sans:R", "𝖱");
-        m.insert("sans:S", "𝖲");
-        m.insert("sans:T", "𝖳");
-        m.insert("sans:U", "𝖴");
-        m.insert("sans:V", "𝖵");
-        m.insert("sans:W", "𝖶");
-        m.insert("sans:X", "𝖷");
-        m.insert("sans:Y", "𝖸");
-        m.insert("sans:Z", "𝖹");
-        m.insert("sans:a", "𝖺");
-        m.insert("sans:b", "𝖻");
-        m.insert("sans:c", "𝖼");
-        m.insert("sans:d", "𝖽");
-        m.insert("sans:e", "𝖾");
-        m.insert("sans:f", "𝖿");
-        m.insert("sans:g", "𝗀");
-        m.insert("sans:h", "𝗁");
-        m.insert("sans:i", "𝗂");
-        m.insert("sans:j", "𝗃");
-        m.insert("sans:k", "𝗄");
-        m.insert("sans:l", "𝗅");
-        m.insert("sans:m", "𝗆");
-        m.insert("sans:n", "𝗇");
-        m.insert("sans:o", "𝗈");
-        m.insert("sans:p", "𝗉");
-        m.insert("sans:q", "𝗊");
-        m.insert("sans:r", "𝗋");
-        m.insert("sans:s", "𝗌");
-        m.insert("sans:t", "𝗍");
-        m.insert("sans:u", "𝗎");
-        m.insert("sans:v", "𝗏");
-        m.insert("sans:w", "𝗐");
-        m.insert("sans:x", "𝗑");
-        m.insert("sans:y", "𝗒");
-        m.insert("sans:z", "𝗓");
-        m.insert("mono:A", "𝙰");
-        m.insert("mono:B", "𝙱");
-        m.insert("mono:C", "𝙲");
-        m.insert("mono:D", "𝙳");
-        m.insert("mono:E", "𝙴");
-        m.insert("mono:F", "𝙵");
-        m.insert("mono:G", "𝙶");
-        m.insert("mono:H", "𝙷");
-        m.insert("mono:I", "𝙸");
-        m.insert("mono:J", "𝙹");
-        m.insert("mono:K", "𝙺");
-        m.insert("mono:L", "𝙻");
-        m.insert("mono:M", "𝙼");
-        m.insert("mono:N", "𝙽");
-        m.insert("mono:O", "𝙾");
-        m.insert("mono:P", "𝙿");
-        m.insert("mono:Q", "𝚀");
-        m.insert("mono:R", "𝚁");
-        m.insert("mono:S", "𝚂");
-        m.insert("mono:T", "𝚃");
-        m.insert("mono:U", "𝚄");
-        m.insert("mono:V", "𝚅");
-        m.insert("mono:W", "𝚆");
-        m.insert("mono:X", "𝚇");
-        m.insert("mono:Y", "𝚈");
-        m.insert("mono:Z", "𝚉");
-        m.insert("mono:a", "𝚊");
-        m.insert("mono:b", "𝚋");
-        m.insert("mono:c", "𝚌");
-        m.insert("mono:d", "𝚍");
-        m.insert("mono:e", "𝚎");
-        m.insert("mono:f", "𝚏");
-        m.insert("mono:g", "𝚐");
-        m.insert("mono:h", "𝚑");
-        m.insert("mono:i", "𝚒");
-        m.insert("mono:j", "𝚓");
-        m.insert("mono:k", "𝚔");
-        m.insert("mono:l", "𝚕");
-        m.insert("mono:m", "𝚖");
-        m.insert("mono:n", "𝚗");
-        m.insert("mono:o", "𝚘");
-        m.insert("mono:p", "𝚙");
-        m.insert("mono:q", "𝚚");
-        m.insert("mono:r", "𝚛");
-        m.insert("mono:s", "𝚜");
-        m.insert("mono:t", "𝚝");
-        m.insert("mono:u", "𝚞");
-        m.insert("mono:v", "𝚟");
-        m.insert("mono:w", "𝚠");
-        m.insert("mono:x", "𝚡");
-        m.insert("mono:y", "𝚢");
-        m.insert("mono:z", "𝚣");
-        m.insert("bb:A", "𝔸");
-        m.insert("bb:B", "𝔹");
-        m.insert("bb:C", "ℂ");
-        m.insert("bb:D", "𝔻");
-        m.insert("bb:E", "𝔼");
-        m.insert("bb:F", "𝔽");
-        m.insert("bb:G", "𝔾");
-        m.insert("bb:H", "ℍ");
-        m.insert("bb:I", "𝕀");
-        m.insert("bb:J", "𝕁");
-        m.insert("bb:K", "𝕂");
-        m.insert("bb:L", "𝕃");
-        m.insert("bb:M", "𝕄");
-        m.insert("bb:N", "ℕ");
-        m.insert("bb:O", "𝕆");
-        m.insert("bb:P", "ℙ");
-        m.insert("bb:Q", "ℚ");
-        m.insert("bb:R", "ℝ");
-        m.insert("bb:S", "𝕊");
-        m.insert("bb:T", "𝕋");
-        m.insert("bb:U", "𝕌");
-        m.insert("bb:V", "𝕍");
-        m.insert("bb:W", "𝕎");
-        m.insert("bb:X", "𝕏");
-        m.insert("bb:Y", "𝕐");
-        m.insert("bb:Z", "ℤ");
-        m.insert("script:A", "𝒜");
-        m.insert("script:B", "ℬ");
-        m.insert("script:C", "𝒞");
-        m.insert("script:D", "𝒟");
-        m.insert("script:E", "ℰ");
-        m.insert("script:F", "ℱ");
-        m.insert("script:G", "𝒢");
-        m.insert("script:H", "ℋ");
-        m.insert("script:I", "ℐ");
-        m.insert("script:J", "𝒥");
-        m.insert("script:K", "𝒦");
-        m.insert("script:L", "ℒ");
-        m.insert("script:M", "ℳ");
-        m.insert("script:N", "𝒩");
-        m.insert("script:O", "𝒪");
-        m.insert("script:P", "𝒫");
-        m.insert("script:Q", "𝒬");
-        m.insert("script:R", "ℛ");
-        m.insert("script:S", "𝒮");
-        m.insert("script:T", "𝒯");
-        m.insert("script:U", "𝒰");
-        m.insert("script:V", "𝒱");
-        m.insert("script:W", "𝒲");
-        m.insert("script:X", "𝒳");
-        m.insert("script:Y", "𝒴");
-        m.insert("script:Z", "𝒵");
-        m.insert("upright:A", "A");
-        m.insert("upright:B", "B");
-        m.insert("upright:C", "C");
-        m.insert("upright:D", "D");
-        m.insert("upright:E", "E");
-        m.insert("upright:F", "F");
-        m.insert("upright:G", "G");
-        m.insert("upright:H", "H");
-        m.insert("upright:I", "I");
-        m.insert("upright:J", "J");
-        m.insert("upright:K", "K");
-        m.insert("upright:L", "L");
-        m.insert("upright:M", "M");
-        m.insert("upright:N", "N");
-        m.insert("upright:O", "O");
-        m.insert("upright:P", "P");
-        m.insert("upright:Q", "Q");
-        m.insert("upright:R", "R");
-        m.insert("upright:S", "S");
-        m.insert("upright:T", "T");
-        m.insert("upright:U", "U");
-        m.insert("upright:V", "V");
-        m.insert("upright:W", "W");
-        m.insert("upright:X", "X");
-        m.insert("upright:Y", "Y");
-        m.insert("upright:Z", "Z");
-        m.insert("upright:a", "a");
-        m.insert("upright:b", "b");
-        m.insert("upright:c", "c");
-        m.insert("upright:d", "d");
-        m.insert("upright:e", "e");
-        m.insert("upright:f", "f");
-        m.insert("upright:g", "g");
-        m.insert("upright:h", "h");
-        m.insert("upright:i", "i");
-        m.insert("upright:j", "j");
-        m.insert("upright:k", "k");
-        m.insert("upright:l", "l");
-        m.insert("upright:m", "m");
-        m.insert("upright:n", "n");
-        m.insert("upright:o", "o");
-        m.insert("upright:p", "p");
-        m.insert("upright:q", "q");
-        m.insert("upright:r", "r");
-        m.insert("upright:s", "s");
-        m.insert("upright:t", "t");
-        m.insert("upright:u", "u");
-        m.insert("upright:v", "v");
-        m.insert("upright:w", "w");
-        m.insert("upright:x", "x");
-        m.insert("upright:y", "y");
-        m.insert("upright:z", "z");
-        m.insert("frak:A", "𝔄");
-        m.insert("frak:B", "𝔅");
-        m.insert("frak:C", "ℭ");
-        m.insert("frak:D", "𝔇");
-        m.insert("frak:E", "𝔈");
-        m.insert("frak:F", "𝔉");
-        m.insert("frak:G", "𝔊");
-        m.insert("frak:H", "ℌ");
-        m.insert("frak:I", "ℑ");
-        m.insert("frak:J", "𝔍");
-        m.insert("frak:K", "𝔎");
-        m.insert("frak:L", "𝔏");
-        m.insert("frak:M", "𝔐");
-        m.insert("frak:N", "𝔑");
-        m.insert("frak:O", "𝔒");
-        m.insert("frak:P", "𝔓");
-        m.insert("frak:Q", "𝔔");
-        m.insert("frak:R", "ℜ");
-        m.insert("frak:S", "𝔖");
-        m.insert("frak:T", "𝔗");
-        m.insert("frak:U", "𝔘");
-        m.insert("frak:V", "𝔙");
-        m.insert("frak:W", "𝔚");
-        m.insert("frak:X", "𝔛");
-        m.insert("frak:Y", "𝔜");
-        m.insert("frak:Z", "ℨ");
-        m.insert("frak:a", "𝔞");
-        m.insert("frak:b", "𝔟");
-        m.insert("frak:c", "𝔠");
-        m.insert("frak:d", "𝔡");
-        m.insert("frak:e", "𝔢");
-        m.insert("frak:f", "𝔣");
-        m.insert("frak:g", "𝔤");
-        m.insert("frak:h", "𝔥");
-        m.insert("frak:i", "𝔦");
-        m.insert("frak:j", "𝔧");
-        m.insert("frak:k", "𝔨");
-        m.insert("frak:l", "𝔩");
-        m.insert("frak:m", "𝔪");
-        m.insert("frak:n", "𝔫");
-        m.insert("frak:o", "𝔬");
-        m.insert("frak:p", "𝔭");
-        m.insert("frak:q", "𝔮");
-        m.insert("frak:r", "𝔯");
-        m.insert("frak:s", "𝔰");
-        m.insert("frak:t", "𝔱");
-        m.insert("frak:u", "𝔲");
-        m.insert("frak:v", "𝔳");
-        m.insert("frak:w", "𝔴");
-        m.insert("frak:x", "𝔵");
-        m.insert("frak:y", "𝔶");
-        m.insert("frak:z", "𝔷");
-        m.insert("double:0", "𝟘");
-        m.insert("double:1", "𝟙");
-        m.insert("double:2", "𝟚");
-        m.insert("double:3", "𝟛");
-        m.insert("double:4", "𝟜");
-        m.insert("double:5", "𝟝");
-        m.insert("double:6", "𝟞");
-        m.insert("double:7", "𝟟");
-        m.insert("double:8", "𝟠");
-        m.insert("double:9", "𝟡");
-        m
+    pub static ref MATH_SYMBOLS: phf::Map<&'static str, &'static str> = phf_map! {
+        "alpha" => "α",
+        "beta" => "β",
+        "gamma" => "γ",
+        "delta" => "δ",
+        "epsilon" => "ε",
+        "varepsilon" => "ϵ",
+        "zeta" => "ζ",
+        "eta" => "η",
+        "theta" => "θ",
+        "vartheta" => "ϑ",
+        "iota" => "ι",
+        "kappa" => "κ",
+        "lambda" => "λ",
+        "mu" => "μ",
+        "nu" => "ν",
+        "xi" => "ξ",
+        "pi" => "π",
+        "varpi" => "ϖ",
+        "rho" => "ρ",
+        "varrho" => "ϱ",
+        "sigma" => "σ",
+        "varsigma" => "ς",
+        "tau" => "τ",
+        "upsilon" => "υ",
+        "phi" => "φ",
+        "varphi" => "ϕ",
+        "chi" => "χ",
+        "psi" => "ψ",
+        "omega" => "ω",
+        "Gamma" => "Γ",
+        "Delta" => "Δ",
+        "Theta" => "Θ",
+        "Lambda" => "Λ",
+        "Xi" => "Ξ",
+        "Pi" => "Π",
+        "Sigma" => "Σ",
+        "Upsilon" => "Υ",
+        "Phi" => "Φ",
+        "Chi" => "Χ",
+        "Psi" => "Ψ",
+        "Omega" => "Ω",
+        "sum" => "∑",
+        "sqrt" => "√",
+        "product" => "∏",
+        "integral" => "∫",
+        "nabla" => "∇",
+        "partial" => "∂",
+        "infinity" => "∞",
+        "emptyset" => "∅",
+        "aleph" => "ℵ",
+        "subset" => "⊂",
+        "superset" => "⊃",
+        "union" => "∪",
+        "intersection" => "∩",
+        "in" => "∈",
+        "notin" => "∉",
+        "element" => "∈",
+        "forall" => "∀",
+        "exists" => "∃",
+        "neg" => "¬",
+        "and" => "∧",
+        "or" => "∨",
+        "implies" => "⇒",
+        "iff" => "⇔",
+        "equiv" => "≡",
+        "approx" => "≈",
+        "neq" => "≠",
+        "leq" => "≤",
+        "geq" => "≥",
+        "ll" => "≪",
+        "gg" => "≫",
+        "pm" => "±",
+        "mp" => "∓",
+        "times" => "×",
+        // "div" => "÷",
+        "cdot" => "·",
+        "bullet" => "•",
+        "circ" => "∘",
+        "ast" => "∗",
+        "cap" => "∩",
+        "cup" => "∪",
+        "sqcap" => "⊓",
+        "sqcup" => "⊔",
+        "vee" => "∨",
+        "wedge" => "∧",
+        "oplus" => "⊕",
+        "ominus" => "⊖",
+        "otimes" => "⊗",
+        "oslash" => "⊘",
+        "odot" => "⊙",
+        "parallel" => "∥",
+        "perp" => "⊥",
+        "angle" => "∠",
+        "triangle" => "△",
+        "square" => "□",
+        "diamond" => "◊",
+        "star" => "⋆",
+        "dagger" => "†",
+        "ddagger" => "‡",
+        "sharp" => "♯",
+        "flat" => "♭",
+        "natural" => "♮",
+        "clubs" => "♣",
+        "diamonds" => "♢",
+        "hearts" => "♡",
+        "spades" => "♠",
+        "dif" => "d",
+        "diff" => "∂",
+        "paren.b" => "⏝",
+        "brace.l" => "{",
+        "brace.r" => "}",
+        "brace.t" => "⏞",
+        "brace.b" => "⏟",
+        "bracket.l" => "{",
+        "bracket.l.double" => "⟦",
+        "bracket.r" => "}",
+        "bracket.r.double" => "⟧",
+        "bracket.t" => "⎴",
+        "bracket.b" => "⎵",
+        "turtle.l" => "〔",
+        "turtle.r" => "〕",
+        "turtle.t" => "⏠",
+        "turtle.b" => "⏡",
+        "bar.v" => "|",
+        "dots" => "…",
+        "langle" => "⟨",
+        "rangle" => "⟩",
+        "lfloor" => "⌊",
+        "rfloor" => "⌋",
+        "lceil" => "⌈",
+        "rceil" => "⌉",
+        "norm" => "‖",
+        "abs" => "|",
+        "hbar" => "ℏ",
+        "planck" => "ℎ",
+        "boltzmann" => "k",
+        "avogadro" => "N",
+        "electron" => "e",
+        "proton" => "p",
+        "neutron" => "n",
+        "speed" => "c",
+        "light" => "c",
+        "gravity" => "g",
+        "charge" => "q",
+        "mass" => "m",
+        "energy" => "E",
+        "momentum" => "p",
+        "angular" => "L",
+        "spin" => "S",
+        "magnetic" => "B",
+        "electric" => "E",
+        "force" => "F",
+        "pressure" => "P",
+        "temperature" => "T",
+        "entropy" => "S",
+        "enthalpy" => "H",
+        "helmholtz" => "F",
+        "gibbs" => "G",
+        "grad" => "∇",
+        "div" => "∇·",
+        "curl" => "∇×",
+        "laplacian" => "∇²",
+        "quad" => " ",
+        "\\mathbb{A}" => "𝔸",
+        "\\mathbb{B}" => "𝔹",
+        "\\mathbb{C}" => "ℂ",
+        "\\mathbb{D}" => "𝔻",
+        "\\mathbb{E}" => "𝔼",
+        "\\mathbb{F}" => "𝔽",
+        "\\mathbb{G}" => "𝔾",
+        "\\mathbb{H}" => "ℍ",
+        "\\mathbb{I}" => "𝕀",
+        "\\mathbb{J}" => "𝕁",
+        "\\mathbb{K}" => "𝕂",
+        "\\mathbb{L}" => "𝕃",
+        "\\mathbb{M}" => "𝕄",
+        "\\mathbb{N}" => "ℕ",
+        "\\mathbb{O}" => "𝕆",
+        "\\mathbb{P}" => "ℙ",
+        "\\mathbb{Q}" => "ℚ",
+        "\\mathbb{R}" => "ℝ",
+        "\\mathbb{S}" => "𝕊",
+        "\\mathbb{T}" => "𝕋",
+        "\\mathbb{U}" => "𝕌",
+        "\\mathbb{V}" => "𝕍",
+        "\\mathbb{W}" => "𝕎",
+        "\\mathbb{X}" => "𝕏",
+        "\\mathbb{Y}" => "𝕐",
+        "\\mathbb{Z}" => "ℤ",
+        "\\mathsf{a}" => "𝖺",
+        "\\mathsf{b}" => "𝖻",
+        "\\mathsf{c}" => "𝖼",
+        "\\mathsf{d}" => "𝖽",
+        "\\mathsf{e}" => "𝖾",
+        "\\mathsf{f}" => "𝖿",
+        "\\mathsf{g}" => "𝗀",
+        "\\mathsf{h}" => "𝗁",
+        "\\mathsf{i}" => "𝗂",
+        "\\mathsf{j}" => "𝗃",
+        "\\mathsf{k}" => "𝗄",
+        "\\mathsf{l}" => "𝗅",
+        "\\mathsf{m}" => "𝗆",
+        "\\mathsf{n}" => "𝗇",
+        "\\mathsf{o}" => "𝗈",
+        "\\mathsf{p}" => "𝗉",
+        "\\mathsf{q}" => "𝗊",
+        "\\mathsf{r}" => "𝗋",
+        "\\mathsf{s}" => "𝗌",
+        "\\mathsf{t}" => "𝗍",
+        "\\mathsf{u}" => "𝗎",
+        "\\mathsf{v}" => "𝗏",
+        "\\mathsf{w}" => "𝗐",
+        "\\mathsf{x}" => "𝗑",
+        "\\mathsf{y}" => "𝗒",
+        "\\mathsf{z}" => "𝗓",
+        "\\mathsf{A}" => "𝖠",
+        "\\mathsf{B}" => "𝖡",
+        "\\mathsf{C}" => "𝖢",
+        "\\mathsf{D}" => "𝖣",
+        "\\mathsf{E}" => "𝖤",
+        "\\mathsf{F}" => "𝖥",
+        "\\mathsf{G}" => "𝖦",
+        "\\mathsf{H}" => "𝖧",
+        "\\mathsf{I}" => "𝖨",
+        "\\mathsf{J}" => "𝖩",
+        "\\mathsf{K}" => "𝖪",
+        "\\mathsf{L}" => "𝖫",
+        "\\mathsf{M}" => "𝖬",
+        "\\mathsf{N}" => "𝖭",
+        "\\mathsf{O}" => "𝖮",
+        "\\mathsf{P}" => "𝖯",
+        "\\mathsf{Q}" => "𝖰",
+        "\\mathsf{R}" => "𝖱",
+        "\\mathsf{S}" => "𝖲",
+        "\\mathsf{T}" => "𝖳",
+        "\\mathsf{U}" => "𝖴",
+        "\\mathsf{V}" => "𝖵",
+        "\\mathsf{W}" => "𝖶",
+        "\\mathsf{X}" => "𝖷",
+        "\\mathsf{Y}" => "𝖸",
+        "\\mathsf{Z}" => "𝖹",
+        "\\mathfrak{a}" => "𝔞",
+        "\\mathfrak{b}" => "𝔟",
+        "\\mathfrak{c}" => "𝔠",
+        "\\mathfrak{d}" => "𝔡",
+        "\\mathfrak{e}" => "𝔢",
+        "\\mathfrak{f}" => "𝔣",
+        "\\mathfrak{g}" => "𝔤",
+        "\\mathfrak{h}" => "𝔥",
+        "\\mathfrak{i}" => "𝔦",
+        "\\mathfrak{j}" => "𝔧",
+        "\\mathfrak{k}" => "𝔨",
+        "\\mathfrak{l}" => "𝔩",
+        "\\mathfrak{m}" => "𝔪",
+        "\\mathfrak{n}" => "𝔫",
+        "\\mathfrak{o}" => "𝔬",
+        "\\mathfrak{p}" => "𝔭",
+        "\\mathfrak{q}" => "𝔮",
+        "\\mathfrak{r}" => "𝔯",
+        "\\mathfrak{s}" => "𝔰",
+        "\\mathfrak{t}" => "𝔱",
+        "\\mathfrak{u}" => "𝔲",
+        "\\mathfrak{v}" => "𝔳",
+        "\\mathfrak{w}" => "𝔴",
+        "\\mathfrak{x}" => "𝔵",
+        "\\mathfrak{y}" => "𝔶",
+        "\\mathfrak{z}" => "𝔷",
+        "\\mathfrak{A}" => "𝔄",
+        "\\mathfrak{B}" => "𝔅",
+        "\\mathfrak{C}" => "ℭ",
+        "\\mathfrak{D}" => "𝔇",
+        "\\mathfrak{E}" => "𝔈",
+        "\\mathfrak{F}" => "𝔉",
+        "\\mathfrak{G}" => "𝔊",
+        "\\mathfrak{H}" => "ℌ",
+        "\\mathfrak{I}" => "ℑ",
+        "\\mathfrak{J}" => "𝔍",
+        "\\mathfrak{K}" => "𝔎",
+        "\\mathfrak{L}" => "𝔏",
+        "\\mathfrak{M}" => "𝔐",
+        "\\mathfrak{N}" => "𝔑",
+        "\\mathfrak{O}" => "𝔒",
+        "\\mathfrak{P}" => "𝔓",
+        "\\mathfrak{Q}" => "𝔔",
+        "\\mathfrak{R}" => "ℜ",
+        "\\mathfrak{S}" => "𝔖",
+        "\\mathfrak{T}" => "𝔗",
+        "\\mathfrak{U}" => "𝔘",
+        "\\mathfrak{V}" => "𝔙",
+        "\\mathfrak{W}" => "𝔚",
+        "\\mathfrak{X}" => "𝔛",
+        "\\mathfrak{Y}" => "𝔜",
+        "\\mathfrak{Z}" => "ℨ",
+        "\\mathscr{A}" => "𝓐",
+        "\\mathscr{B}" => "𝓑",
+        "\\mathscr{C}" => "𝓒",
+        "\\mathscr{D}" => "𝓓",
+        "\\mathscr{E}" => "𝓔",
+        "\\mathscr{F}" => "𝓕",
+        "\\mathscr{G}" => "𝓖",
+        "\\mathscr{H}" => "𝓗",
+        "\\mathscr{I}" => "𝓘",
+        "\\mathscr{J}" => "𝓙",
+        "\\mathscr{K}" => "𝓚",
+        "\\mathscr{L}" => "𝓛",
+        "\\mathscr{M}" => "𝓜",
+        "\\mathscr{N}" => "𝓝",
+        "\\mathscr{O}" => "𝓞",
+        "\\mathscr{P}" => "𝓟",
+        "\\mathscr{Q}" => "𝓠",
+        "\\mathscr{R}" => "𝓡",
+        "\\mathscr{S}" => "𝓢",
+        "\\mathscr{T}" => "𝓣",
+        "\\mathscr{U}" => "𝓤",
+        "\\mathscr{V}" => "𝓥",
+        "\\mathscr{W}" => "𝓦",
+        "\\mathscr{X}" => "𝓧",
+        "\\mathscr{Y}" => "𝓨",
+        "\\mathscr{Z}" => "𝓩",
+        "\\mathcal{A}" => "𝓐",
+        "\\mathcal{B}" => "𝓑",
+        "\\mathcal{C}" => "𝓒",
+        "\\mathcal{D}" => "𝓓",
+        "\\mathcal{E}" => "𝓔",
+        "\\mathcal{F}" => "𝓕",
+        "\\mathcal{G}" => "𝓖",
+        "\\mathcal{H}" => "𝓗",
+        "\\mathcal{I}" => "𝓘",
+        "\\mathcal{J}" => "𝓙",
+        "\\mathcal{K}" => "𝓚",
+        "\\mathcal{L}" => "𝓛",
+        "\\mathcal{M}" => "𝓜",
+        "\\mathcal{N}" => "𝓝",
+        "\\mathcal{O}" => "𝓞",
+        "\\mathcal{P}" => "𝓟",
+        "\\mathcal{Q}" => "𝓠",
+        "\\mathcal{R}" => "𝓡",
+        "\\mathcal{S}" => "𝓢",
+        "\\mathcal{T}" => "𝓣",
+        "\\mathcal{U}" => "𝓤",
+        "\\mathcal{V}" => "𝓥",
+        "\\mathcal{W}" => "𝓦",
+        "\\mathcal{X}" => "𝓧",
+        "\\mathcal{Y}" => "𝓨",
+        "\\mathcal{Z}" => "𝓩",
+        "\\alpha" => "α",
+        "\\beta" => "β",
+        "\\gamma" => "γ",
+        "\\delta" => "δ",
+        "\\epsilon" => "ϵ",
+        "\\varepsilon" => "ε",
+        "\\zeta" => "ζ",
+        "\\eta" => "η",
+        "\\theta" => "θ",
+        "\\vartheta" => "ϑ",
+        "\\iota" => "ι",
+        "\\kappa" => "κ",
+        "\\lambda" => "λ",
+        "\\mu" => "μ",
+        "\\nu" => "ν",
+        "\\xi" => "ξ",
+        "\\pi" => "π",
+        "\\varpi" => "ϖ",
+        "\\rho" => "ρ",
+        "\\varrho" => "ϱ",
+        "\\sigma" => "σ",
+        "\\varsigma" => "ς",
+        "\\tau" => "τ",
+        "\\upsilon" => "υ",
+        "\\phi" => "ϕ",
+        "\\varphi" => "φ",
+        "\\chi" => "χ",
+        "\\psi" => "ψ",
+        "\\omega" => "ω",
+        "\\Gamma" => "Γ",
+        "\\Delta" => "Δ",
+        "\\Theta" => "Θ",
+        "\\Lambda" => "Λ",
+        "\\Xi" => "Ξ",
+        "\\Pi" => "Π",
+        "\\Sigma" => "Σ",
+        "\\Upsilon" => "Υ",
+        "\\Phi" => "Φ",
+        "\\Chi" => "Χ",
+        "\\Psi" => "Ψ",
+        "\\Omega" => "Ω",
+        "\\|" => "‖",
+        "\\amalg" => "∐",
+        "\\angle" => "∠",
+        "\\approx" => "≈",
+        "\\ast" => "∗",
+        "\\asymp" => "≍",
+        "\\backslash" => "∖",
+        "\\bigcap" => "∩",
+        "\\bigcirc" => "○",
+        "\\bigcup" => "∪",
+        "\\bigodot" => "⊙",
+        "\\bigoplus" => "⊕",
+        "\\bigotimes" => "⊗",
+        "\\bigsqcup" => "⊔",
+        "\\bigtriangledown" => "∇",
+        "\\bigtriangleup" => "∆",
+        "\\bigvee" => "⋁",
+        "\\bigwedge" => "⋀",
+        "\\bot" => "⊥",
+        "\\bowtie" => "⋈",
+        "\\bullet" => "•",
+        "\\cap" => "∩",
+        "\\cdot" => "·",
+        "\\cdots" => "⋯",
+        "\\circ" => "∘",
+        "\\cong" => "≅",
+        "\\coprod" => "∐",
+        "\\copyright" => "©",
+        "\\cup" => "∪",
+        "\\dagger" => "†",
+        "\\dashv" => "⊣",
+        "\\ddagger" => "‡",
+        "\\ddots" => "⋱",
+        "\\diamond" => "⋄",
+        "\\div" => "÷",
+        "\\doteq" => "≐",
+        "\\dots" => "…",
+        "\\downarrow" => "↓",
+        "\\Downarrow" => "⇓",
+        "\\equiv" => "≡",
+        "\\exists" => "∃",
+        "\\flat" => "♭",
+        "\\forall" => "∀",
+        "\\frown" => "⁔",
+        "\\ge" => "≥",
+        "\\geq" => "≥",
+        "\\gets" => "←",
+        "\\gg" => "⟫",
+        "\\hookleftarrow" => "↩",
+        "\\hookrightarrow" => "↪",
+        "\\iff" => "⇔",
+        "\\Im" => "ℑ",
+        "\\in" => "∈",
+        "\\int" => "∫",
+        "\\jmath" => "𝚥",
+        "\\land" => "∧",
+        "\\lceil" => "⌈",
+        "\\ldots" => "…",
+        "\\le" => "≤",
+        "\\leftarrow" => "←",
+        "\\Leftarrow" => "⇐",
+        "\\leftharpoondown" => "↽",
+        "\\leftharpoonup" => "↼",
+        "\\leftrightarrow" => "↔",
+        "\\Leftrightarrow" => "⇔",
+        "\\leq" => "≤",
+        "\\lfloor" => "⌊",
+        "\\ll" => "≪",
+        "\\lmoustache" => "╭",
+        "\\lor" => "∨",
+        "\\mapsto" => "↦",
+        "\\mid" => "∣",
+        "\\models" => "╞",
+        "\\mp" => "∓",
+        "\\nabla" => "∇",
+        "\\natural" => "♮",
+        "\\ne" => "≠",
+        "\\nearrow" => "↗",
+        "\\neg" => "¬",
+        "\\neq" => "≠",
+        "\\ni" => "∋",
+        "\\notin" => "∉",
+        "\\nwarrow" => "↖",
+        "\\odot" => "⊙",
+        "\\oint" => "∮",
+        "\\ominus" => "⊖",
+        "\\oplus" => "⊕",
+        "\\oslash" => "⊘",
+        "\\otimes" => "⊗",
+        "\\owns" => "∋",
+        "\\P" => "¶",
+        "\\parallel" => "║",
+        "\\partial" => "∂",
+        "\\perp" => "⊥",
+        "\\pm" => "±",
+        "\\prec" => "≺",
+        "\\preceq" => "⪯",
+        "\\prime" => "′",
+        "\\prod" => "∏",
+        "\\propto" => "∝",
+        "\\rceil" => "⌉",
+        "\\Re" => "ℜ",
+        "\\quad" => " ",
+        "\\qquad" => " ",
+        "\\rfloor" => "⌋",
+        "\\rightarrow" => "→",
+        "\\Rightarrow" => "⇒",
+        "\\rightleftharpoons" => "⇌",
+        "\\rmoustache" => "╮",
+        "\\S" => "§",
+        "\\searrow" => "↘",
+        "\\setminus" => "∖",
+        "\\sharp" => "♯",
+        "\\sim" => "∼",
+        "\\simeq" => "⋍",
+        "\\smile" => "‿",
+        "\\sqcap" => "⊓",
+        "\\sqcup" => "⊔",
+        "\\sqsubset" => "⊏",
+        "\\sqsubseteq" => "⊑",
+        "\\sqsupset" => "⊐",
+        "\\sqsupseteq" => "⊒",
+        "\\star" => "✫",
+        "\\subset" => "⊂",
+        "\\subseteq" => "⊆",
+        "\\succ" => "≻",
+        "\\succeq" => "⪰",
+        "\\sum" => "∑",
+        "\\supset" => "⊃",
+        "\\supseteq" => "⊇",
+        "\\surd" => "√",
+        "\\swarrow" => "↙",
+        "\\times" => "×",
+        "\\to" => "→",
+        "\\top" => "⊤",
+        "\\triangle" => "∆",
+        "\\triangleleft" => "⊲",
+        "\\triangleright" => "⊳",
+        "\\uparrow" => "↑",
+        "\\Uparrow" => "⇑",
+        "\\updownarrow" => "↕",
+        "\\Updownarrow" => "⇕",
+        "\\vdash" => "⊢",
+        "\\vdots" => "⋮",
+        "\\vee" => "∨",
+        "\\wedge" => "∧",
+        "\\wp" => "℘",
+        "\\wr" => "≀",
+        "\\langle" => "⟨",
+        "\\rangle" => "⟩",
+        "\\{" => "{",
+        "\\}" => "}",
+        "\\aleph" => "ℵ",
+        "\\clubsuit" => "♣",
+        "\\diamondsuit" => "♢",
+        "\\heartsuit" => "♡",
+        "\\spadesuit" => "♠",
+        "\\ell" => "ℓ",
+        "\\emptyset" => "∅",
+        "\\varnothing" => "∅",
+        "\\hbar" => "ℏ",
+        "\\imath" => "ɩ",
+        "\\infty" => "∞",
+        "_0" => "₀",
+        "_1" => "₁",
+        "_2" => "₂",
+        "_3" => "₃",
+        "_4" => "₄",
+        "_5" => "₅",
+        "_6" => "₆",
+        "_7" => "₇",
+        "_8" => "₈",
+        "_9" => "₉",
+        "_a" => "ₐ",
+        "_e" => "ₑ",
+        "_h" => "ₕ",
+        "_i" => "ᵢ",
+        "_j" => "ⱼ",
+        "_k" => "ₖ",
+        "_l" => "ₗ",
+        "_m" => "ₘ",
+        "_n" => "ₙ",
+        "_o" => "ₒ",
+        "_p" => "ₚ",
+        "_r" => "ᵣ",
+        "_s" => "ₛ",
+        "_t" => "ₜ",
+        "_u" => "ᵤ",
+        "_v" => "ᵥ",
+        "_x" => "ₓ",
+        "_\\." => "‸",
+        "_+" => "₊",
+        "_-" => "₋",
+        "_/" => "ˏ",
+        "0" => "₀",
+        "1" => "₁",
+        "2" => "₂",
+        "3" => "₃",
+        "4" => "₄",
+        "5" => "₅",
+        "6" => "₆",
+        "7" => "₇",
+        "8" => "₈",
+        "9" => "₉",
+        "a" => "ₐ",
+        "e" => "ₑ",
+        "h" => "ₕ",
+        "i" => "ᵢ",
+        "j" => "ⱼ",
+        "k" => "ₖ",
+        "l" => "ₗ",
+        "m" => "ₘ",
+        "n" => "ₙ",
+        "o" => "ₒ",
+        "p" => "ₚ",
+        "r" => "ᵣ",
+        "s" => "ₛ",
+        "t" => "ₜ",
+        "u" => "ᵤ",
+        "v" => "ᵥ",
+        "x" => "ₓ",
+        "+" => "₊",
+        "-" => "₋",
+        "/" => "ˏ",
+        "^0" => "⁰",
+        "^1" => "¹",
+        "^2" => "²",
+        "^3" => "³",
+        "^4" => "⁴",
+        "^5" => "⁵",
+        "^6" => "⁶",
+        "^7" => "⁷",
+        "^8" => "⁸",
+        "^9" => "⁹",
+        "^a" => "ᵃ",
+        "^b" => "ᵇ",
+        "^c" => "ᶜ",
+        "^d" => "ᵈ",
+        "^e" => "ᵉ",
+        "^f" => "ᶠ",
+        "^g" => "ᵍ",
+        "^h" => "ʰ",
+        "^i" => "ⁱ",
+        "^j" => "ʲ",
+        "^k" => "ᵏ",
+        "^l" => "ˡ",
+        "^m" => "ᵐ",
+        "^n" => "ⁿ",
+        "^o" => "ᵒ",
+        "^p" => "ᵖ",
+        "^r" => "ʳ",
+        "^s" => "ˢ",
+        "^t" => "ᵗ",
+        "^u" => "ᵘ",
+        "^v" => "ᵛ",
+        "^w" => "ʷ",
+        "^x" => "ˣ",
+        "^y" => "ʸ",
+        "^z" => "ᶻ",
+        "^A" => "ᴬ",
+        "^B" => "ᴮ",
+        "^D" => "ᴰ",
+        "^E" => "ᴱ",
+        "^G" => "ᴳ",
+        "^H" => "ᴴ",
+        "^I" => "ᴵ",
+        "^J" => "ᴶ",
+        "^K" => "ᴷ",
+        "^L" => "ᴸ",
+        "^M" => "ᴹ",
+        "^N" => "ᴺ",
+        "^O" => "ᴼ",
+        "^P" => "ᴾ",
+        "^R" => "ᴿ",
+        "^T" => "ᵀ",
+        "^U" => "ᵁ",
+        "^V" => "ⱽ",
+        "^W" => "ᵂ",
+        "^+" => "⁺",
+        "^-" => "⁻",
+        "^<" => "˂",
+        "^>" => "˃",
+        "^/" => "ˊ",
+        "^\\." => "˙",
+        "^=" => "˭",
+        "\\dashint" => "⨍",
+        "A" => "ℒ",
+        "bold:A" => "𝐀",
+        "bold:B" => "𝐁",
+        "bold:C" => "𝐂",
+        "bold:D" => "𝐃",
+        "bold:E" => "𝐄",
+        "bold:F" => "𝐅",
+        "bold:G" => "𝐆",
+        "bold:H" => "𝐇",
+        "bold:I" => "𝐈",
+        "bold:J" => "𝐉",
+        "bold:K" => "𝐊",
+        "bold:L" => "𝐋",
+        "bold:M" => "𝐌",
+        "bold:N" => "𝐍",
+        "bold:O" => "𝐎",
+        "bold:P" => "𝐏",
+        "bold:Q" => "𝐐",
+        "bold:R" => "𝐑",
+        "bold:S" => "𝐒",
+        "bold:T" => "𝐓",
+        "bold:U" => "𝐔",
+        "bold:V" => "𝐕",
+        "bold:W" => "𝐖",
+        "bold:X" => "𝐗",
+        "bold:Y" => "𝐘",
+        "bold:Z" => "𝐙",
+        "bold:a" => "𝐚",
+        "bold:b" => "𝐛",
+        "bold:c" => "𝐜",
+        "bold:d" => "𝐝",
+        "bold:e" => "𝐞",
+        "bold:f" => "𝐟",
+        "bold:g" => "𝐠",
+        "bold:h" => "𝐡",
+        "bold:i" => "𝐢",
+        "bold:j" => "𝐣",
+        "bold:k" => "𝐤",
+        "bold:l" => "𝐥",
+        "bold:m" => "𝐦",
+        "bold:n" => "𝐧",
+        "bold:o" => "𝐨",
+        "bold:p" => "𝐩",
+        "bold:q" => "𝐪",
+        "bold:r" => "𝐫",
+        "bold:s" => "𝐬",
+        "bold:t" => "𝐭",
+        "bold:u" => "𝐮",
+        "bold:v" => "𝐯",
+        "bold:w" => "𝐰",
+        "bold:x" => "𝐱",
+        "bold:y" => "𝐲",
+        "bold:z" => "𝐳",
+        "bold:\\alpha" => "𝛂",
+        "bold:\\beta" => "𝛃",
+        "bold:\\gamma" => "𝛄",
+        "bold:\\delta" => "𝛅",
+        "bold:\\epsilon" => "𝛆",
+        "bold:\\zeta" => "𝛇",
+        "bold:\\eta" => "𝛈",
+        "bold:\\theta" => "𝛉",
+        "bold:\\iota" => "𝛊",
+        "bold:\\kappa" => "𝛋",
+        "bold:\\lambda" => "𝛌",
+        "bold:\\mu" => "𝛍",
+        "bold:\\nu" => "𝛎",
+        "bold:\\xi" => "𝛏",
+        "bold:\\pi" => "𝛑",
+        "bold:\\rho" => "𝛒",
+        "bold:\\sigma" => "𝛔",
+        "bold:\\tau" => "𝛕",
+        "bold:\\upsilon" => "𝛖",
+        "bold:\\phi" => "𝛗",
+        "bold:\\chi" => "𝛘",
+        "bold:\\psi" => "𝛙",
+        "bold:\\omega" => "𝛚",
+        "bold:\\Gamma" => "𝚪",
+        "bold:\\Delta" => "𝚫",
+        "bold:\\Theta" => "𝚯",
+        "bold:\\Lambda" => "𝚲",
+        "bold:\\Xi" => "𝚵",
+        "bold:\\Pi" => "𝚷",
+        "bold:\\Sigma" => "𝚺",
+        "bold:\\Upsilon" => "𝚼",
+        "bold:\\Phi" => "𝚽",
+        "bold:\\Chi" => "𝚾",
+        "bold:\\Psi" => "𝚿",
+        "bold:\\Omega" => "𝛀",
+        "italic:A" => "𝐴",
+        "italic:B" => "𝐵",
+        "italic:C" => "𝐶",
+        "italic:D" => "𝐷",
+        "italic:E" => "𝐸",
+        "italic:F" => "𝐹",
+        "italic:G" => "𝐺",
+        "italic:H" => "𝐻",
+        "italic:I" => "𝐼",
+        "italic:J" => "𝐽",
+        "italic:K" => "𝐾",
+        "italic:L" => "𝐿",
+        "italic:M" => "𝑀",
+        "italic:N" => "𝑁",
+        "italic:O" => "𝑂",
+        "italic:P" => "𝑃",
+        "italic:Q" => "𝑄",
+        "italic:R" => "𝑅",
+        "italic:S" => "𝑆",
+        "italic:T" => "𝑇",
+        "italic:U" => "𝑈",
+        "italic:V" => "𝑉",
+        "italic:W" => "𝑊",
+        "italic:X" => "𝑋",
+        "italic:Y" => "𝑌",
+        "italic:Z" => "𝑍",
+        "italic:a" => "𝑎",
+        "italic:b" => "𝑏",
+        "italic:c" => "𝑐",
+        "italic:d" => "𝑑",
+        "italic:e" => "𝑒",
+        "italic:f" => "𝑓",
+        "italic:g" => "𝑔",
+        "italic:h" => "ℎ",
+        "italic:i" => "𝑖",
+        "italic:j" => "𝑗",
+        "italic:k" => "𝑘",
+        "italic:l" => "𝑙",
+        "italic:m" => "𝑚",
+        "italic:n" => "𝑛",
+        "italic:o" => "𝑜",
+        "italic:p" => "𝑝",
+        "italic:q" => "𝑞",
+        "italic:r" => "𝑟",
+        "italic:s" => "𝑠",
+        "italic:t" => "𝑡",
+        "italic:u" => "𝑢",
+        "italic:v" => "𝑣",
+        "italic:w" => "𝑤",
+        "italic:x" => "𝑥",
+        "italic:y" => "𝑦",
+        "italic:z" => "𝑧",
+        "sans:A" => "𝖠",
+        "sans:B" => "𝖡",
+        "sans:C" => "𝖢",
+        "sans:D" => "𝖣",
+        "sans:E" => "𝖤",
+        "sans:F" => "𝖥",
+        "sans:G" => "𝖦",
+        "sans:H" => "𝖧",
+        "sans:I" => "𝖨",
+        "sans:J" => "𝖩",
+        "sans:K" => "𝖪",
+        "sans:L" => "𝖫",
+        "sans:M" => "𝖬",
+        "sans:N" => "𝖭",
+        "sans:O" => "𝖮",
+        "sans:P" => "𝖯",
+        "sans:Q" => "𝖰",
+        "sans:R" => "𝖱",
+        "sans:S" => "𝖲",
+        "sans:T" => "𝖳",
+        "sans:U" => "𝖴",
+        "sans:V" => "𝖵",
+        "sans:W" => "𝖶",
+        "sans:X" => "𝖷",
+        "sans:Y" => "𝖸",
+        "sans:Z" => "𝖹",
+        "sans:a" => "𝖺",
+        "sans:b" => "𝖻",
+        "sans:c" => "𝖼",
+        "sans:d" => "𝖽",
+        "sans:e" => "𝖾",
+        "sans:f" => "𝖿",
+        "sans:g" => "𝗀",
+        "sans:h" => "𝗁",
+        "sans:i" => "𝗂",
+        "sans:j" => "𝗃",
+        "sans:k" => "𝗄",
+        "sans:l" => "𝗅",
+        "sans:m" => "𝗆",
+        "sans:n" => "𝗇",
+        "sans:o" => "𝗈",
+        "sans:p" => "𝗉",
+        "sans:q" => "𝗊",
+        "sans:r" => "𝗋",
+        "sans:s" => "𝗌",
+        "sans:t" => "𝗍",
+        "sans:u" => "𝗎",
+        "sans:v" => "𝗏",
+        "sans:w" => "𝗐",
+        "sans:x" => "𝗑",
+        "sans:y" => "𝗒",
+        "sans:z" => "𝗓",
+        "mono:A" => "𝙰",
+        "mono:B" => "𝙱",
+        "mono:C" => "𝙲",
+        "mono:D" => "𝙳",
+        "mono:E" => "𝙴",
+        "mono:F" => "𝙵",
+        "mono:G" => "𝙶",
+        "mono:H" => "𝙷",
+        "mono:I" => "𝙸",
+        "mono:J" => "𝙹",
+        "mono:K" => "𝙺",
+        "mono:L" => "𝙻",
+        "mono:M" => "𝙼",
+        "mono:N" => "𝙽",
+        "mono:O" => "𝙾",
+        "mono:P" => "𝙿",
+        "mono:Q" => "𝚀",
+        "mono:R" => "𝚁",
+        "mono:S" => "𝚂",
+        "mono:T" => "𝚃",
+        "mono:U" => "𝚄",
+        "mono:V" => "𝚅",
+        "mono:W" => "𝚆",
+        "mono:X" => "𝚇",
+        "mono:Y" => "𝚈",
+        "mono:Z" => "𝚉",
+        "mono:a" => "𝚊",
+        "mono:b" => "𝚋",
+        "mono:c" => "𝚌",
+        "mono:d" => "𝚍",
+        "mono:e" => "𝚎",
+        "mono:f" => "𝚏",
+        "mono:g" => "𝚐",
+        "mono:h" => "𝚑",
+        "mono:i" => "𝚒",
+        "mono:j" => "𝚓",
+        "mono:k" => "𝚔",
+        "mono:l" => "𝚕",
+        "mono:m" => "𝚖",
+        "mono:n" => "𝚗",
+        "mono:o" => "𝚘",
+        "mono:p" => "𝚙",
+        "mono:q" => "𝚚",
+        "mono:r" => "𝚛",
+        "mono:s" => "𝚜",
+        "mono:t" => "𝚝",
+        "mono:u" => "𝚞",
+        "mono:v" => "𝚟",
+        "mono:w" => "𝚠",
+        "mono:x" => "𝚡",
+        "mono:y" => "𝚢",
+        "mono:z" => "𝚣",
+        "bb:A" => "𝔸",
+        "bb:B" => "𝔹",
+        "bb:C" => "ℂ",
+        "bb:D" => "𝔻",
+        "bb:E" => "𝔼",
+        "bb:F" => "𝔽",
+        "bb:G" => "𝔾",
+        "bb:H" => "ℍ",
+        "bb:I" => "𝕀",
+        "bb:J" => "𝕁",
+        "bb:K" => "𝕂",
+        "bb:L" => "𝕃",
+        "bb:M" => "𝕄",
+        "bb:N" => "ℕ",
+        "bb:O" => "𝕆",
+        "bb:P" => "ℙ",
+        "bb:Q" => "ℚ",
+        "bb:R" => "ℝ",
+        "bb:S" => "𝕊",
+        "bb:T" => "𝕋",
+        "bb:U" => "𝕌",
+        "bb:V" => "𝕍",
+        "bb:W" => "𝕎",
+        "bb:X" => "𝕏",
+        "bb:Y" => "𝕐",
+        "bb:Z" => "ℤ",
+        "script:A" => "𝒜",
+        "script:B" => "ℬ",
+        "script:C" => "𝒞",
+        "script:D" => "𝒟",
+        "script:E" => "ℰ",
+        "script:F" => "ℱ",
+        "script:G" => "𝒢",
+        "script:H" => "ℋ",
+        "script:I" => "ℐ",
+        "script:J" => "𝒥",
+        "script:K" => "𝒦",
+        "script:L" => "ℒ",
+        "script:M" => "ℳ",
+        "script:N" => "𝒩",
+        "script:O" => "𝒪",
+        "script:P" => "𝒫",
+        "script:Q" => "𝒬",
+        "script:R" => "ℛ",
+        "script:S" => "𝒮",
+        "script:T" => "𝒯",
+        "script:U" => "𝒰",
+        "script:V" => "𝒱",
+        "script:W" => "𝒲",
+        "script:X" => "𝒳",
+        "script:Y" => "𝒴",
+        "script:Z" => "𝒵",
+        "upright:A" => "A",
+        "upright:B" => "B",
+        "upright:C" => "C",
+        "upright:D" => "D",
+        "upright:E" => "E",
+        "upright:F" => "F",
+        "upright:G" => "G",
+        "upright:H" => "H",
+        "upright:I" => "I",
+        "upright:J" => "J",
+        "upright:K" => "K",
+        "upright:L" => "L",
+        "upright:M" => "M",
+        "upright:N" => "N",
+        "upright:O" => "O",
+        "upright:P" => "P",
+        "upright:Q" => "Q",
+        "upright:R" => "R",
+        "upright:S" => "S",
+        "upright:T" => "T",
+        "upright:U" => "U",
+        "upright:V" => "V",
+        "upright:W" => "W",
+        "upright:X" => "X",
+        "upright:Y" => "Y",
+        "upright:Z" => "Z",
+        "upright:a" => "a",
+        "upright:b" => "b",
+        "upright:c" => "c",
+        "upright:d" => "d",
+        "upright:e" => "e",
+        "upright:f" => "f",
+        "upright:g" => "g",
+        "upright:h" => "h",
+        "upright:i" => "i",
+        "upright:j" => "j",
+        "upright:k" => "k",
+        "upright:l" => "l",
+        "upright:m" => "m",
+        "upright:n" => "n",
+        "upright:o" => "o",
+        "upright:p" => "p",
+        "upright:q" => "q",
+        "upright:r" => "r",
+        "upright:s" => "s",
+        "upright:t" => "t",
+        "upright:u" => "u",
+        "upright:v" => "v",
+        "upright:w" => "w",
+        "upright:x" => "x",
+        "upright:y" => "y",
+        "upright:z" => "z",
+        "frak:A" => "𝔄",
+        "frak:B" => "𝔅",
+        "frak:C" => "ℭ",
+        "frak:D" => "𝔇",
+        "frak:E" => "𝔈",
+        "frak:F" => "𝔉",
+        "frak:G" => "𝔊",
+        "frak:H" => "ℌ",
+        "frak:I" => "ℑ",
+        "frak:J" => "𝔍",
+        "frak:K" => "𝔎",
+        "frak:L" => "𝔏",
+        "frak:M" => "𝔐",
+        "frak:N" => "𝔑",
+        "frak:O" => "𝔒",
+        "frak:P" => "𝔓",
+        "frak:Q" => "𝔔",
+        "frak:R" => "ℜ",
+        "frak:S" => "𝔖",
+        "frak:T" => "𝔗",
+        "frak:U" => "𝔘",
+        "frak:V" => "𝔙",
+        "frak:W" => "𝔚",
+        "frak:X" => "𝔛",
+        "frak:Y" => "𝔜",
+        "frak:Z" => "ℨ",
+        "frak:a" => "𝔞",
+        "frak:b" => "𝔟",
+        "frak:c" => "𝔠",
+        "frak:d" => "𝔡",
+        "frak:e" => "𝔢",
+        "frak:f" => "𝔣",
+        "frak:g" => "𝔤",
+        "frak:h" => "𝔥",
+        "frak:i" => "𝔦",
+        "frak:j" => "𝔧",
+        "frak:k" => "𝔨",
+        "frak:l" => "𝔩",
+        "frak:m" => "𝔪",
+        "frak:n" => "𝔫",
+        "frak:o" => "𝔬",
+        "frak:p" => "𝔭",
+        "frak:q" => "𝔮",
+        "frak:r" => "𝔯",
+        "frak:s" => "𝔰",
+        "frak:t" => "𝔱",
+        "frak:u" => "𝔲",
+        "frak:v" => "𝔳",
+        "frak:w" => "𝔴",
+        "frak:x" => "𝔵",
+        "frak:y" => "𝔶",
+        "frak:z" => "𝔷",
+        "double:0" => "𝟘",
+        "double:1" => "𝟙",
+        "double:2" => "𝟚",
+        "double:3" => "𝟛",
+        "double:4" => "𝟜",
+        "double:5" => "𝟝",
+        "double:6" => "𝟞",
+        "double:7" => "𝟟",
+        "double:8" => "𝟠",
+        "double:9" => "𝟡",
     };
 }
 
@@ -1121,13 +1097,10 @@ pub fn lookup_math_symbol(s: &str) -> &str {
 // Return the font-styled character based on font type
 pub fn lookup_font_symbol<'a>(text: &'a str, font_type: &'a str) -> &'a str {
     let key = format!("{font_type}:{text}");
-    UNIFIED_FONT_SYMBOLS
-        .get(key.as_str())
-        .copied()
-        .unwrap_or(text)
+    MATH_SYMBOLS.get(key.as_str()).copied().unwrap_or(text)
 }
 
 // Return the actual Unicode character for the given field
-pub fn lookup_field_symbol(s: &str) -> &str {
-    UNIFIED_FONT_SYMBOLS.get(s).copied().unwrap_or(s)
-}
+// pub fn lookup_field_symbol(s: &str) -> &str {
+//     UNIFIED_FONT_SYMBOLS.get(s).copied().unwrap_or(s)
+// }
