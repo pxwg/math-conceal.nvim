@@ -1,34 +1,34 @@
 local M = {}
 local function set_highlights()
   local highlights = {
-    ["@_cmd"] = { fg = "#b4befe", bold = true }, -- Lavender
-    ["@cmd"] = { fg = "#f5c2e7", bold = true }, -- Pink
-    ["@func"] = { fg = "#89b4fa", italic = true }, -- Blue
-    ["@font_letter"] = { fg = "#89b4fa", bold = true }, -- Text
-    ["@sub"] = { fg = "#94e2d5" }, -- Teal
-    ["@sub_ident"] = { fg = "#a6e3a1" }, -- Green
-    ["@sub_letter"] = { fg = "#bac2de" }, -- Subtext 1
-    ["@sub_number"] = { fg = "#f9e2af" }, -- Yellow
-    ["@sup"] = { fg = "#fab387" }, -- Peach
-    ["@sup_ident"] = { fg = "#eba0ac" }, -- Maroon
-    ["@sup_letter"] = { fg = "#f38ba8" }, -- Red
-    ["@sup_number"] = { fg = "#f2cdcd" }, -- Flamingo
-    ["@symbol"] = { fg = "#74c7ec" }, -- Sapphire
-    ["@typ_font_name"] = { fg = "#cba6f7", italic = true }, -- Mauve
-    ["@typ_greek_symbol"] = { fg = "#cba6f7", bold = true }, -- Red (鲜艳)
-    ["@typ_inline_dollar"] = { fg = "#7f849c", bold = true }, -- Peach (鲜艳)
-    ["@typ_math_delim"] = { fg = "#9399b2" }, -- Overlay 2
-    ["@typ_math_font"] = { fg = "#f9e2af" }, -- Yellow
-    ["@typ_math_symbol"] = { fg = "#a6adc8" }, -- Subtext 0
-    ["@typ_phy_symbol"] = { fg = "#a6e3a1" }, -- Green
-    ["@conceal"] = { fg = "#74c7ec" }, -- Rosewater
-    ["@open1"] = { fg = "#6c7086" }, -- Overlay 0
-    ["@open2"] = { fg = "#45475a" }, -- Surface 1
-    ["@close1"] = { fg = "#313244" }, -- Surface 0
-    ["@close2"] = { fg = "#585b70" }, -- Surface 2
-    ["@punctuation"] = { fg = "#9399b2" }, -- Overlay 2
-    ["@left_paren"] = { fg = "#7f849c" }, -- Overlay 1
-    ["@right_paren"] = { fg = "#7f849c" }, -- Overlay 1
+    ["@_cmd"] = { link = "@conceal" },
+    ["@cmd"] = { link = "@conceal" },
+    ["@func"] = { link = "@conceal" },
+    ["@font_letter"] = { link = "@conceal" },
+    ["@sub"] = { link = "@conceal" },
+    ["@sub_ident"] = { link = "@conceal" },
+    ["@sub_letter"] = { link = "@conceal" },
+    ["@sub_number"] = { link = "@conceal" },
+    ["@sup"] = { link = "@conceal" },
+    ["@sup_ident"] = { link = "@conceal" },
+    ["@sup_letter"] = { link = "@conceal" },
+    ["@sup_number"] = { link = "@conceal" },
+    ["@symbol"] = { link = "@conceal" },
+    ["@typ_font_name"] = { link = "@conceal" },
+    ["@typ_greek_symbol"] = { link = "@conceal" },
+    ["@typ_inline_dollar"] = { link = "@conceal" },
+    ["@typ_math_delim"] = { link = "@conceal" },
+    ["@typ_math_font"] = { link = "@conceal" },
+    ["@typ_math_symbol"] = { link = "@conceal" },
+    ["@typ_phy_symbol"] = { link = "@conceal" },
+    ["@conceal"] = { link = "@conceal" },
+    ["@open1"] = { link = "@conceal" },
+    ["@open2"] = { link = "@conceal" },
+    ["@close1"] = { link = "@conceal" },
+    ["@close2"] = { link = "@conceal" },
+    ["@punctuation"] = { link = "@conceal" },
+    ["@left_paren"] = { link = "@conceal" },
+    ["@right_paren"] = { link = "@conceal" },
   }
   for group, opts in pairs(highlights) do
     vim.api.nvim_set_hl(0, group, opts)
