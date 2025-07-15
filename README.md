@@ -41,3 +41,4 @@ return {
 
 ## To-do
 - [ ] Better support for typst files, and customizable conceal patterns.
+- [ ] Commutative diagram conceal for Typst files.
