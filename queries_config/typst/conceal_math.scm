@@ -45,7 +45,8 @@
 
 ; Replace comma with division slash
 ((call
-  item: (ident)
+  item: (ident) @_frac_name
+  (#eq? @_frac_name "frac")
   (_) .  "," @_comma
   (_))
  (#set! conceal "/" @_comma))
