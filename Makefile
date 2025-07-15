@@ -28,7 +28,7 @@ $(1):
 	@if [ "$(UNAME)" = "Darwin" ]; then \
 		RUSTFLAGS="-C link-args=-undefined -C link-args=dynamic_lookup" cargo build --release --features=$(1) -p lookup_conceal; \
 	else \
-		cargo build --release --features=$(1) -p tree_; \
+		RUSTFLAGS="-C link-args=-Wl,-soname,liblookup_conceal.$(EXT)" cargo build --release --features=$(1) -p lookup_conceal; \
 	fi
 	@mkdir -p build
 	@cp $(BUILD_DIR)/liblookup_conceal.$(EXT) build/lookup_conceal$(1).$(EXT)
