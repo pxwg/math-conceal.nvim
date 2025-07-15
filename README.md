@@ -2,16 +2,22 @@
 
 Faster and More Precise [LaTeX](https://www.latex-project.org/) and [typst](https://github.com/typst/typst) conceal for [Neovim](https://github.com/neovim/neovim) with the power of [rust](https://www.rust-lang.org/).
 
-<div style="display: flex; justify-content: center; align-items: center; width: 80%; margin: auto;">
-  <figure style="width: 47%; text-align: center; margin: 0;">
-    <img src="./fig/showcase_1.png" alt="Latex Showcase" style="width: 95%;">
-    <figcaption>Latex</figcaption>
-  </figure>
-  <figure style="width: 48%; text-align: center; margin: 0;">
-    <img src="./fig/showcase_2.png" alt="Typst Showcase" style="width: 99%;">
-    <figcaption>Typst</figcaption>
-  </figure>
-</div>
+<table style="width: 80%; margin: auto; text-align: center;">
+  <tr>
+    <td style="width: 50%;">
+      <figure>
+        <img src="./fig/tbf.png" alt="Latex Showcase" style="width: 95%;">
+        <figcaption>Typst-Before</figcaption>
+      </figure>
+    </td>
+    <td style="width: 50%;">
+      <figure>
+        <img src="./fig/taf.png" alt="Typst Showcase" style="width: 99%;">
+        <figcaption>Typst-After</figcaption>
+      </figure>
+    </td>
+  </tr>
+</table>
 
 ## Introduction
 
