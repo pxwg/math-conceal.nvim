@@ -1,5 +1,5 @@
 local M = {}
-local highlights = require("latex-conceal.highlights")
+local highlights = require("math-conceal.highlights")
 
 --- TODO: add custum_function setup
 
@@ -25,7 +25,7 @@ local default_opts = {
   },
   ft = { "*.tex", "*.md", "*.typ" },
 }
-local autocmd = require("latex-conceal.autocmd")
+local autocmd = require("math-conceal.autocmd")
 
 function M.setup(opts)
   highlights.set_highlights()
