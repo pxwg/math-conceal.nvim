@@ -1,1 +1,1 @@
-require("latex-conceal").setup({})
+-- require("latex-conceal").setup({})
