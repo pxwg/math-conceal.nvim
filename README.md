@@ -23,6 +23,7 @@ return {
   "pxwg/math-conceal.nvim",
   event = "VeryLazy",
   build = "make lua51",
+  main = "math-conceal",
   --- @type LaTeXConcealOptions
   opts = {
     enabled = true,
@@ -34,7 +35,7 @@ return {
       "delim",
       "phy",
     },
-    ft = { "tex", "latex", "markdown", "typst" },
+    ft = { "*.tex", "*.md", "*.typ" },
   },
 }
 ```
