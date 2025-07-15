@@ -6,7 +6,25 @@ Faster and More Precise [LaTeX](https://www.latex-project.org/) and [typst](http
   <tr>
     <td style="width: 50%;">
       <figure>
-        <img src="./fig/tbf.png" alt="Latex Showcase" style="width: 95%;">
+        <img src="./fig/ebf.png" alt="Latex Showcase" style="width: 95%;">
+        <figcaption>LaTeX-Before</figcaption>
+      </figure>
+    </td>
+    <td style="width: 50%;">
+      <figure>
+        <img src="./fig/eaf.png" alt="LaTeX Showcase" style="width: 99%;">
+        <figcaption>LaTeX-After</figcaption>
+      </figure>
+    </td>
+  </tr>
+</table>
+
+
+<table style="width: 80%; margin: auto; text-align: center;">
+  <tr>
+    <td style="width: 50%;">
+      <figure>
+        <img src="./fig/tbf.png" alt="Typst Showcase" style="width: 95%;">
         <figcaption>Typst-Before</figcaption>
       </figure>
     </td>
