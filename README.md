@@ -78,6 +78,8 @@ return {
 - [ ] Better support for typst files, and customizable conceal patterns.
 - [ ] Commutative diagram conceal for Typst files.
 - [ ] Table conceal for LaTeX and Typst files (inspired from [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim)).
+- [ ] Automatically maintain the conceal query file and `math_symbols.json` file.
+- [ ] Decoupling the `latex` part and `typst` part.
 
 ## References
 
