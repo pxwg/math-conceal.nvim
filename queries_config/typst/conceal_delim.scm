@@ -1,5 +1,4 @@
 ; Typst delimiter conceals
-
 ; Math delimiters - parentheses, brackets, braces
 (call
   item: (ident) @typ_math_delim
@@ -30,9 +29,9 @@
 
 ; Vertical bars and double bars
 ((symbol) @typ_math_delim
-(#any-of? @typ_math_delim "|" "||")
-(#has-ancestor? @typ_math_delim math formula)
-(#lua_func! @typ_math_delim "conceal"))
+  (#any-of? @typ_math_delim "|" "||")
+  (#has-ancestor? @typ_math_delim math formula)
+  (#lua_func! @typ_math_delim "conceal"))
 
 ; Inline math dollars and quotes
 (math
@@ -42,6 +41,7 @@
 (string
   "\"" @typ_inline_quote
   (#set! conceal ""))
+
 (strong
   "*" @typ_inline_asterisk
   (#set! conceal ""))

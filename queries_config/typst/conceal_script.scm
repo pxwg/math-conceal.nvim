@@ -1,5 +1,4 @@
 ; Typst script style conceals
-
 ; Superscript and subscript conceals
 (attach
   sup: (letter) @sup_letter
@@ -44,32 +43,35 @@
   (#has-ancestor? @func math formula)
   (#set! conceal ""))
 
-
 ; Capture and conceal the opening parenthesis of the sub/supscript group
 (math
   (formula
     (attach
       (_)
-      sup: (group "(" @_open_paren)))
-(#set! conceal "" @_open_paren))
+      sup: (group
+        "(" @_open_paren)))
+  (#set! conceal "" @_open_paren))
 
 (math
   (formula
     (attach
       (_)
-      sub: (group "(" @_open_paren)))
-(#set! conceal "" @_open_paren))
+      sub: (group
+        "(" @_open_paren)))
+  (#set! conceal "" @_open_paren))
 
 (math
   (formula
     (attach
       (_)
-      sup: (group ")" @_close_paren)))
-(#set! conceal "" @_close_paren))
+      sup: (group
+        ")" @_close_paren)))
+  (#set! conceal "" @_close_paren))
 
 (math
   (formula
     (attach
       (_)
-      sub: (group ")" @_close_paren)))
-(#set! conceal "" @_close_paren))
+      sub: (group
+        ")" @_close_paren)))
+  (#set! conceal "" @_close_paren))
