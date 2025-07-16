@@ -2,7 +2,6 @@ use lazy_static::lazy_static;
 use phf::phf_map;
 // TODO: Add custumizeable math symbols with treesitter
 
-// 包含编译时生成的代码
 include!(concat!(env!("OUT_DIR"), "/math_symbols_map.rs"));
 
 // Return the actual Unicode character or the original string
