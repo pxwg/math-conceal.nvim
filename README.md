@@ -74,5 +74,10 @@ return {
 ```
 
 ## To-do
+
 - [ ] Better support for typst files, and customizable conceal patterns.
 - [ ] Commutative diagram conceal for Typst files.
+
+## References
+
+- [ts_query_lsp](https://github.com/ribru17/ts_query_ls) I use this LSP as a pre-commit hook to format the query file.
