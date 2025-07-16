@@ -30,7 +30,7 @@ Faster and More Precise [LaTeX](https://www.latex-project.org/) and [typst](http
     </td>
     <td style="width: 50%;">
       <figure>
-        <img src="./fig/taf.png" alt="Typst Showcase" style="width: 99%;">
+        <img src="./fig/taf_1.png" alt="Typst Showcase" style="width: 99%;">
         <figcaption>Typst-After</figcaption>
       </figure>
     </td>
