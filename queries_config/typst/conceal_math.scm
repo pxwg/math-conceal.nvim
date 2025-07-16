@@ -40,7 +40,7 @@
     "Lambda" "Mu" "Nu" "Omega" "Omicron" "Phi" "Pi" "Psi" "Rho" "Sigma" "Tau" "Theta" "Upsilon" "Xi"
     "Zeta" "aleph" "alef" "beth" "bet" "gimmel" "gimel" "shin" "AA" "BB" "CC" "DD" "EE" "FF" "GG"
     "HH" "II" "JJ" "KK" "LL" "MM" "NN" "OO" "PP" "QQ" "RR" "SS" "TT" "UU" "VV" "WW" "XX" "YY" "ZZ"
-    "ell" "planck" "angstrom" "kelvin" "Re" "Im"))
+    "ell" "planck" "angstrom" "kelvin" "Re" "Im" "thin"))
   (#lua_func! @typ_math_symbol "conceal"))
 
 (((field) @typ_math_symbol
