@@ -13,6 +13,19 @@
   ")" @right_paren
   (#set! @right_paren conceal ""))
 
+; overline conceal for ident
+(call
+  item: (ident) @typ_font_name
+  (#any-of? @typ_font_name "overline")
+  (#set! @typ_font_name conceal "")
+  "(" @left_paren
+  (#set! @left_paren conceal "")
+  (formula
+    (ident) @font_letter
+    (#lua_func! @font_letter @typ_font_name "font"))
+  ")" @right_paren
+  (#set! @right_paren conceal ""))
+
 ; Math function calls with special symbols
 (call
   item: (ident) @typ_math_font
