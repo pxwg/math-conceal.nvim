@@ -3,12 +3,12 @@
 (call
   item: (ident) @typ_font_name
   (#any-of? @typ_font_name
-    "bold" "italic" "cal" "script" "bb" "sans" "mono" "frak" "double" "upright")
+    "bold" "italic" "cal" "script" "bb" "sans" "mono" "frak" "double" "upright" "overline")
   (#set! @typ_font_name conceal "")
   "(" @left_paren
   (#set! @left_paren conceal "")
   (formula
-    (letter) @font_letter
+    (_) @font_letter
     (#lua_func! @font_letter @typ_font_name "font"))
   ")" @right_paren
   (#set! @right_paren conceal ""))

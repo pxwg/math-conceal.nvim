@@ -1,5 +1,5 @@
 {
-  "total_count": 32,
+  "total_count": 34,
   "languages": {
     "latex": [
       "@_cmd",
@@ -16,9 +16,11 @@
       "@_comma",
       "@_frac_name",
       "@_open_paren",
+      "@abs_name",
       "@conceal",
       "@font_letter",
       "@func",
+      "@func_name",
       "@left_paren",
       "@right_paren",
       "@sub_ident",
@@ -45,12 +47,14 @@
     "@_comma",
     "@_frac_name",
     "@_open_paren",
+    "@abs_name",
     "@close1",
     "@close2",
     "@cmd",
     "@conceal",
     "@font_letter",
     "@func",
+    "@func_name",
     "@left_paren",
     "@open1",
     "@open2",
