@@ -8,7 +8,7 @@
   "(" @left_paren
   (#set! @left_paren conceal "")
   (formula
-    (_) @font_letter
+    (letter) @font_letter
     (#lua_func! @font_letter @typ_font_name "font"))
   ")" @right_paren
   (#set! @right_paren conceal ""))
@@ -25,3 +25,10 @@
   ; (#has-ancestor? @conceal math formula)
   ; (#set! @conceal "m"))
   (#lua_func! @typ_math_font "conceal"))
+
+; Script functions like upright, script, etc.
+(call
+  item: (ident) @func
+  (#any-of? @func "upright" "italic" "script" "mono" "sans")
+  (#has-ancestor? @func math formula)
+  (#set! conceal ""))
