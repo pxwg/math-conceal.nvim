@@ -80,13 +80,6 @@
   (#set! priority 98)
   (#set! conceal "" @sub_symbol)))
 
-; Script functions like upright, script, etc.
-(call
-  item: (ident) @func
-  (#any-of? @func "upright" "italic" "script" "cal" "frak" "mono" "sans" "bold")
-  (#has-ancestor? @func math formula)
-  (#set! conceal ""))
-
 ; Capture and conceal the opening parenthesis of the sub/supscript group
 ; For superscript with parentheses - hide both ^ and parentheses when content matches criteria
 (math
