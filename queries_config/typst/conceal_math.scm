@@ -41,6 +41,7 @@
     "Zeta" "aleph" "alef" "beth" "bet" "gimmel" "gimel" "shin" "AA" "BB" "CC" "DD" "EE" "FF" "GG"
     "HH" "II" "JJ" "KK" "LL" "MM" "NN" "OO" "PP" "QQ" "RR" "SS" "TT" "UU" "VV" "WW" "XX" "YY" "ZZ"
     "ell" "planck" "angstrom" "kelvin" "Re" "Im" "thin"))
+  (#has-ancestor? @typ_math_symbol math formula)
   (#lua_func! @typ_math_symbol "conceal"))
 
 (((field) @typ_math_symbol
@@ -153,6 +154,7 @@
     "tack.t.short" "tack.b" "tack.b.big" "tack.b.double" "tack.b.short" "tack.l.r" "beta.alt"
     "epsilon.alt" "kappa.alt" "ohm.inv" "phi.alt" "pi.alt" "rho.alt" "sigma.alt" "theta.alt"
     "planck.reduce" "dotless.i" "dotless.j"))
+  (#has-ancestor? @typ_math_symbol math formula)
   (#lua_func! @typ_math_symbol "conceal")
   (#set! priority 1000))
 
