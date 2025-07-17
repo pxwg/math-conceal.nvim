@@ -1,87 +1,29 @@
 ; Typst script style conceals
 ; Superscript and subscript conceals
-(attach
-  (_)
-  sup: (letter) @sup_object
-  (#has-ancestor? @sup_object math formula)
-  (#set! priority 99)
-  (#lua_func! @sup_object "sup"))
-
-(attach
-  (_)
-  sup: (number) @sup_object
-  (#has-ancestor? @sup_object math formula)
-  (#any-of? @sup_object "1" "2" "3" "4" "5" "6" "7" "8" "9")
-  (#set! priority 99)
-  (#lua_func! @sup_object "sup"))
-
-(attach
-  (_)
-  sup: (ident) @sup_object
-  (#has-ancestor? @sup_object math formula)
-  (#set! priority 99)
-  (#lua_func! @sup_object "sup"))
-
+; A_a -> A(concealed sub:a)
 (attach
   (_)
   "^" @sup_symbol
-  sup: (number) @sup_object
+  sup: (_) @sup_object
   (#has-ancestor? @sup_object math formula)
-  (#any-of? @sup_object "1" "2" "3" "4" "5" "6" "7" "8" "9")
-  (#set! priority 98)
-  (#set! conceal "" @sup_symbol))
-
-(attach
-  (_)
-  "^" @sup_symbol
-  sup: (letter) @sup_object
-  ((#match? @sup_object "[a-z]")
-  (#has-ancestor? @sup_object math formula)
-  (#set! priority 98)
-  (#set! conceal "" @sup_object)))
+  (#match? @sup_object "^[1-9a-z]$")
+  (#set! @sup_symbol conceal "")
+  (#lua_func! @sup_object "sup"))
 
 ; Subscript conceals
 (attach
   (_)
-  sub: (letter) @sub_object
-  (#set! priority 99)
-  (#lua_func! @sub_object "sub"))
-
-(attach
-  (_)
-  sub: (number) @sub_object
-  (#has-ancestor? @sub_object math formula)
-  (#any-of? @sub_object "1" "2" "3" "4" "5" "6" "7" "8" "9")
-  (#set! priority 99)
-  (#lua_func! @sub_object "sub"))
-
-(attach
-  (_)
-  sub: (ident) @sub_object
-  (#has-ancestor? @sub_object math formula)
-  (#set! priority 99)
-  (#lua_func! @sub_object "sub"))
-
-(attach
-  (_)
   "_" @sub_symbol
-  sub: (number) @sub_object
-  (#any-of? @sub_object "1" "2" "3" "4" "5" "6" "7" "8" "9")
+  sub: (_) @sub_object
   (#has-ancestor? @sub_object math formula)
-  (#set! priority 98)
-  (#set! conceal "" @sub_symbol))
-
-(attach
-  (_)
-  "_" @sub_symbol
-  sub: (letter) @sub_object
-  ((#match? @sub_object "[aehijklmnoprstuvx]")
-  (#has-ancestor? @sub_object math formula)
-  (#set! priority 98)
-  (#set! conceal "" @sub_symbol)))
+  (#match? @sub_object "^[1-9aehijklmnoprstuvx]$")
+  (#set! @sub_symbol conceal "")
+  (#lua_func! @sub_object "sub"))
 
 ; Capture and conceal the opening parenthesis of the sub/supscript group
 ; For superscript with parentheses - hide both ^ and parentheses when content matches criteria
+; Concealed symbol with lua_func: concealing the subscript and superscript symbols
+; A_(a) -> A(concealed sub:a)
 (math
   (formula
     (attach
@@ -89,141 +31,49 @@
       "^" @sup_symbol
       sup: (group
         "(" @open_paren
-        (formula
-          (letter) @sup_letter)
+        (formula) @sup_letter
         ")" @close_paren)
-      (#match? @sup_letter "[a-z]")
-      (#set! priority 97)
+      (#match? @sup_letter "^[a-z1-9]$")
+      (#set! @sup_symbol conceal "")
       (#lua_func! @sup_letter "sup"))))
 
 (math
   (formula
     (attach
       (_)
-      "^" @sup_symbol
-      sup: (group
-        "(" @open_paren
-        (formula
-          (letter) @sup_letter)
-        ")" @close_paren)
-      (#match? @sup_letter "[a-z]")
-      (#set! priority 96)
-      (#set! conceal "" @sup_symbol))))
-
-; For superscript with parentheses - hide both ^ and parentheses when content is a number
-(math
-  (formula
-    (attach
-      (_)
-      "^" @sup_symbol
-      sup: (group
-        "(" @open_paren
-        (formula
-          (number) @sup_number)
-        ")" @close_paren)
-      (#any-of? @sup_number "1" "2" "3" "4" "5" "6" "7" "8" "9")
-      (#set! priority 97)
-      (#lua_func! @sup_number "sup"))))
-
-(math
-  (formula
-    (attach
-      (_)
-      "^" @sup_symbol
-      sup: (group
-        "(" @open_paren
-        (formula
-          (number) @sup_number)
-        ")" @close_paren)
-      (#any-of? @sup_number "1" "2" "3" "4" "5" "6" "7" "8" "9")
-      (#set! priority 96)
-      (#set! conceal "" @sup_symbol))))
-
-(math
-  (formula
-    (attach
-      (_)
       "_" @sub_symbol
       sub: (group
         "(" @open_paren
-        (formula
-          (letter) @sub_object)
+        (formula) @sub_object
         ")" @close_paren)
-      (#match? @sub_object "[aehijklmnoprstuvx]")
-      (#set! priority 97)
+      (#match? @sub_object "^[aehijklmnoprstuvx1234567890]$")
+      (#set! @sub_symbol conceal "")
       (#lua_func! @sub_object "sub"))))
 
+; Conceal the opening parenthesis of the subscript group while the formula has no space
+; A_(xxx) -> A_xxx
 (math
   (formula
     (attach
       (_)
-      "_" @sub_symbol
-      sub: (group
-        "(" @open_paren
-        (formula
-          (letter) @sub_object)
-        ")" @close_paren)
-      (#match? @sub_object "[aehijklmnoprstuvx]")
-      (#set! priority 96)
-      (#set! conceal "" @sub_symbol))))
-
-; For subscript with parentheses - hide both _ and parentheses when content is a number
-(math
-  (formula
-    (attach
-      (_)
-      "_" @sub_symbol
-      sub: (group
-        "(" @open_paren
-        (formula
-          (number) @sub_number)
-        ")" @close_paren)
-      (#any-of? @sub_number "1" "2" "3" "4" "5" "6" "7" "8" "9")
-      (#set! priority 97)
-      (#lua_func! @sub_number "sub"))))
-
-(math
-  (formula
-    (attach
-      (_)
-      "_" @sub_symbol
-      sub: (group
-        "(" @open_paren
-        (formula
-          (number) @sub_number)
-        ")" @close_paren)
-      (#any-of? @sub_number "1" "2" "3" "4" "5" "6" "7" "8" "9")
-      (#set! priority 96)
-      (#set! conceal "" @sub_symbol))))
-
-(math
-  (formula
-    (attach
-      (_)
+      "^" @sup_symbol
       sup: (group
-        "(" @_open_paren))
-    (#set! conceal "" @_open_paren)))
+        "(" @open_paren
+        (formula) @sup_number
+        ")" @close_paren)
+      (#not-match? @sup_number ".* .*")
+      (#set! @open_paren conceal "")
+      (#set! @close_paren conceal ""))))
 
 (math
   (formula
     (attach
       (_)
-      sup: (group
-        ")" @_close_paren)))
-  (#set! conceal "" @_close_paren))
-
-(math
-  (formula
-    (attach
-      (_)
+      "_" @sub_symbol
       sub: (group
-        "(" @_open_paren)))
-  (#set! conceal "" @_open_paren))
-
-(math
-  (formula
-    (attach
-      (_)
-      sub: (group
-        ")" @_close_paren)))
-  (#set! conceal "" @_close_paren))
+        "(" @open_paren
+        (formula) @sub_number
+        ")" @close_paren)
+      (#not-match? @sub_number ".* .*")
+      (#set! @close_paren conceal "")
+      (#set! @open_paren conceal ""))))
