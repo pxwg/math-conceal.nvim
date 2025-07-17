@@ -3,13 +3,13 @@
 (call
   item: (ident) @typ_font_name
   (#any-of? @typ_font_name
-    "bold" "italic" "cal" "script" "bb" "sans" "mono" "frak" "double" "upright" "overline")
+    "bold" "italic" "cal" "script" "bb" "sans" "mono" "frak" "double" "upright")
   (#set! @typ_font_name conceal "")
   "(" @left_paren
   (#set! @left_paren conceal "")
-  (formula
-    (letter) @font_letter
-    (#lua_func! @font_letter @typ_font_name "font"))
+  (formula) @font_letter
+  (#match? @font_letter "^[a-zA-Z]$")
+  (#lua_func! @font_letter @typ_font_name "font")
   ")" @right_paren
   (#set! @right_paren conceal ""))
 
@@ -20,9 +20,9 @@
   (#set! @typ_font_name conceal "")
   "(" @left_paren
   (#set! @left_paren conceal "")
-  (formula
-    (ident) @font_letter
-    (#lua_func! @font_letter @typ_font_name "font"))
+  (formula) @font_letter
+  (#match? @font_letter "^[a-zA-Z]+$")
+  (#lua_func! @font_letter @typ_font_name "font")
   ")" @right_paren
   (#set! @right_paren conceal ""))
 
