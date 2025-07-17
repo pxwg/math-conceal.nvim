@@ -150,6 +150,63 @@
   (formula
     (attach
       (_)
+      "_" @sub_symbol
+      sub: (group
+        "(" @open_paren
+        (formula
+          (letter) @sub_object)
+        ")" @close_paren)
+      (#match? @sub_object "[aehijklmnoprstuvx]")
+      (#set! priority 97)
+      (#lua_func! @sub_object "sub"))))
+
+(math
+  (formula
+    (attach
+      (_)
+      "_" @sub_symbol
+      sub: (group
+        "(" @open_paren
+        (formula
+          (letter) @sub_object)
+        ")" @close_paren)
+      (#match? @sub_object "[aehijklmnoprstuvx]")
+      (#set! priority 96)
+      (#set! conceal "" @sub_symbol))))
+
+; For subscript with parentheses - hide both _ and parentheses when content is a number
+(math
+  (formula
+    (attach
+      (_)
+      "_" @sub_symbol
+      sub: (group
+        "(" @open_paren
+        (formula
+          (number) @sub_number)
+        ")" @close_paren)
+      (#any-of? @sub_number "1" "2" "3" "4" "5" "6" "7" "8" "9")
+      (#set! priority 97)
+      (#lua_func! @sub_number "sub"))))
+
+(math
+  (formula
+    (attach
+      (_)
+      "_" @sub_symbol
+      sub: (group
+        "(" @open_paren
+        (formula
+          (number) @sub_number)
+        ")" @close_paren)
+      (#any-of? @sub_number "1" "2" "3" "4" "5" "6" "7" "8" "9")
+      (#set! priority 96)
+      (#set! conceal "" @sub_symbol))))
+
+(math
+  (formula
+    (attach
+      (_)
       sup: (group
         "(" @_open_paren))
     (#set! conceal "" @_open_paren)))
