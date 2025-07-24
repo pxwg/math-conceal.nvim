@@ -88,8 +88,7 @@ function M.lookup_math_symbol(text, pattern, type)
   end
 
   return state.lookup_conceal.lookup_math_symbol({ text = text, pattern = pattern or "conceal", mode = type or "" })
+    or text
 end
-
--- _G.GetMathSymbol = M.lookup_math_symbol
 
 return M
