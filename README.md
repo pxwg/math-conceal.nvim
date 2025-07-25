@@ -1,5 +1,7 @@
 # math-conceal.nvim ☀️
 
+中文版文档：[zh-cn](./doc/zh_cn.md)
+
 Faster and More Precise [LaTeX](https://www.latex-project.org/) and [typst](https://github.com/typst/typst) conceal for [Neovim](https://github.com/neovim/neovim) with the power of [rust](https://www.rust-lang.org/).
 
 <table style="width: 80%; margin: auto; text-align: center;">

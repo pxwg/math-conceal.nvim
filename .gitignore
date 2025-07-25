@@ -5,3 +5,4 @@ tree_builder.log
 release/
 target/
 scripts/
+test/

@@ -1,5 +1,7 @@
 local M = {}
 
+local conceal = require("utils.latex_conceal")
+
 ---add predicate
 ---@param filenames string[] List of filenames to read
 ---@return string contents Concatenated contents of the files
@@ -102,16 +104,16 @@ local function lua_func(match, _, source, predicate, metadata)
       local function_name_node = match[function_name_id]
       local function_name_text = function_name_node and vim.treesitter.get_node_text(function_name_node, source)
         or "cal"
-      metadata[capture_id]["conceal"] = M.get_mathfont_conceal(node_text, "font", function_name_text)
+      metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(node_text, "font", function_name_text)
     end,
     conceal = function()
-      metadata[capture_id][key] = M.get_mathfont_conceal(node_text, "conceal", value)
+      metadata[capture_id][key] = conceal.lookup_math_symbol(node_text, "conceal", value)
     end,
     sub = function()
-      metadata[capture_id]["conceal"] = M.get_mathfont_conceal(node_text, "sub", value)
+      metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(node_text, "sub", value)
     end,
     sup = function()
-      metadata[capture_id]["conceal"] = M.get_mathfont_conceal(node_text, "sup", value)
+      metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(node_text, "sup", value)
     end,
   }
   if actions[key] then
@@ -152,13 +154,13 @@ local function load_queries(args)
   vim.treesitter.query.set("typst", "highlights", typst_strings)
 end
 
---- @param text string
---- @param pattern string?
---- @param type string?
-function M.get_mathfont_conceal(text, pattern, type)
-  local out = require("utils.latex_conceal").lookup_math_symbol(text, pattern, type)
-  return out or text
-end
+-- --- @param text string
+-- --- @param pattern string?
+-- --- @param type string?
+-- function M.get_mathfont_conceal(text, pattern, type)
+--   local out = lookup_math_symbol.lookup_math_symbol(text, pattern, type)
+--   return out
+-- end
 
 --- initializes the conceal queries
 M.load_queries = load_queries
