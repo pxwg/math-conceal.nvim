@@ -21,7 +21,7 @@
   (#set! conceal ""))
 
 (inline_formula
-  "$" @conceal
+  "$" @conceal_dollar
   (#set! conceal ""))
 
 (inline_formula
@@ -41,7 +41,7 @@
   (#set! conceal ""))
 
 (displayed_equation
-  "$$" @conceal
+  "$$" @conceal_dollar
   (#set! conceal "")
   (#set! conceal_lines ""))
 
