@@ -7,3 +7,4 @@ target/
 scripts/
 test/
 **_zhihu.md
+Cargo.lock
