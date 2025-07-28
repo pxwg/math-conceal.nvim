@@ -1,7 +1,8 @@
 {
-  "total_count": 40,
+  "total_count": 41,
   "languages": {
     "latex": [
+      "@close_paren",
       "@cmd",
       "@conceal",
       "@conceal_dollar",
@@ -11,11 +12,18 @@
       "@left_2",
       "@left_brace",
       "@left_paren",
+      "@open_paren",
       "@punctuation",
       "@right_1",
       "@right_2",
       "@right_brace",
       "@right_paren",
+      "@sub_letter",
+      "@sub_object",
+      "@sub_symbol",
+      "@sup_letter",
+      "@sup_object",
+      "@sup_symbol",
       "@tex_font_name",
       "@tex_greek_symbol"
     ],
@@ -72,6 +80,7 @@
     "@right_2",
     "@right_brace",
     "@right_paren",
+    "@sub_letter",
     "@sub_number",
     "@sub_object",
     "@sub_symbol",

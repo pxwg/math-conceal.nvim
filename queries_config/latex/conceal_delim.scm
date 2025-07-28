@@ -2,14 +2,14 @@
   "{" @conceal
   (#not-has-grandparent? @conceal
     title_declaration author_declaration chapter part section subsection subsubsection paragraph
-    subparagraph command generic_command)
+    subparagraph command generic_command subscript superscript)
   (#set! conceal ""))
 
 (curly_group
   "}" @conceal
   (#not-has-grandparent? @conceal
     title_declaration author_declaration chapter part section subsection subsubsection paragraph
-    subparagraph generic_command command)
+    subparagraph command generic_command subscript superscript)
   (#set! conceal ""))
 
 (math_delimiter
