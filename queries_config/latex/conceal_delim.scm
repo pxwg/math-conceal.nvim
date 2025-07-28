@@ -2,14 +2,14 @@
   "{" @conceal
   (#not-has-grandparent? @conceal
     title_declaration author_declaration chapter part section subsection subsubsection paragraph
-    subparagraph command generic_command)
+    subparagraph command generic_command subscript superscript)
   (#set! conceal ""))
 
 (curly_group
   "}" @conceal
   (#not-has-grandparent? @conceal
     title_declaration author_declaration chapter part section subsection subsubsection paragraph
-    subparagraph generic_command command)
+    subparagraph command generic_command subscript superscript)
   (#set! conceal ""))
 
 (math_delimiter
@@ -25,20 +25,15 @@
   (#set! conceal ""))
 
 (inline_formula
-  "\\(" @conceal
-  (#set! conceal ""))
-
-(inline_formula
-  "\\)" @conceal
-  (#set! conceal ""))
+  "\\(" @conceal_dollar
+  (_)
+  "\\)" @conceal_dollar
+  (#set! @conceal_dollar conceal ""))
 
 (displayed_equation
-  "\\[" @conceal
-  (#set! conceal ""))
-
-(displayed_equation
-  "\\]" @conceal
-  (#set! conceal ""))
+  "\\[" @conceal_dollar
+  "\\]" @conceal_dollar
+  (#set! @conceal_dollar conceal ""))
 
 (displayed_equation
   "$$" @conceal_dollar
