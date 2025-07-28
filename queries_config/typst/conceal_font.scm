@@ -9,7 +9,7 @@
   (#set! @left_paren conceal "")
   (formula) @font_letter
   (#match? @font_letter "^[a-zA-Z]$")
-  (#lua_func! @font_letter @typ_font_name "font")
+  (#set-font! @font_letter @typ_font_name "font")
   ")" @right_paren
   (#set! @right_paren conceal ""))
 

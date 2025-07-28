@@ -11,37 +11,37 @@
   item: (ident) @typ_math_delim
   (#any-of? @typ_math_delim "angle" "langle" "rangle")
   (#has-ancestor? @typ_math_delim math formula)
-  (#lua_func! @typ_math_delim "conceal"))
+  (#set-conceal! @typ_math_delim "conceal"))
 
 ; Floor and ceiling
 (call
   item: (ident) @typ_math_delim
   (#any-of? @typ_math_delim "floor" "ceil" "lfloor" "rfloor" "lceil" "rceil")
   (#has-ancestor? @typ_math_delim math formula)
-  (#lua_func! @typ_math_delim "conceal"))
+  (#set-conceal! @typ_math_delim "conceal"))
 
 ; Norm delimiters
 (call
   item: (ident) @typ_math_delim
   (#any-of? @typ_math_delim "norm")
   (#has-ancestor? @typ_math_delim math formula)
-  (#lua_func! @typ_math_delim "conceal"))
+  (#set-conceal! @typ_math_delim "conceal"))
 
 ; Vertical bars and double bars
 ((symbol) @typ_math_delim
   (#any-of? @typ_math_delim "|" "||")
   (#has-ancestor? @typ_math_delim math formula)
-  (#lua_func! @typ_math_delim "conceal"))
+  (#set-conceal! @typ_math_delim "conceal"))
 
 ; Inline math dollars and quotes
 (math
   "$" @typ_inline_dollar
-  (#set! conceal ""))
+  (#set! @typ_inline_dollar conceal ""))
 
 (string
   "\"" @typ_inline_quote
-  (#set! conceal ""))
+  (#set! @typ_inline_quote conceal ""))
 
 (strong
   "*" @typ_inline_asterisk
-  (#set! conceal ""))
+  (#set! @typ_inline_asterisk conceal ""))
