@@ -1,22 +1,27 @@
 # Highlight Groups by Language
 
-Total: 38 highlight groups across 2 languages
+Total: 40 highlight groups across 2 languages
 
 ## Latex
 
-Count: 11 highlight groups
+Count: 16 highlight groups
 
 - @cmd
 - @conceal
 - @conceal_dollar
+- @font_letter
 - @frac
 - @left_1
 - @left_2
 - @left_brace
+- @left_paren
 - @punctuation
 - @right_1
 - @right_2
 - @right_brace
+- @right_paren
+- @tex_font_name
+- @tex_greek_symbol
 
 ## Typst
 

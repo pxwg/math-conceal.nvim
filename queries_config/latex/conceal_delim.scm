@@ -25,20 +25,15 @@
   (#set! conceal ""))
 
 (inline_formula
-  "\\(" @conceal
-  (#set! conceal ""))
-
-(inline_formula
-  "\\)" @conceal
-  (#set! conceal ""))
+  "\\(" @conceal_dollar
+  (_)
+  "\\)" @conceal_dollar
+  (#set! @conceal_dollar conceal ""))
 
 (displayed_equation
-  "\\[" @conceal
-  (#set! conceal ""))
-
-(displayed_equation
-  "\\]" @conceal
-  (#set! conceal ""))
+  "\\[" @conceal_dollar
+  "\\]" @conceal_dollar
+  (#set! @conceal_dollar conceal ""))
 
 (displayed_equation
   "$$" @conceal_dollar
