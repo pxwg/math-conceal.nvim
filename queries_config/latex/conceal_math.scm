@@ -34,45 +34,20 @@
   (#not-has-ancestor? @conceal label_definition text_mode)
   (#lua_func! @conceal "conceal"))
 
-; Conceal \frac command and brackets to show as numerator/denominator
 (generic_command
-  command: ((command_name) @cmd
-    (#eq? @cmd "\\frac"))
-  (#has-ancestor? @cmd math_environment inline_formula displayed_equation)
-  (#set! priority 101)
-  (#set! conceal "("))
-
-(generic_command
-  command: (command_name) @_cmd
-  (#eq? @_cmd "\\frac")
+  command: (command_name) @frac
+  (#any-of? @frac "\\frac" "\\dfrac" "\\tfrac" "\\cfrac")
   arg: (curly_group
-    "{" @open1)
-  (#has-ancestor? @open1 math_environment inline_formula displayed_equation)
-  (#set! conceal ""))
-
-(generic_command
-  command: (command_name) @_cmd
-  (#eq? @_cmd "\\frac")
+    "{" @left_1
+    (_)
+    "}" @right_1)
   arg: (curly_group
-    "}" @close1)
-  arg: (curly_group)
-  (#has-ancestor? @close1 math_environment inline_formula displayed_equation)
-  (#set! conceal "/"))
-
-(generic_command
-  command: (command_name) @_cmd
-  (#eq? @_cmd "\\frac")
-  arg: (curly_group)
-  arg: (curly_group
-    "{" @open2)
-  (#has-ancestor? @open2 math_environment inline_formula displayed_equation)
-  (#set! conceal ""))
-
-(generic_command
-  command: (command_name) @_cmd
-  (#eq? @_cmd "\\frac")
-  arg: (curly_group)
-  arg: (curly_group
-    "}" @close2)
-  (#has-ancestor? @close2 math_environment inline_formula displayed_equation)
-  (#set! conceal ")"))
+    "{" @left_2
+    (_)
+    "}" @right_2)
+  (#has-ancestor? @frac math_environment inline_formula displayed_equation)
+  (#set! @frac conceal "")
+  (#set! @left_1 conceal "(")
+  (#set! @right_1 conceal "/")
+  (#set! @left_2 conceal "")
+  (#set! @right_2 conceal ")"))

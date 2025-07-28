@@ -45,7 +45,7 @@
 
 (text
   word: (superscript) @conceal
-  (#any-of? @conceal "^+" "^-" "^<" "^>" "^/" "^=" "^\.")
+  (#any-of? @conceal "^+" "^-" "^<" "^>" "^/" "^=" "^.")
   (#has-ancestor? @conceal math_environment inline_formula displayed_equation)
   (#not-has-ancestor? @conceal text_mode label_definition)
   (#lua_func! @conceal "conceal"))
@@ -55,5 +55,5 @@
   (#has-ancestor? @conceal superscript)
   (#has-ancestor? @conceal math_environment inline_formula displayed_equation)
   (#not-has-ancestor? @conceal label_definition text_mode)
-  (#any-of? @conceal "+" "-" "<" ">" "/" "=" "\.")
+  (#any-of? @conceal "+" "-" "<" ">" "/" "=" ".")
   (#lua_func! @conceal "conceal"))
