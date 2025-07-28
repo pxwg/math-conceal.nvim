@@ -2,9 +2,8 @@
   "_" @sub_symbol
   subscript: (curly_group
     "{" @open_paren
-    (text) @sub_object
-    "}" @close_paren)
-  (#match? @sub_object "^[aehijklmnoprstuvx1234567890]$")
+    "}" @close_paren) @sub_object
+  (#match? @sub_object "^\\{[aehijklmnoprstuvx1234567890]\\}$")
   (#set! @sub_symbol conceal "")
   (#set! @open_paren conceal "")
   (#set! @close_paren conceal "")
@@ -14,26 +13,24 @@
   "_" @sub_symbol
   subscript: (curly_group
     "{" @open_paren
-    (text) @sub_object
-    "}" @close_paren)
-  (#match? @sub_object "^[^[:space:]]*$")
+    "}" @close_paren) @sub_object
+  (#match? @sub_object "^\\{[a-zA-Z0-9]*\\}$")
   (#set! @open_paren conceal "")
   (#set! @close_paren conceal ""))
 
 (subscript
   "_" @sub_symbol
-  subscript: (letter) @sub_letter
-  (#match? @sub_letter "^[aehijklmnoprstuvx1234567890]$")
+  subscript: (_) @sub_object
+  (#match? @sub_object "^[aehijklmnoprstuvx1234567890]$")
   (#set! @sub_symbol conceal "")
-  (#set-sub! @sub_letter))
+  (#set-sub! @sub_object))
 
 (superscript
   "^" @sup_symbol
   superscript: (curly_group
     "{" @open_paren
-    (text) @sup_object
-    "}" @close_paren)
-  (#match? @sup_object "^[a-z1-9]$")
+    "}" @close_paren) @sup_object
+  (#match? @sup_object "^\\{[a-z1-9]\\}$")
   (#set! @sup_symbol conceal "")
   (#set! @open_paren conceal "")
   (#set! @close_paren conceal "")
@@ -43,15 +40,14 @@
   "^" @sup_symbol
   superscript: (curly_group
     "{" @open_paren
-    (text) @sup_object
-    "}" @close_paren)
-  (#match? @sup_object "^[^[:space:]]*$")
+    "}" @close_paren) @sup_object
+  (#match? @sup_object "^\\{[a-zA-Z0-9]*\\}$")
   (#set! @open_paren conceal "")
   (#set! @close_paren conceal ""))
 
 (superscript
   "^" @sup_symbol
-  superscript: (letter) @sup_letter
-  (#match? @sup_letter "^[a-z1-9]$")
+  superscript: (_) @sup_object
+  (#match? @sup_object "^[a-z1-9]$")
   (#set! @sup_symbol conceal "")
-  (#set-sup! @sup_letter))
+  (#set-sup! @sup_object))
