@@ -103,18 +103,23 @@ end
 ---@param predicate any[]
 ---@param metadata vim.treesitter.query.TSMetadata
 local function handle_conceal(match, _, source, predicate, metadata)
-  local capture_id = predicate[2]
-  local key = predicate[3]
-  local value = predicate[4]
-  if not capture_id or not match[capture_id] or not key then
+  local capture_id, key, value = predicate[2], predicate[3], predicate[4]
+  if not capture_id or not key then
     return
   end
   local node = match[capture_id]
-  if type(metadata[capture_id]) ~= "table" then
-    metadata[capture_id] = {}
+  if not node then
+    return
+  end
+  local meta = metadata[capture_id]
+  if type(meta) ~= "table" then
+    meta = {}
+    metadata[capture_id] = meta
   end
   local node_text = vim.treesitter.get_node_text(node, source)
-  metadata[capture_id][key] = conceal.lookup_math_symbol(node_text, "conceal", value)
+  if node_text then
+    meta[key] = conceal.lookup_math_symbol(node_text, "conceal", value)
+  end
 end
 
 ---@param match table<integer, TSNode[]>

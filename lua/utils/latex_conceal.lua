@@ -70,7 +70,7 @@ function M.initialize()
 end
 
 -- Ensure the library is loaded before usage
-local function ensure_loaded()
+function M.ensure_loaded()
   if not state.initialized then
     return M.initialize()
   end
@@ -83,10 +83,6 @@ end
 --- @param type string: Type of concealment (e.g., "cal", "frak", "bold", etc.)
 --- @return string: The converted Unicode symbol or the original text if not found
 function M.lookup_math_symbol(text, pattern, type)
-  if not ensure_loaded() then
-    return text
-  end
-
   return state.lookup_conceal.lookup_math_symbol({ text = text, pattern = pattern or "conceal", mode = type or "" })
     or text
 end
