@@ -20,4 +20,4 @@
     "Upsilon" "Phi" "Chi" "Psi" "Omega"))
   ; (#has-ancestor? @conceal math formula)
   ; (#set! @conceal "m"))
-  (#lua_func! @typ_greek_symbol "conceal"))
+  (#set-conceal! @typ_greek_symbol "conceal"))

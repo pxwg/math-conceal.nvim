@@ -8,7 +8,7 @@
     "speed" "light" "gravity" "acceleration" "force" "pressure" "temperature" "entropy" "enthalpy"
     "helmholtz" "gibbs")
   ; (#has-ancestor? @typ_phy_symbol math formula)
-  (#lua_func! @typ_phy_symbol "conceal"))
+  (#set-conceal! @typ_phy_symbol "conceal"))
 
 ; Physics units and quantities
 ((ident) @typ_phy_symbol
@@ -17,7 +17,7 @@
     "charge" "mass" "energy" "momentum" "angular" "spin" "magnetic" "electric" "force" "pressure"
     "temperature" "entropy" "enthalpy" "helmholtz" "gibbs")
   ; (#has-ancestor? @typ_phy_symbol math formula)
-  (#lua_func! @typ_phy_symbol "conceal"))
+  (#set-conceal! @typ_phy_symbol "conceal"))
 
 ; Vector and tensor notation
 ((ident) @func
@@ -29,10 +29,10 @@
 ((ident) @func
   (#any-of? @func "diff" "pdiff" "grad" "div" "curl" "laplacian")
   ; (#has-ancestor? @func math formula)
-  (#lua_func! @func "conceal"))
+  (#set-conceal! @func "conceal"))
 
 ; Physics operators
 ((ident) @func
   (#any-of? @func "expval" "mel" "bra" "ket" "braket" "ketbra" "op")
   ; (#has-ancestor? @func math formula)
-  (#lua_func! @func "conceal"))
+  (#set-conceal! @func "conceal"))

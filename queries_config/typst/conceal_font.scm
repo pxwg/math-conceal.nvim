@@ -22,7 +22,7 @@
   (#set! @left_paren conceal "")
   (formula) @font_letter
   (#match? @font_letter "^[a-zA-Z]+$")
-  (#lua_func! @font_letter @typ_font_name "font")
+  (#set-font! @font_letter @typ_font_name "font")
   ")" @right_paren
   (#set! @right_paren conceal ""))
 
@@ -37,7 +37,7 @@
   (#any-of? @typ_math_font "dif"))
   ; (#has-ancestor? @conceal math formula)
   ; (#set! @conceal "m"))
-  (#lua_func! @typ_math_font "conceal"))
+  (#set-conceal! @typ_math_font "conceal"))
 
 ; Script functions like upright, script, etc.
 (call
