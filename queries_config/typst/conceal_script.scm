@@ -8,7 +8,7 @@
   (#has-ancestor? @sup_object math formula)
   (#match? @sup_object "^[1-9a-z]$")
   (#set! @sup_symbol conceal "")
-  (#lua_func! @sup_object "sup"))
+  (#set-sup! @sup_object "sup"))
 
 ; Subscript conceals
 (attach
@@ -18,7 +18,7 @@
   (#has-ancestor? @sub_object math formula)
   (#match? @sub_object "^[1-9aehijklmnoprstuvx]$")
   (#set! @sub_symbol conceal "")
-  (#lua_func! @sub_object "sub"))
+  (#set-sub! @sub_object "sub"))
 
 ; Capture and conceal the opening parenthesis of the sub/supscript group
 ; For superscript with parentheses - hide both ^ and parentheses when content matches criteria
@@ -35,7 +35,7 @@
         ")" @close_paren)
       (#match? @sup_letter "^[a-z1-9]$")
       (#set! @sup_symbol conceal "")
-      (#lua_func! @sup_letter "sup"))))
+      (#set-sup! @sup_letter))))
 
 (math
   (formula
@@ -48,7 +48,7 @@
         ")" @close_paren)
       (#match? @sub_object "^[aehijklmnoprstuvx1234567890]$")
       (#set! @sub_symbol conceal "")
-      (#lua_func! @sub_object "sub"))))
+      (#set-sub! @sub_object))))
 
 ; Conceal the opening parenthesis of the subscript group while the formula has no space
 ; A_(xxx) -> A_xxx

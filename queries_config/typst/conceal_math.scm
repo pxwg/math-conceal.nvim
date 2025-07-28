@@ -5,17 +5,17 @@
   item: (ident) @typ_math_symbol
   (#any-of? @typ_math_symbol "root" "sum" "product" "integral")
   ; (#has-ancestor? @func math formula)
-  (#lua_func! @typ_math_symbol "conceal"))
+  (#set-conceal! @typ_math_symbol "conceal"))
 
 (((ident) @typ_math_symbol
   (#any-of? @typ_math_symbol "root" "sum" "product" "integral"))
   ; (#has-ancestor? @conceal math formula)
   ; (#set! @conceal "m"))
-  (#lua_func! @typ_math_symbol "conceal"))
+  (#set-conceal! @typ_math_symbol "conceal"))
 
 ; (((ident) @typ_math_symbol
 ; (#any-of? @typ_math_symbol
-; (#lua_func! @typ_math_symbol "conceal"))
+; (#set-conceal! @typ_math_symbol "conceal"))
 ; Math operators and symbols
 (((ident) @typ_math_symbol
   (#any-of? @typ_math_symbol
@@ -42,7 +42,7 @@
     "HH" "II" "JJ" "KK" "LL" "MM" "NN" "OO" "PP" "QQ" "RR" "SS" "TT" "UU" "VV" "WW" "XX" "YY" "ZZ"
     "ell" "planck" "angstrom" "kelvin" "Re" "Im" "thin"))
   (#has-ancestor? @typ_math_symbol math formula)
-  (#lua_func! @typ_math_symbol "conceal"))
+  (#set-conceal! @typ_math_symbol "conceal"))
 
 (((field) @typ_math_symbol
   (#any-of? @typ_math_symbol
@@ -155,7 +155,7 @@
     "epsilon.alt" "kappa.alt" "ohm.inv" "phi.alt" "pi.alt" "rho.alt" "sigma.alt" "theta.alt"
     "planck.reduce" "dotless.i" "dotless.j"))
   (#has-ancestor? @typ_math_symbol math formula)
-  (#lua_func! @typ_math_symbol "conceal")
+  (#set-conceal! @typ_math_symbol "conceal")
   (#set! priority 1000))
 
 ; Special symbols in math mode

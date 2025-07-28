@@ -81,45 +81,102 @@ end
 ---@param source string|integer
 ---@param predicate any[]
 ---@param metadata vim.treesitter.query.TSMetadata
-local function lua_func(match, _, source, predicate, metadata)
-  -- (#lua_func! @capture key value)
+local function handle_font(match, _, source, predicate, metadata)
   local capture_id = predicate[2]
-  local key = predicate[3]
-  local value = predicate[4]
-
-  if not capture_id or not match[capture_id] or not key then
+  local function_name_id = predicate[3]
+  if not capture_id or not match[capture_id] then
     return
   end
-
   local node = match[capture_id]
-
+  local function_name_node = match[function_name_id]
+  local function_name_text = function_name_node and vim.treesitter.get_node_text(function_name_node, source) or "cal"
   if type(metadata[capture_id]) ~= "table" then
     metadata[capture_id] = {}
   end
-
   local node_text = vim.treesitter.get_node_text(node, source)
-  local actions = {
-    font = function()
-      local function_name_id = predicate[3] -- @function_name is the 3rd element
-      local function_name_node = match[function_name_id]
-      local function_name_text = function_name_node and vim.treesitter.get_node_text(function_name_node, source)
-        or "cal"
-      metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(node_text, "font", function_name_text)
-    end,
-    conceal = function()
-      metadata[capture_id][key] = conceal.lookup_math_symbol(node_text, "conceal", value)
-    end,
-    sub = function()
-      metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(node_text, "sub", value)
-    end,
-    sup = function()
-      metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(node_text, "sup", value)
-    end,
-  }
-  if actions[key] then
-    actions[key]()
-  elseif actions[value] then
-    actions[value]()
+  metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(node_text, "font", function_name_text)
+end
+
+---@param match table<integer, TSNode[]>
+---@param _ integer
+---@param source string|integer
+---@param predicate any[]
+---@param metadata vim.treesitter.query.TSMetadata
+local function handle_conceal(match, _, source, predicate, metadata)
+  local capture_id = predicate[2]
+  local key = predicate[3]
+  local value = predicate[4]
+  if not capture_id or not match[capture_id] or not key then
+    return
+  end
+  local node = match[capture_id]
+  if type(metadata[capture_id]) ~= "table" then
+    metadata[capture_id] = {}
+  end
+  local node_text = vim.treesitter.get_node_text(node, source)
+  metadata[capture_id][key] = conceal.lookup_math_symbol(node_text, "conceal", value)
+end
+
+---@param match table<integer, TSNode[]>
+---@param _ integer
+---@param source string|integer
+---@param predicate any[]
+---@param metadata vim.treesitter.query.TSMetadata
+local function handle_sub(match, _, source, predicate, metadata)
+  local capture_id = predicate[2]
+  local value = predicate[4]
+  if not capture_id or not match[capture_id] then
+    return
+  end
+  local node = match[capture_id]
+  if type(metadata[capture_id]) ~= "table" then
+    metadata[capture_id] = {}
+  end
+  local node_text = vim.treesitter.get_node_text(node, source)
+  metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(node_text, "sub", value)
+end
+
+---@param match table<integer, TSNode[]>
+---@param _ integer
+---@param source string|integer
+---@param predicate any[]
+---@param metadata vim.treesitter.query.TSMetadata
+local function handle_sup(match, _, source, predicate, metadata)
+  local capture_id = predicate[2]
+  local value = predicate[4]
+  if not capture_id or not match[capture_id] then
+    return
+  end
+  local node = match[capture_id]
+  if type(metadata[capture_id]) ~= "table" then
+    metadata[capture_id] = {}
+  end
+  local node_text = vim.treesitter.get_node_text(node, source)
+  metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(node_text, "sup", value)
+end
+
+---@deprecated
+local function lua_func(match, _, source, predicate, metadata)
+  local capture_id = predicate[2]
+  local key = predicate[3]
+  local value = predicate[4]
+  if not capture_id or not match[capture_id] or not key then
+    return
+  end
+  local node = match[capture_id]
+  if type(metadata[capture_id]) ~= "table" then
+    metadata[capture_id] = {}
+  end
+  local node_text = vim.treesitter.get_node_text(node, source)
+
+  if key == "font" then
+    handle_font(match, _, source, predicate, metadata)
+  elseif key == "conceal" then
+    handle_conceal(match, _, source, predicate, metadata)
+  elseif key == "sub" then
+    handle_sub(match, _, source, predicate, metadata)
+  elseif key == "sup" then
+    handle_sup(match, _, source, predicate, metadata)
   else
     metadata[capture_id][key] = node_text
   end
@@ -129,6 +186,10 @@ end
 local function load_queries(args)
   vim.treesitter.query.add_predicate("has-grandparent?", hasgrandparent, { force = true })
   vim.treesitter.query.add_directive("set-pairs!", setpairs, { force = true })
+  vim.treesitter.query.add_directive("set-font!", handle_font, { force = true })
+  vim.treesitter.query.add_directive("set-conceal!", handle_conceal, { force = true })
+  vim.treesitter.query.add_directive("set-sub!", handle_sub, { force = true })
+  vim.treesitter.query.add_directive("set-sup!", handle_sup, { force = true })
   vim.treesitter.query.add_directive("lua_func!", lua_func, { force = true })
 
   -- Load LaTeX queries
