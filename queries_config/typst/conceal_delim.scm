@@ -21,11 +21,14 @@
   (#set-conceal! @typ_math_delim "conceal"))
 
 ; Norm delimiters
-(call
-  item: (ident) @typ_math_delim
-  (#any-of? @typ_math_delim "norm")
-  (#has-ancestor? @typ_math_delim math formula)
-  (#set-conceal! @typ_math_delim "conceal"))
+((call 
+        item: (ident) @cmd
+        "(" @left_brace
+        (_)
+        ")" @right_brace)
+ (#set! @cmd conceal "")
+ (#set! @left_brace conceal "‖")
+ (#set! @right_brace conceal "‖"))
 
 ; Vertical bars and double bars
 ((symbol) @typ_math_delim
