@@ -186,7 +186,7 @@ local function load_queries(args)
   vim.treesitter.query.add_directive("set-sup!", handle_sup, { force = true })
   vim.treesitter.query.add_directive("lua_func!", lua_func, { force = true })
 
-  -- Load LaTeX queries
+  -- load latex queries
   local latex_out = vim.treesitter.query.get_files("latex", "highlights")
   for _, name in ipairs(args.conceal) do
     local files = vim.api.nvim_get_runtime_file("queries_config/latex/conceal_" .. name .. ".scm", true)
@@ -197,7 +197,7 @@ local function load_queries(args)
   local latex_strings = read_query_files(latex_out)
   vim.treesitter.query.set("latex", "highlights", latex_strings)
 
-  -- Load Typst queries
+  -- load typst queries
   local typst_out = vim.treesitter.query.get_files("typst", "highlights")
   for _, name in ipairs(args.conceal) do
     local files = vim.api.nvim_get_runtime_file("queries_config/typst/conceal_" .. name .. ".scm", true)
