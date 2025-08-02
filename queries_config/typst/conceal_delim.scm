@@ -26,6 +26,7 @@
         "(" @left_brace
         (_)
         ")" @right_brace)
+ (#eq? @cmd "norm")
  (#set! @cmd conceal "")
  (#set! @left_brace conceal "‖")
  (#set! @right_brace conceal "‖"))
