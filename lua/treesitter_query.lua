@@ -82,19 +82,18 @@ end
 ---@param predicate any[]
 ---@param metadata vim.treesitter.query.TSMetadata
 local function handle_font(match, _, source, predicate, metadata)
-  local capture_id = predicate[2]
-  local function_name_id = predicate[3]
+  local capture_id, function_name_id = predicate[2], predicate[3]
   if not capture_id or not match[capture_id] then
     return
   end
+
   local node = match[capture_id]
   local function_name_node = match[function_name_id]
   local function_name_text = function_name_node and vim.treesitter.get_node_text(function_name_node, source) or "cal"
-  if type(metadata[capture_id]) ~= "table" then
-    metadata[capture_id] = {}
-  end
-  local node_text = vim.treesitter.get_node_text(node, source)
-  metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(node_text, "font", function_name_text)
+
+  metadata[capture_id] = metadata[capture_id] or {}
+  metadata[capture_id]["conceal"] =
+    conceal.lookup_math_symbol(vim.treesitter.get_node_text(node, source), "font", function_name_text)
 end
 
 ---@param match table<integer, TSNode[]>
@@ -104,22 +103,18 @@ end
 ---@param metadata vim.treesitter.query.TSMetadata
 local function handle_conceal(match, _, source, predicate, metadata)
   local capture_id, key, value = predicate[2], predicate[3], predicate[4]
-  if not capture_id or not key then
+  if not capture_id or not key or not match[capture_id] then
     return
   end
+
   local node = match[capture_id]
-  if not node then
+  local node_text = vim.treesitter.get_node_text(node, source)
+  if not node_text then
     return
   end
-  local meta = metadata[capture_id]
-  if type(meta) ~= "table" then
-    meta = {}
-    metadata[capture_id] = meta
-  end
-  local node_text = vim.treesitter.get_node_text(node, source)
-  if node_text then
-    meta[key] = conceal.lookup_math_symbol(node_text, "conceal", value)
-  end
+
+  metadata[capture_id] = metadata[capture_id] or {}
+  metadata[capture_id][key] = conceal.lookup_math_symbol(node_text, "conceal", value)
 end
 
 ---@param match table<integer, TSNode[]>
@@ -128,17 +123,14 @@ end
 ---@param predicate any[]
 ---@param metadata vim.treesitter.query.TSMetadata
 local function handle_sub(match, _, source, predicate, metadata)
-  local capture_id = predicate[2]
-  local value = predicate[4]
+  local capture_id, value = predicate[2], predicate[4]
   if not capture_id or not match[capture_id] then
     return
   end
+
   local node = match[capture_id]
-  if type(metadata[capture_id]) ~= "table" then
-    metadata[capture_id] = {}
-  end
-  local node_text = vim.treesitter.get_node_text(node, source)
-  metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(node_text, "sub", value)
+  metadata[capture_id] = metadata[capture_id] or {}
+  metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(vim.treesitter.get_node_text(node, source), "sub", value)
 end
 
 ---@param match table<integer, TSNode[]>
@@ -147,17 +139,14 @@ end
 ---@param predicate any[]
 ---@param metadata vim.treesitter.query.TSMetadata
 local function handle_sup(match, _, source, predicate, metadata)
-  local capture_id = predicate[2]
-  local value = predicate[4]
+  local capture_id, value = predicate[2], predicate[4]
   if not capture_id or not match[capture_id] then
     return
   end
+
   local node = match[capture_id]
-  if type(metadata[capture_id]) ~= "table" then
-    metadata[capture_id] = {}
-  end
-  local node_text = vim.treesitter.get_node_text(node, source)
-  metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(node_text, "sup", value)
+  metadata[capture_id] = metadata[capture_id] or {}
+  metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(vim.treesitter.get_node_text(node, source), "sup", value)
 end
 
 ---@deprecated

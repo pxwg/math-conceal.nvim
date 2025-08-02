@@ -10,13 +10,16 @@ pub fn lookup_math_symbol(s: &str) -> &str {
 }
 
 // Return the font-styled character based on font type in typst
+// TODO: better handling of font types
 pub fn lookup_font_symbol<'a>(text: &'a str, font_type: &'a str) -> &'a str {
-    let key = format!("{font_type}:{text}");
+    // let key = format!("{font_type}:{text}");
+    let key = [font_type, ":", text].concat();
     MATH_SYMBOLS.get(key.as_str()).copied().unwrap_or(text)
 }
 
 // Return the sub/superscript type and character based on typst notation
 pub fn lookup_subsup_symbol<'a>(text: &'a str, sub_or_sup: &'a str) -> &'a str {
-    let key = format!("{sub_or_sup}:{text}");
+    // let key = format!("{sub_or_sup}:{text}");
+    let key = [sub_or_sup, ":", text].concat();
     MATH_SYMBOLS.get(key.as_str()).copied().unwrap_or(text)
 }
