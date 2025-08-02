@@ -7,6 +7,7 @@
   sup: (_) @sup_object
   (#has-ancestor? @sup_object math formula)
   (#match? @sup_object "^[1-9a-z]$")
+  (#set! priority 98)
   (#set! @sup_symbol conceal "")
   (#set-sup! @sup_object "sup"))
 
