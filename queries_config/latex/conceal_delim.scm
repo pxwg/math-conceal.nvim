@@ -37,8 +37,8 @@
 
 (displayed_equation
   "$$" @conceal_dollar
-  (#set! conceal "")
-  (#set! conceal_lines ""))
+  (#set! conceal ""))
+  ; (#set! conceal_lines ""))
 
 (text_mode
   command: _ @conceal
