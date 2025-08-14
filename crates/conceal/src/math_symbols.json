@@ -2108,5 +2108,9 @@
   "\\bar:phi.alt": "ϕ̅",
   "\\bar:varphi": "ϕ̅",
   "\\bar:varpi": "ϖ̅",
-  "\\bar:partial": "∂̅"
+  "\\bar:partial": "∂̅",
+  "\\,": "",
+  "\\nolimits": "",
+  "\\leadsto": "⇝",
+  "\\Box": "□"
 }
