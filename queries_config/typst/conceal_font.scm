@@ -3,7 +3,7 @@
 (call
   item: (ident) @typ_font_name
   (#any-of? @typ_font_name
-    "bold" "italic" "cal" "script" "bb" "sans" "mono" "frak" "double" "upright")
+    "bold" "italic" "cal" "script" "bb" "sans" "mono" "frak" "double" "upright" )
   (#set! @typ_font_name conceal "")
   "(" @left_paren
   (#set! @left_paren conceal "")
@@ -15,25 +15,13 @@
 
 ; overline conceal for ident
 (call
-  item: (ident) @typ_font_name
-  (#any-of? @typ_font_name "overline")
+  item: (_) @typ_font_name
+  (#any-of? @typ_font_name "overline" "tilde" "hat" "dot" "dot.double")
   (#set! @typ_font_name conceal "")
   "(" @left_paren
   (#set! @left_paren conceal "")
   (formula) @font_letter
-  (#match? @font_letter "^[a-zA-Z]+$")
-  (#set-font! @font_letter @typ_font_name "font")
-  ")" @right_paren
-  (#set! @right_paren conceal ""))
-
-(call
-  item: (ident) @typ_font_name
-  (#any-of? @typ_font_name "hat")
-  (#set! @typ_font_name conceal "")
-  "(" @left_paren
-  (#set! @left_paren conceal "")
-  (formula) @font_letter
-  (#match? @font_letter "^[acegijosuyzACEGIJOSUYZ]$")
+  (#match? @font_letter "^([a-zA-Z]|alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|varepsilon|vartheta|varpi|varrho|varsigma|varphi|digamma|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|Varepsilon|Vartheta|Varpi|Varrho|Varsigma|Varphi)$")
   (#set-font! @font_letter @typ_font_name "font")
   ")" @right_paren
   (#set! @right_paren conceal ""))

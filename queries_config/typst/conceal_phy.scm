@@ -14,12 +14,6 @@
   (#set! priority 98)
   (#set-conceal! @typ_phy_symbol "conceal"))
 
-; Vector and tensor notation
-((ident) @func
-  (#any-of? @func "vec" "tilde" "bar" "dot" "ddot" "dddot")
-  ; (#has-ancestor? @func math formula)
-  (#set! conceal ""))
-
 ; Derivatives and differentials
 ((ident) @func
   (#any-of? @func "diff" "pdiff" "grad" "div" "curl" "laplacian")

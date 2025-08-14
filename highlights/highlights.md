@@ -1,10 +1,10 @@
 # Highlight Groups by Language
 
-Total: 41 highlight groups across 2 languages
+Total: 48 highlight groups across 2 languages
 
 ## Latex
 
-Count: 24 highlight groups
+Count: 25 highlight groups
 
 - @close_paren
 - @cmd
@@ -29,23 +29,33 @@ Count: 24 highlight groups
 - @sup_object
 - @sup_symbol
 - @tex_font_name
-- @tex_greek_symbol
+- @tex_greek
+- @tex_math_command
 
 ## Typst
 
-Count: 28 highlight groups
+Count: 37 highlight groups
 
 - @_comma
 - @_frac_name
 - @abs_name
 - @close_paren
+- @cmd
+- @comma
 - @conceal
+- @content
+- @first_letter
 - @font_letter
 - @func
 - @func_name
+- @left_brace
+- @left_content
 - @left_paren
 - @open_paren
+- @right_brace
+- @right_content
 - @right_paren
+- @second_letter
 - @sub_number
 - @sub_object
 - @sub_symbol
