@@ -30,3 +30,16 @@
   (#set! @right_1 conceal "/")
   (#set! @left_2 conceal "")
   (#set! @right_2 conceal ")"))
+
+(generic_command 
+        command: (command_name) @tex_math_command 
+        (#eq? @tex_math_command "\\sqrt")
+        arg: (curly_group 
+          "{" @left_paren_cmd
+          (text 
+            word: (word)) 
+          "}" @right_paren_cmd)
+        (#has-ancestor? @tex_math_command math_environment inline_formula displayed_equation)
+        (#set-conceal! @tex_math_command "conceal")
+        (#set! @left_paren_cmd conceal "(")
+        (#set! @right_paren_cmd conceal ")"))
