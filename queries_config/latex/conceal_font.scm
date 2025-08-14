@@ -32,12 +32,11 @@
   command: (command_name) @tex_font_name
   arg: (curly_group
     "{" @left_paren
-    (text
-      word: (word) @font_letter)
+    (_) @font_letter
     "}" @right_paren))
-  (#eq? @tex_font_name "\\bar")
+  (#any-of? @tex_font_name "\\bar" "\\widetilde" "\\hat" "\\dot" "\\ddot")
   (#set! @left_paren conceal "")
   (#set! @right_paren conceal "")
   (#set! @tex_font_name conceal "")
-  (#match? @font_letter "^[a-zA-Z]+$")
+  (#match? @font_letter "^([a-zA-Z]|\\\\(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|varepsilon|vartheta|varpi|varrho|varsigma|varphi|digamma|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|Varepsilon|Vartheta|Varpi|Varrho|Varsigma|Varphi))$")
   (#set-font! @font_letter @tex_font_name))
