@@ -15,8 +15,9 @@
   "_" @sub_symbol
   subscript: (curly_group
     "{" @open_paren
+    (_)
     "}" @close_paren) @sub_object
-  (#match? @sub_object "^\\{[a-zA-Z0-9]*\\}$")
+  (#match? @sub_object "^\\{\\\\\\S+\\}")
   (#set! @open_paren conceal "")
   (#set! @close_paren conceal ""))
 
@@ -44,7 +45,7 @@
   superscript: (curly_group
     "{" @open_paren
     "}" @close_paren) @sup_object
-  (#match? @sup_object "^\\{[a-zA-Z0-9]*\\}$")
+  (#match? @sup_object "^\\{\\\\\\S+\\}$")
   (#set! @open_paren conceal "")
   (#set! @close_paren conceal ""))
 
