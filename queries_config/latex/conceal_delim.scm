@@ -53,3 +53,15 @@
   (#has-ancestor? @conceal math_environment inline_formula displayed_equation)
   (#not-has-ancestor? @conceal label_definition text_mode)
   (#set! conceal ""))
+
+(math_delimiter
+  left_delimiter: (command_name) @punctuation.delimiter
+  (#eq? @punctuation.delimiter "\\{")
+  (#set! conceal "{")
+  (_))
+
+(math_delimiter
+  (_)
+  right_delimiter: (command_name) @punctuation.delimiter
+  (#eq? @punctuation.delimiter "\\}")
+  (#set! conceal "}"))
