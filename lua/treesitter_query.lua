@@ -29,24 +29,23 @@ local function cached_lookup(text, pattern, mode)
   return result
 end
 
----add predicate
+---add predicate (optimized for performance)
 ---@param filenames string[] List of filenames to read
 ---@return string contents Concatenated contents of the files
 local function read_query_files(filenames)
-  local contents = ""
+  local contents_table = {}
 
   for _, filename in ipairs(filenames) do
     local file, err = io.open(filename, "r")
-    local payload = ""
     if file then
-      payload = file:read("*a")
-      io.close(file)
+      local payload = file:read("*a")
+      file:close()
+      table.insert(contents_table, payload)
     else
       error(err)
     end
-    contents = contents .. "\n" .. payload
   end
-  return contents
+  return table.concat(contents_table, "\n")
 end
 
 ---set pairs in treesitter
@@ -73,7 +72,10 @@ local function setpairs(match, _, source, predicate, metadata)
   end
 end
 
----has grandparent predicate
+-- Cache for ancestor type sets to avoid repeated table creation and conversion
+local ancestor_cache = {}
+
+---has grandparent predicate (optimized for performance)
 ------inspired from [latex.nvim](https://github.com/robbielyman/latex.nvim)
 ---@param match table<integer, TSNode[]>
 ---@param predicate any[]
@@ -82,19 +84,26 @@ local function hasgrandparent(match, _, _, predicate)
   if not nodes or #nodes == 0 then
     return false
   end
-  for _, node in ipairs(nodes) do
-    local current = node
-    local valid = true
-    for _ = 1, 2 do
-      current = current and current:parent()
-      if not current then
-        valid = false
-        break
-      end
+  
+  -- Create cache key for ancestor types to avoid repeated table operations
+  local cache_key = table.concat(predicate, "|", 3)
+  local ancestor_set = ancestor_cache[cache_key]
+  
+  if not ancestor_set then
+    -- Convert ancestor types list to hash set for O(1) lookup
+    ancestor_set = {}
+    for i = 3, #predicate do
+      ancestor_set[predicate[i]] = true
     end
-    if valid then
-      local ancestor_types = { unpack(predicate, 3) }
-      if vim.tbl_contains(ancestor_types, current:type()) then
+    ancestor_cache[cache_key] = ancestor_set
+  end
+  
+  for _, node in ipairs(nodes) do
+    -- Optimized traversal: get grandparent directly instead of loop
+    local parent = node:parent()
+    if parent then
+      local grandparent = parent:parent()
+      if grandparent and ancestor_set[grandparent:type()] then
         return true
       end
     end
@@ -272,26 +281,30 @@ local function load_queries(args)
   
   vim.treesitter.query.add_directive("lua_func!", lua_func, { force = true })
 
-  -- load latex queries
-  local latex_out = vim.treesitter.query.get_files("latex", "highlights")
+  -- Optimized loading: batch collect all files first to reduce repeated API calls
+  local latex_files = vim.treesitter.query.get_files("latex", "highlights")
+  local typst_files = vim.treesitter.query.get_files("typst", "highlights")
+  
+  -- Batch collect conceal files for both languages
   for _, name in ipairs(args.conceal) do
-    local files = vim.api.nvim_get_runtime_file("queries_config/latex/conceal_" .. name .. ".scm", true)
-    for _, file in ipairs(files) do
-      table.insert(latex_out, file)
+    -- Collect LaTeX files
+    local latex_conceal_files = vim.api.nvim_get_runtime_file("queries_config/latex/conceal_" .. name .. ".scm", true)
+    for _, file in ipairs(latex_conceal_files) do
+      table.insert(latex_files, file)
+    end
+    
+    -- Collect Typst files
+    local typst_conceal_files = vim.api.nvim_get_runtime_file("queries_config/typst/conceal_" .. name .. ".scm", true)
+    for _, file in ipairs(typst_conceal_files) do
+      table.insert(typst_files, file)
     end
   end
-  local latex_strings = read_query_files(latex_out)
+  
+  -- Read and set queries in batch
+  local latex_strings = read_query_files(latex_files)
   vim.treesitter.query.set("latex", "highlights", latex_strings)
-
-  -- load typst queries
-  local typst_out = vim.treesitter.query.get_files("typst", "highlights")
-  for _, name in ipairs(args.conceal) do
-    local files = vim.api.nvim_get_runtime_file("queries_config/typst/conceal_" .. name .. ".scm", true)
-    for _, file in ipairs(files) do
-      table.insert(typst_out, file)
-    end
-  end
-  local typst_strings = read_query_files(typst_out)
+  
+  local typst_strings = read_query_files(typst_files)
   vim.treesitter.query.set("typst", "highlights", typst_strings)
 end
 
