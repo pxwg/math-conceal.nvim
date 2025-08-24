@@ -49,3 +49,6 @@
 (strong
   "*" @typ_inline_asterisk
   (#set! @typ_inline_asterisk conceal ""))
+
+((align "&" @typ_inline_ampersand)
+  (#set! @typ_inline_ampersand conceal ""))
