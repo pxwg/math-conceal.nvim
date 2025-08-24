@@ -10,22 +10,22 @@ local max_cache_size = 500
 -- Helper function to get from cache or lookup
 local function cached_lookup(text, pattern, mode)
   local cache_key = text .. ":" .. pattern .. ":" .. (mode or "")
-  
+
   -- Check cache first
   local cached_result = symbol_cache[cache_key]
   if cached_result then
     return cached_result
   end
-  
+
   -- Perform lookup
   local result = conceal.lookup_math_symbol(text, pattern, mode)
-  
+
   -- Cache the result if cache isn't full
   if cache_size < max_cache_size then
     symbol_cache[cache_key] = result
     cache_size = cache_size + 1
   end
-  
+
   return result
 end
 
@@ -84,11 +84,11 @@ local function hasgrandparent(match, _, _, predicate)
   if not nodes or #nodes == 0 then
     return false
   end
-  
+
   -- Create cache key for ancestor types to avoid repeated table operations
   local cache_key = table.concat(predicate, "|", 3)
   local ancestor_set = ancestor_cache[cache_key]
-  
+
   if not ancestor_set then
     -- Convert ancestor types list to hash set for O(1) lookup
     ancestor_set = {}
@@ -97,7 +97,7 @@ local function hasgrandparent(match, _, _, predicate)
     end
     ancestor_cache[cache_key] = ancestor_set
   end
-  
+
   for _, node in ipairs(nodes) do
     -- Optimized traversal: get grandparent directly instead of loop
     local parent = node:parent()
@@ -116,7 +116,7 @@ end
 local conceal_config = {
   -- Each entry defines how to register a new conceal type
   -- pattern: the pattern type to use for lookup
-  -- directive_name: the tree-sitter directive name 
+  -- directive_name: the tree-sitter directive name
   -- handler_key: key in the handler_dispatch table
   font = { pattern = "font", directive_name = "set-font!", handler_key = "font" },
   conceal = { pattern = "conceal", directive_name = "set-conceal!", handler_key = "conceal" },
@@ -128,12 +128,12 @@ local conceal_config = {
 -- Function to easily register new conceal types
 local function register_conceal_type(name, pattern, directive_name)
   -- Add to config
-  conceal_config[name] = { 
-    pattern = pattern, 
+  conceal_config[name] = {
+    pattern = pattern,
     directive_name = directive_name or ("set-" .. name .. "!"),
-    handler_key = name
+    handler_key = name,
   }
-  
+
   -- Add handler to dispatch table
   handler_dispatch[name] = function(match, _, source, predicate, metadata)
     local capture_id, key, value = predicate[2], predicate[3], predicate[4]
@@ -176,9 +176,10 @@ local handler_dispatch = {
     local function_name_text = function_name_node and vim.treesitter.get_node_text(function_name_node, source) or "cal"
 
     metadata[capture_id] = metadata[capture_id] or {}
-    metadata[capture_id]["conceal"] = cached_lookup(vim.treesitter.get_node_text(node, source), "font", function_name_text)
+    metadata[capture_id]["conceal"] =
+      cached_lookup(vim.treesitter.get_node_text(node, source), "font", function_name_text)
   end,
-  
+
   conceal = function(match, _, source, predicate, metadata)
     local capture_id, key, value = predicate[2], predicate[3], predicate[4]
     if not capture_id or not key or not match[capture_id] then
@@ -194,7 +195,7 @@ local handler_dispatch = {
     metadata[capture_id] = metadata[capture_id] or {}
     metadata[capture_id][key] = cached_lookup(node_text, "conceal", value)
   end,
-  
+
   sub = function(match, _, source, predicate, metadata)
     local capture_id, value = predicate[2], predicate[4]
     if not capture_id or not match[capture_id] then
@@ -205,7 +206,7 @@ local handler_dispatch = {
     metadata[capture_id] = metadata[capture_id] or {}
     metadata[capture_id]["conceal"] = cached_lookup(vim.treesitter.get_node_text(node, source), "sub", value)
   end,
-  
+
   sup = function(match, _, source, predicate, metadata)
     local capture_id, value = predicate[2], predicate[4]
     if not capture_id or not match[capture_id] then
@@ -216,7 +217,7 @@ local handler_dispatch = {
     metadata[capture_id] = metadata[capture_id] or {}
     metadata[capture_id]["conceal"] = cached_lookup(vim.treesitter.get_node_text(node, source), "sup", value)
   end,
-  
+
   escape = function(match, _, source, predicate, metadata)
     local capture_id, key, value = predicate[2], predicate[3], predicate[4]
     if not capture_id or not key or not match[capture_id] then
@@ -231,7 +232,7 @@ local handler_dispatch = {
 
     metadata[capture_id] = metadata[capture_id] or {}
     metadata[capture_id][key] = cached_lookup(node_text, "escape", value)
-  end
+  end,
 }
 
 -- Optimized unified handler function
@@ -252,12 +253,12 @@ local function lua_func(match, _, source, predicate, metadata)
   if not capture_id or not match[capture_id] or not key then
     return
   end
-  
+
   local node = match[capture_id]
   if type(metadata[capture_id]) ~= "table" then
     metadata[capture_id] = {}
   end
-  
+
   -- Use dispatch table for faster lookups
   local handler = handler_dispatch[key]
   if handler then
@@ -273,18 +274,18 @@ end
 local function load_queries(args)
   vim.treesitter.query.add_predicate("has-grandparent?", hasgrandparent, { force = true })
   vim.treesitter.query.add_directive("set-pairs!", setpairs, { force = true })
-  
+
   -- Register all configured conceal types
   for name, config in pairs(conceal_config) do
     vim.treesitter.query.add_directive(config.directive_name, handle_unified(config.handler_key), { force = true })
   end
-  
+
   vim.treesitter.query.add_directive("lua_func!", lua_func, { force = true })
 
   -- Optimized loading: batch collect all files first to reduce repeated API calls
   local latex_files = vim.treesitter.query.get_files("latex", "highlights")
   local typst_files = vim.treesitter.query.get_files("typst", "highlights")
-  
+
   -- Batch collect conceal files for both languages
   for _, name in ipairs(args.conceal) do
     -- Collect LaTeX files
@@ -292,18 +293,18 @@ local function load_queries(args)
     for _, file in ipairs(latex_conceal_files) do
       table.insert(latex_files, file)
     end
-    
+
     -- Collect Typst files
     local typst_conceal_files = vim.api.nvim_get_runtime_file("queries_config/typst/conceal_" .. name .. ".scm", true)
     for _, file in ipairs(typst_conceal_files) do
       table.insert(typst_files, file)
     end
   end
-  
+
   -- Read and set queries in batch
   local latex_strings = read_query_files(latex_files)
   vim.treesitter.query.set("latex", "highlights", latex_strings)
-  
+
   local typst_strings = read_query_files(typst_files)
   vim.treesitter.query.set("typst", "highlights", typst_strings)
 end

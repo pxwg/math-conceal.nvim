@@ -94,7 +94,7 @@ function M.lookup_batch(batch)
   if not state.lookup_conceal then
     return batch -- Return original if not loaded
   end
-  
+
   return state.lookup_conceal.lookup_batch(batch) or batch
 end
 
