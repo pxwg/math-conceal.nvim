@@ -79,7 +79,7 @@ end
 
 --- Function to convert LaTeX math symbols to Unicode
 --- @param text string: The LaTeX math symbol to convert
---- @param pattern '"conceal"'|'"font"'|'"sub"'|'"sup"' Valid values from PatternType enum
+--- @param pattern '"escape"'|'"conceal"'|'"font"'|'"sub"'|'"sup"' Valid values from PatternType enum
 --- @param type string: Type of concealment (e.g., "cal", "frak", "bold", etc.)
 --- @return string: The converted Unicode symbol or the original text if not found
 function M.lookup_math_symbol(text, pattern, type)
