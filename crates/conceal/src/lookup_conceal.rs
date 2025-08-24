@@ -1,5 +1,6 @@
 use lazy_static::lazy_static;
 use phf::phf_map;
+use regex::escape;
 // TODO: Add custumizeable math symbols with treesitter
 
 include!(concat!(env!("OUT_DIR"), "/math_symbols_map.rs"));
@@ -21,5 +22,9 @@ pub fn lookup_font_symbol<'a>(text: &'a str, font_type: &'a str) -> &'a str {
 pub fn lookup_subsup_symbol<'a>(text: &'a str, sub_or_sup: &'a str) -> &'a str {
     // let key = format!("{sub_or_sup}:{text}");
     let key = [sub_or_sup, ":", text].concat();
+    MATH_SYMBOLS.get(key.as_str()).copied().unwrap_or(text)
+}
+pub fn lookup_escape_symbol<'a>(text: &'a str, escape: &'a str) -> &'a str {
+    let key = [escape, ":", text].concat();
     MATH_SYMBOLS.get(key.as_str()).copied().unwrap_or(text)
 }

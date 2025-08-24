@@ -1,5 +1,7 @@
 pub mod lookup_conceal;
-use lookup_conceal::{lookup_font_symbol, lookup_math_symbol, lookup_subsup_symbol};
+use lookup_conceal::{
+    lookup_escape_symbol, lookup_font_symbol, lookup_math_symbol, lookup_subsup_symbol,
+};
 use mlua::{Lua, UserData, UserDataMethods};
 // fn normalize_font_type(font_type: &str) -> &str {
 //     match font_type {
@@ -23,6 +25,7 @@ pub fn lookup_conceal(lua: &Lua) -> mlua::Result<mlua::Table> {
                 "font" => Ok(lookup_font_symbol(&text, &mode).to_string()),
                 "sub" => Ok(lookup_subsup_symbol(&text, &"sub").to_string()),
                 "sup" => Ok(lookup_subsup_symbol(&text, &"sup").to_string()),
+                "escape" => Ok(lookup_escape_symbol(&text, &"escape").to_string()),
                 _ => Ok(lookup_math_symbol(&text).to_string()), // Return original text if pattern is unknown
             }
         })?,

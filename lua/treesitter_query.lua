@@ -149,6 +149,27 @@ local function handle_sup(match, _, source, predicate, metadata)
   metadata[capture_id]["conceal"] = conceal.lookup_math_symbol(vim.treesitter.get_node_text(node, source), "sup", value)
 end
 
+---@param match table<integer, TSNode[]>
+---@param _ integer
+---@param source string|integer
+---@param predicate any[]
+---@param metadata vim.treesitter.query.TSMetadata
+local function handle_escape(match, _, source, predicate, metadata)
+  local capture_id, key, value = predicate[2], predicate[3], predicate[4]
+  if not capture_id or not key or not match[capture_id] then
+    return
+  end
+
+  local node = match[capture_id]
+  local node_text = vim.treesitter.get_node_text(node, source)
+  if not node_text then
+    return
+  end
+
+  metadata[capture_id] = metadata[capture_id] or {}
+  metadata[capture_id][key] = conceal.lookup_math_symbol(node_text, "escape", value)
+end
+
 ---@deprecated
 local function lua_func(match, _, source, predicate, metadata)
   local capture_id = predicate[2]
@@ -171,6 +192,8 @@ local function lua_func(match, _, source, predicate, metadata)
     handle_sub(match, _, source, predicate, metadata)
   elseif key == "sup" then
     handle_sup(match, _, source, predicate, metadata)
+  elseif key == "escape" then
+    handle_escape(match, _, source, predicate, metadata)
   else
     metadata[capture_id][key] = node_text
   end
@@ -182,6 +205,7 @@ local function load_queries(args)
   vim.treesitter.query.add_directive("set-pairs!", setpairs, { force = true })
   vim.treesitter.query.add_directive("set-font!", handle_font, { force = true })
   vim.treesitter.query.add_directive("set-conceal!", handle_conceal, { force = true })
+  vim.treesitter.query.add_directive("set-escape!", handle_escape, { force = true })
   vim.treesitter.query.add_directive("set-sub!", handle_sub, { force = true })
   vim.treesitter.query.add_directive("set-sup!", handle_sup, { force = true })
   vim.treesitter.query.add_directive("lua_func!", lua_func, { force = true })
