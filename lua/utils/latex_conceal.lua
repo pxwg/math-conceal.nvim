@@ -87,4 +87,15 @@ function M.lookup_math_symbol(text, pattern, type)
     or text
 end
 
+--- Batch lookup function for better performance
+--- @param batch table: Array of {text, pattern, mode} tables
+--- @return table: Array of results
+function M.lookup_batch(batch)
+  if not state.lookup_conceal then
+    return batch -- Return original if not loaded
+  end
+
+  return state.lookup_conceal.lookup_batch(batch) or batch
+end
+
 return M

@@ -1,6 +1,4 @@
-use lazy_static::lazy_static;
 use phf::phf_map;
-use regex::escape;
 // TODO: Add custumizeable math symbols with treesitter
 
 include!(concat!(env!("OUT_DIR"), "/math_symbols_map.rs"));
