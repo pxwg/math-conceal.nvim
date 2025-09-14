@@ -26,6 +26,19 @@
   ")" @right_paren
   (#set! @right_paren conceal ""))
 
+(call
+  item: (_) @typ_font_name
+  (#any-of? @typ_font_name "overline")
+  (#set! @typ_font_name conceal "")
+  "(" @left_paren
+  (#set! @left_paren conceal "")
+  (formula) @font_letter
+  (#match? @font_letter "diff")
+  (#set-font! @font_letter @typ_font_name "font")
+  ")" @right_paren
+  (#set! @right_paren conceal "")
+  (#set! priority 101))
+
 ; Math function calls with special symbols
 (call
   item: (ident) @typ_math_font

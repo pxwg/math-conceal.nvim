@@ -2404,6 +2404,7 @@
   "overline:varphi": "ϕ̅",
   "overline:varpi": "ϖ̅",
   "overline:partial": "∂̅",
+  "overline:diff": "∂̅",
   "\\bar:a": "a̅",
   "\\bar:b": "b̅",
   "\\bar:c": "c̅",
