@@ -348,8 +348,6 @@ local function update_queries(conceal_map, args)
   vim.treesitter.query.set("latex", "highlights", all_queries)
 end
 
-_G.update_conceal = update_queries
-
 -- --- @param text string
 -- --- @param pattern string?
 -- --- @param type string?
@@ -421,8 +419,6 @@ local function get_preamble_conceal_map()
 
   return conceal_map
 end
-
-_G.get_preamble_conceal_map = get_preamble_conceal_map
 
 --- initializes the conceal queries
 M.load_queries = load_queries

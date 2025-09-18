@@ -19,6 +19,7 @@ local function subscribe_autocmd(opts)
   autocmd("BufReadPost", {
     pattern = ft,
     callback = function()
+      queries.load_queries(opts)
       local conceal_map = queries.get_preamble_conceal_map()
       queries.update_queries(conceal_map, opts)
       vim.cmd("e")

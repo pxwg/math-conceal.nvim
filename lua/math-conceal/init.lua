@@ -11,6 +11,7 @@ local utils = require("utils.latex_conceal")
 --- @field enabled boolean: Enable or disable LaTeX conceal. Default is true.
 --- @field conceal string[]?: Enable or disable math symbol concealment. You can add your own custom conceal types here. Default is {"greek", "script", "math", "font", "delim"}.
 --- @field ft string[]: A list of filetypes to enable LaTeX conceal. Default is {"tex", "latex", "markdown", "typst"}.
+--- @field depth integer
 
 -- Default options
 --- @type LaTeXConcealOptions
@@ -25,11 +26,11 @@ local default_opts = {
     "phy",
   },
   ft = { "*.tex", "*.md", "*.typ" },
+  depth = 90,
 }
 local autocmd = require("math-conceal.autocmd")
 
 function M.setup(opts)
-  require("treesitter_query").load_queries(opts)
   highlights.set_highlights()
   M.opts = vim.tbl_deep_extend("force", default_opts, opts or {})
   if not utils.ensure_loaded() then
