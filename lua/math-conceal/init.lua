@@ -29,6 +29,7 @@ local default_opts = {
 local autocmd = require("math-conceal.autocmd")
 
 function M.setup(opts)
+  require("treesitter_query").load_queries(opts)
   highlights.set_highlights()
   M.opts = vim.tbl_deep_extend("force", default_opts, opts or {})
   if not utils.ensure_loaded() then
