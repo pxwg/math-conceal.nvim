@@ -58,3 +58,19 @@
       (text) @_env))@_line)
   (#any-of? @_env "equation" "equation*")
   (#set! @_line conceal ""))
+
+
+
+
+
+
+
+
+;;; TODO: Add it as a config key
+((command_name) @cmd
+(#eq? @cmd "\\ali")
+arg: (curly_group
+       "{" @left_paren
+       (_)
+       "}" @right_paren)
+(#set! conceal ""))

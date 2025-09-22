@@ -283,23 +283,23 @@ local function load_queries(args)
   vim.treesitter.query.add_directive("lua_func!", lua_func, { force = true })
 
   -- Optimized loading: batch collect all files first to reduce repeated API calls
-  -- local latex_files = vim.treesitter.query.get_files("latex", "highlights")
-  -- local typst_files = vim.treesitter.query.get_files("typst", "highlights")
+  local latex_files = vim.treesitter.query.get_files("latex", "highlights")
+  local typst_files = vim.treesitter.query.get_files("typst", "highlights")
 
-  -- -- Batch collect conceal files for both languages
-  -- for _, name in ipairs(args.conceal) do
-  --   -- Collect LaTeX files
-  --   local latex_conceal_files = vim.api.nvim_get_runtime_file("queries/latex/conceal_" .. name .. ".scm", true)
-  --   for _, file in ipairs(latex_conceal_files) do
-  --     table.insert(latex_files, file)
-  --   end
-  --
-  --   -- Collect Typst files
-  --   local typst_conceal_files = vim.api.nvim_get_runtime_file("queries_config/typst/conceal_" .. name .. ".scm", true)
-  --   for _, file in ipairs(typst_conceal_files) do
-  --     table.insert(typst_files, file)
-  --   end
-  -- end
+  -- Batch collect conceal files for both languages
+  for _, name in ipairs(args.conceal) do
+    -- Collect LaTeX files
+    local latex_conceal_files = vim.api.nvim_get_runtime_file("queries/latex/conceal_" .. name .. ".scm", true)
+    for _, file in ipairs(latex_conceal_files) do
+      table.insert(latex_files, file)
+    end
+
+    -- Collect Typst files
+    local typst_conceal_files = vim.api.nvim_get_runtime_file("queries_config/typst/conceal_" .. name .. ".scm", true)
+    for _, file in ipairs(typst_conceal_files) do
+      table.insert(typst_files, file)
+    end
+  end
   --
   -- -- Read and set queries in batch
   -- local latex_strings = read_query_files(latex_files)
