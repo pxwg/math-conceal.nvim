@@ -289,7 +289,7 @@ local function load_queries(args)
   -- Batch collect conceal files for both languages
   for _, name in ipairs(args.conceal) do
     -- Collect LaTeX files
-    local latex_conceal_files = vim.api.nvim_get_runtime_file("queries_config/latex/conceal_" .. name .. ".scm", true)
+    local latex_conceal_files = vim.api.nvim_get_runtime_file("queries/latex/conceal_" .. name .. ".scm", true)
     for _, file in ipairs(latex_conceal_files) do
       table.insert(latex_files, file)
     end
@@ -300,13 +300,52 @@ local function load_queries(args)
       table.insert(typst_files, file)
     end
   end
+  --
+  -- -- Read and set queries in batch
+  -- local latex_strings = read_query_files(latex_files)
+  -- vim.treesitter.query.set("latex", "highlights", latex_strings)
+  --
+  -- local typst_strings = read_query_files(typst_files)
+  -- vim.treesitter.query.set("typst", "highlights", typst_strings)
+end
 
-  -- Read and set queries in batch
+---Update user-defined and preamble conceal commands
+---@param conceal_map table<string, string> Map of LaTeX commands to conceal characters
+---@param args LaTeXConcealOptions
+local function update_queries(conceal_map, args)
+  -- Collect all latex highlight files
+  local latex_files = vim.treesitter.query.get_files("latex", "highlights") or {}
+
+  -- Collect conceal files for each command in conceal_map
+  for _, name in ipairs(args.conceal) do
+    local latex_conceal_files = vim.api.nvim_get_runtime_file("queries/latex/conceal_" .. name .. ".scm", true)
+    for _, file in ipairs(latex_conceal_files) do
+      table.insert(latex_files, file)
+    end
+  end
+
+  -- Generate conceal queries from conceal_map
+  local queries = {}
+  for cmd, origin in pairs(conceal_map) do
+    local conceal_string = conceal.lookup_all(origin)
+    if vim.fn.strdisplaywidth(conceal_string) == 1 then
+      local query = string.format(
+        [[
+(generic_command
+  command: ((command_name) @conceal
+    (#match? @conceal "^\\%s$"))
+  (#set! @conceal conceal "%s"))
+]],
+        cmd,
+        conceal_string
+      )
+      table.insert(queries, query)
+    end
+  end
+
   local latex_strings = read_query_files(latex_files)
-  vim.treesitter.query.set("latex", "highlights", latex_strings)
-
-  local typst_strings = read_query_files(typst_files)
-  vim.treesitter.query.set("typst", "highlights", typst_strings)
+  local all_queries = latex_strings .. "\n" .. table.concat(queries, "\n")
+  vim.treesitter.query.set("latex", "highlights", all_queries)
 end
 
 -- --- @param text string
@@ -317,7 +356,73 @@ end
 --   return out
 -- end
 
+---Get conceal mapping from file pramble, e.g., \newcommand{\R}{\mathbb{R}}, \renewcommand{\a}{\alpha}
+---The key in the returned table has the form: { ["\\\\R"] = "\mathbb{R}", ["\\\\a"] = "\alpha", ...}
+---@return table<string, string> Map of LaTeX commands to conceal characters
+local function get_preamble_conceal_map()
+  local conceal_map = {}
+
+  local bufnr = vim.api.nvim_get_current_buf()
+  local ok_parser, parser = pcall(vim.treesitter.get_parser, bufnr, "latex")
+  if not ok_parser or not parser then
+    return conceal_map
+  end
+
+  local tree = parser:parse()[1]
+  if not tree then
+    return conceal_map
+  end
+  local root = tree:root()
+
+  local query_string = [[
+    (new_command_definition
+      declaration: (curly_group_command_name
+        command: (command_name) @cmd)
+      implementation: (curly_group) @impl) @definition
+  ]]
+
+  local ok_query, query = pcall(vim.treesitter.query.parse, "latex", query_string)
+  if not ok_query or not query then
+    return conceal_map
+  end
+
+  local function get_node_text(node)
+    local start_row, start_col, end_row, end_col = node:range()
+    return vim.treesitter.get_node_text(node, bufnr)
+  end
+
+  local definitions = {}
+  for id, node, metadata in query:iter_captures(root, bufnr, 0, -1) do
+    local name = query.captures[id]
+
+    if name == "definition" then
+      table.insert(definitions, {})
+    elseif name == "cmd" or name == "impl" then
+      if #definitions > 0 then
+        definitions[#definitions][name] = node
+      end
+    end
+  end
+
+  for _, def in ipairs(definitions) do
+    if def.cmd and def.impl then
+      local cmd_text = get_node_text(def.cmd)
+      local impl_text = get_node_text(def.impl)
+
+      while impl_text:match("^%b{}$") do
+        impl_text = impl_text:sub(2, -2)
+      end
+
+      conceal_map["\\" .. cmd_text] = impl_text
+    end
+  end
+
+  return conceal_map
+end
+
 --- initializes the conceal queries
 M.load_queries = load_queries
+M.update_queries = update_queries
+M.get_preamble_conceal_map = get_preamble_conceal_map
 
 return M

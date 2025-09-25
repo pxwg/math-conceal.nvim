@@ -21,10 +21,24 @@
   "(" @left_paren
   (#set! @left_paren conceal "")
   (formula) @font_letter
-  (#match? @font_letter "^([a-zA-Z]|alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|varepsilon|vartheta|varpi|varrho|varsigma|varphi|digamma|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|Varepsilon|Vartheta|Varpi|Varrho|Varsigma|Varphi)$")
+  (#match? @font_letter "^([a-zA-Z]|alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|partial|chi|psi|omega|varepsilon|vartheta|varpi|varrho|varsigma|varphi|digamma|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|Varepsilon|Vartheta|Varpi|Varrho|Varsigma|Varphi)$")
   (#set-font! @font_letter @typ_font_name "font")
   ")" @right_paren
-  (#set! @right_paren conceal ""))
+  (#set! @right_paren conceal "")
+  (#set! priority 102))
+
+(call
+  item: (_) @typ_font_name
+  (#any-of? @typ_font_name "overline")
+  (#set! @typ_font_name conceal "")
+  "(" @left_paren
+  (#set! @left_paren conceal "")
+  (formula) @font_letter
+  (#match? @font_letter "diff")
+  (#set-font! @font_letter @typ_font_name "font")
+  ")" @right_paren
+  (#set! @right_paren conceal "")
+  (#set! priority 102))
 
 ; Math function calls with special symbols
 (call

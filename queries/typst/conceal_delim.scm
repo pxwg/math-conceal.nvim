@@ -21,7 +21,7 @@
   (#set-conceal! @typ_math_delim "conceal"))
 
 ; Norm delimiters
-((call 
+((call
         item: (ident) @cmd
         "(" @left_brace
         (_)
