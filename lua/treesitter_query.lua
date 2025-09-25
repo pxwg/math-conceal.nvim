@@ -270,8 +270,15 @@ local function lua_func(match, _, source, predicate, metadata)
   end
 end
 
+---@class LaTeXConcealInit
+---@field typst string[]
+---@field typst_queries string
+---@field latex string[]
+---@field latex_queries string
+
 --- @param args LaTeXConcealOptions
-local function load_queries(args)
+--- @param init_data LaTeXConcealInit
+local function load_queries(args, init_data)
   vim.treesitter.query.add_predicate("has-grandparent?", hasgrandparent, { force = true })
   vim.treesitter.query.add_directive("set-pairs!", setpairs, { force = true })
 
@@ -282,7 +289,18 @@ local function load_queries(args)
 
   vim.treesitter.query.add_directive("lua_func!", lua_func, { force = true })
 
-  -- Optimized loading: batch collect all files first to reduce repeated API calls
+  -- Read and set queries in batch
+  local latex_strings = init_data.latex_queries
+  vim.treesitter.query.set("latex", "highlights", latex_strings)
+
+  local typst_strings = init_data.typst_queries
+  vim.treesitter.query.set("typst", "highlights", typst_strings)
+end
+
+---Get conceal queries
+---@param args LaTeXConcealOptions
+---@return table<string, string[]> conceal_files Map of language to list of conceal query files
+local function get_conceal_queries(args)
   local latex_files = vim.treesitter.query.get_files("latex", "highlights")
   local typst_files = vim.treesitter.query.get_files("typst", "highlights")
 
@@ -295,24 +313,18 @@ local function load_queries(args)
     end
 
     -- Collect Typst files
-    local typst_conceal_files = vim.api.nvim_get_runtime_file("queries_config/typst/conceal_" .. name .. ".scm", true)
+    local typst_conceal_files = vim.api.nvim_get_runtime_file("queries/typst/conceal_" .. name .. ".scm", true)
     for _, file in ipairs(typst_conceal_files) do
       table.insert(typst_files, file)
     end
   end
-  --
-  -- -- Read and set queries in batch
-  -- local latex_strings = read_query_files(latex_files)
-  -- vim.treesitter.query.set("latex", "highlights", latex_strings)
-  --
-  -- local typst_strings = read_query_files(typst_files)
-  -- vim.treesitter.query.set("typst", "highlights", typst_strings)
+  return { latex = latex_files, typst = typst_files }
 end
 
 ---Update user-defined and preamble conceal commands
 ---@param conceal_map table<string, string> Map of LaTeX commands to conceal characters
 ---@param args LaTeXConcealOptions
-local function update_queries(conceal_map, args)
+local function update_latex_queries(conceal_map, args)
   -- Collect all latex highlight files
   local latex_files = vim.treesitter.query.get_files("latex", "highlights") or {}
 
@@ -422,7 +434,9 @@ end
 
 --- initializes the conceal queries
 M.load_queries = load_queries
-M.update_queries = update_queries
+M.update_latex_queries = update_latex_queries
 M.get_preamble_conceal_map = get_preamble_conceal_map
+M.get_conceal_queries = get_conceal_queries
+M.read_query_files = read_query_files
 
 return M
