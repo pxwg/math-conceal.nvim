@@ -318,6 +318,7 @@ local function get_conceal_queries(args)
       table.insert(typst_files, file)
     end
   end
+
   return { latex = latex_files, typst = typst_files }
 end
 
