@@ -53,6 +53,39 @@ The basic solution of the problem above comes from [latex.nvim](https://github.c
 
 ## Installation
 
+### rocks.nvim
+
+#### Command style
+
+```vim
+:Rocks install math-conceal.nvim
+```
+
+#### Declare style
+
+`~/.config/nvim/rocks.toml`:
+
+```toml
+[plugins]
+"math-conceal.nvim" = "scm"
+```
+
+Then
+
+```vim
+:Rocks sync
+```
+
+or:
+
+```sh
+$ luarocks --lua-version 5.1 --local --tree ~/.local/share/nvim/rocks install math-conceal.nvim
+# ~/.local/share/nvim/rocks is the default rocks tree path
+# you can change it according to your vim.g.rocks_nvim.rocks_path
+```
+
+### lazy.nvim
+
 ```lua
 return {
   "pxwg/math-conceal.nvim",
@@ -73,6 +106,13 @@ return {
     ft = { "*.tex", "*.md", "*.typ" },
   },
 }
+```
+
+After building, a DLL will occur in `build/`. Add the following code to your
+`init.lua`:
+
+```lua
+package.cpath = package.cpath .. ';/the/path/of/build/?.so'
 ```
 
 ## To-do
