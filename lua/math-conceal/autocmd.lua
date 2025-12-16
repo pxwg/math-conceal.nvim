@@ -3,13 +3,16 @@ local autocmd = vim.api.nvim_create_autocmd
 local queries = require("treesitter_query")
 
 --- @param opts LaTeXConcealOptions
-local function subscribe_autocmd(opts, init_data)
+--- @param augroup_id integer?
+local function subscribe_autocmd(opts, init_data, augroup_id)
   if not opts.enabled then
     return
   end
 
+  augroup_id = augroup_id or vim.api.nvim_create_augroup("math-conceal", {})
   local ft = opts.ft
   autocmd({ "BufEnter", "BufReadPre" }, {
+    group = augroup_id,
     pattern = ft,
     callback = function()
       vim.opt_local.conceallevel = 2
@@ -17,6 +20,7 @@ local function subscribe_autocmd(opts, init_data)
     end,
   })
   autocmd("BufReadPost", {
+    group = augroup_id,
     pattern = ft,
     callback = function()
       queries.load_queries(opts, init_data)
