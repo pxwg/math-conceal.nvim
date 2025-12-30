@@ -1,6 +1,6 @@
 local M = {}
 local autocmd = vim.api.nvim_create_autocmd
-local queries = require("treesitter_query")
+local queries = require("math-conceal.query")
 
 --- @param opts LaTeXConcealOptions
 --- @param augroup_id integer?
