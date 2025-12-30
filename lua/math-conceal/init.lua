@@ -1,7 +1,6 @@
 local M = {}
 local highlights = require("math-conceal.highlights")
 local queries = require("treesitter_query")
-local utils = require("utils.latex_conceal")
 
 --- TODO: add custum_function setup
 
@@ -44,20 +43,8 @@ function M.setup(opts)
   local typst_queries = queries.read_query_files(init_data.typst)
   init_data.latex_queries = latex_queries
   init_data.typst_queries = typst_queries
-  if not utils.ensure_loaded() then
-    vim.notify(
-      "Failed to load math-conceal library. Make sure you run 'make lua51' or 'make luajit' first.",
-      vim.log.levels.ERROR
-    )
-    return
-  end
   if M.opts.enabled then
-    local success = require("utils.latex_conceal").initialize()
-    if not success then
-      vim.notify("LaTeX conceal initialization failed", vim.log.levels.WARN)
-    else
-      autocmd.subscribe_autocmd(M.opts, init_data)
-    end
+    autocmd.subscribe_autocmd(M.opts, init_data)
   end
 end
 
