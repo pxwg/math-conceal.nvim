@@ -8,13 +8,13 @@ Faster and More Precise [LaTeX](https://www.latex-project.org/) and [typst](http
   <tr>
     <td style="width: 50%;">
       <figure>
-        <img src="./fig/ebf.png" alt="Latex Showcase" style="width: 95%;">
+        <img src="https://github.com/user-attachments/assets/51702428-640b-4b5e-8888-2a3f6354ad4c" alt="Latex Showcase" style="width: 95%;">
         <figcaption>LaTeX-Before</figcaption>
       </figure>
     </td>
     <td style="width: 50%;">
       <figure>
-        <img src="./fig/eaf.png" alt="LaTeX Showcase" style="width: 99%;">
+        <img src="https://github.com/user-attachments/assets/affbcc24-df83-4a45-9f02-aeba891f7727" alt="LaTeX Showcase" style="width: 99%;">
         <figcaption>LaTeX-After</figcaption>
       </figure>
     </td>
@@ -26,13 +26,13 @@ Faster and More Precise [LaTeX](https://www.latex-project.org/) and [typst](http
   <tr>
     <td style="width: 50%;">
       <figure>
-        <img src="./fig/tbf.png" alt="Typst Showcase" style="width: 95%;">
+        <img src="https://github.com/user-attachments/assets/e0823415-fd78-43c5-9744-13c2313adedb" alt="Typst Showcase" style="width: 95%;">
         <figcaption>Typst-Before</figcaption>
       </figure>
     </td>
     <td style="width: 50%;">
       <figure>
-        <img src="./fig/taf_1.png" alt="Typst Showcase" style="width: 99%;">
+        <img src="https://github.com/user-attachments/assets/c1effd1b-f7e9-41df-b97c-a7bddca0ee82" alt="Typst Showcase" style="width: 99%;">
         <figcaption>Typst-After</figcaption>
       </figure>
     </td>
