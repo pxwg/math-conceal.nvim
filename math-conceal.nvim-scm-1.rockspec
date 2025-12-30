@@ -47,8 +47,8 @@ build = {
   },
   install = {
     lua = {
-      treesitter_query = "lua/treesitter_query.lua",
-      ["utils.latex_conceal"] = "lua/utils/latex_conceal.lua",
+      ["math-conceal.conceal"] = "lua/math-conceal/conceal.lua",
+      ["math-conceal.query"] = "lua/math-conceal/query.lua",
       ["math-conceal.autocmd"] = "lua/math-conceal/autocmd.lua",
       ["math-conceal.highlights"] = "lua/math-conceal/highlights.lua",
       ["math-conceal.init"] = "lua/math-conceal/init.lua",

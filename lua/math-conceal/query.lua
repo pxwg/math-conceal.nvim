@@ -1,6 +1,6 @@
 local M = {}
 
-local conceal = require("utils.latex_conceal")
+local conceal = require "math-conceal.conceal"
 
 -- Cache for frequently used symbols to reduce FFI overhead
 local symbol_cache = {}
@@ -155,15 +155,6 @@ end
 -- Export the registration function for extensibility
 M.register_conceal_type = register_conceal_type
 
--- Optimized unified handler function
-local function handle_unified(handler_type)
-  return function(match, pattern_index, source, predicate, metadata)
-    local handler = handler_dispatch[handler_type]
-    if handler then
-      handler(match, pattern_index, source, predicate, metadata)
-    end
-  end
-end
 local handler_dispatch = {
   font = function(match, _, source, predicate, metadata)
     local capture_id, function_name_id = predicate[2], predicate[3]

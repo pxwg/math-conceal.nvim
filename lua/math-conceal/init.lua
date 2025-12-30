@@ -1,6 +1,6 @@
 local M = {}
 local highlights = require("math-conceal.highlights")
-local queries = require("treesitter_query")
+local queries = require("math-conceal.query")
 
 --- TODO: add custum_function setup
 
