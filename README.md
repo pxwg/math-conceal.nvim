@@ -90,7 +90,6 @@ $ luarocks --lua-version 5.1 --local --tree ~/.local/share/nvim/rocks install ma
 return {
   "pxwg/math-conceal.nvim",
   event = "VeryLazy",
-  build = "make lua51",
   main = "math-conceal",
   --- @type LaTeXConcealOptions
   opts = {
@@ -106,13 +105,6 @@ return {
     ft = { "*.tex", "*.md", "*.typ" },
   },
 }
-```
-
-After building, a DLL will occur in `build/`. Add the following code to your
-`init.lua`:
-
-```lua
-package.cpath = package.cpath .. ';/the/path/of/build/?.so'
 ```
 
 ## To-do
