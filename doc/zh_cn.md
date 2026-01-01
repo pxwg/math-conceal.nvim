@@ -57,7 +57,6 @@ return {
   main = "math-conceal",
   --- @type LaTeXConcealOptions
   opts = {
-    enabled = true,
     conceal = {
       "greek",
       "script",
@@ -66,7 +65,7 @@ return {
       "delim",
       "phy",
     },
-    ft = { "*.tex", "*.md", "*.typ" },
+    ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
   },
 }
 ```
