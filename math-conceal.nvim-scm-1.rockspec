@@ -41,7 +41,7 @@ end
 
 build = {
   type = 'rust-mlua',
-  copy_directories = {'queries'},
+  copy_directories = {'ftplugin', 'queries'},
   modules = {
     "lookup_conceal"
   },

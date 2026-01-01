@@ -13,11 +13,7 @@ local M = {
       "delim",
       "phy",
     },
-    filetypes = {
-      latex = { "*.tex" },
-      markdown = { "*.md" },
-      typst = { "*.typ" },
-    },
+    ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
     depth = 90,
     ns_id = 0,
     highlights = {
@@ -60,53 +56,61 @@ local M = {
 
 --- @class LaTeXConcealOptions
 --- @field conceal string[]?: Enable or disable math symbol concealment. You can add your own custom conceal types here. Default is {"greek", "script", "math", "font", "delim"}.
---- @field filetypes table<"latex" | "typst" | "markdown", string[]>
+--- @field ft string[]: A list of filetypes to enable LaTeX conceal
 --- @field depth integer
 --- @field ns_id integer
 --- @field highlights table<string, table<string, string>>
---- @field augroup_id integer?
 
 ---set up
 ---@param opts LaTeXConcealOptions?
 function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", M.opts, opts or {})
+end
 
-  for group, opts in pairs(M.opts.highlights) do
-    vim.api.nvim_set_hl(M.opts.ns_id, group, opts)
-  end
-
-  M.opts.augroup_id = M.opts.augroup_id or vim.api.nvim_create_augroup("math-conceal", {})
-  -- ftplugin or FileType cannot work
-  for ft, pattern in pairs(M.opts.filetypes) do
-    vim.api.nvim_create_autocmd("BufReadPost", {
-      group = M.opts.augroup_id,
-      pattern = pattern,
-      callback = function()
-        M.load_queries(ft)
-      end
-    })
+---set math conceal
+---@param filetype string?
+function M.set(filetype)
+  filetype = filetype or vim.bo.filetype
+  for _, ft in ipairs(M.opts.ft) do
+    if ft == filetype then
+      M.set_highlights(filetype, M.opts.ns_id, M.opts.highlights, M.opts.conceal)
+      return
+    end
   end
 end
 
----load all queries.
----callback for autocmd
----@param filetype "latex" | "typst" | "markdown"
-function M.load_queries(filetype)
-  queries.load_queries()
+---set highlights
+---@param filetype string?
+---@param ns_id integer?
+---@param highlights table<string, table<string, string>>
+---@param conceal string[]
+function M.set_highlights(filetype, ns_id, highlights, conceal)
+  filetype = filetype or vim.bo.filetype
+  ns_id = ns_id or 0
+  highlights = highlights or {}
+  conceal = conceal or {}
   local code = ""
-  if filetype == "latex" then
+  if filetype == "tex" then
     local conceal_map = queries.get_preamble_conceal_map()
     code = queries.update_latex_queries(conceal_map)
-  elseif filetype == "markdown" then
+  end
+  if filetype ~= "typst" then
     filetype = "latex"
   end
+
+  if #M.queries == 0 then
+    for name, val in pairs(highlights) do
+      vim.api.nvim_set_hl(ns_id, name, val)
+    end
+    queries.load_queries()
+  end
+
   if M.queries[filetype] == nil then
-    M.files[filetype] = queries.get_conceal_queries(filetype, M.opts.conceal)
+    M.files[filetype] = queries.get_conceal_queries(filetype, conceal)
     M.queries[filetype] = queries.read_query_files(M.files[filetype])
   end
   code = M.queries[filetype] .. "\n" .. code
   vim.treesitter.query.set(filetype, "highlights", code)
-  vim.cmd.edit()
 end
 
 return M
