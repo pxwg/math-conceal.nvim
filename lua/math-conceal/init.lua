@@ -1,5 +1,6 @@
 local queries = require("math-conceal.query")
 local M = {
+  queries = {},
   -- Default options
   --- @type LaTeXConcealOptions
   opts = {
@@ -60,6 +61,8 @@ local M = {
 --- @field highlights table<string, table<string, string>>
 --- @field augroup_id integer?
 
+---set up
+---@param opts LaTeXConcealOptions?
 function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", M.opts, opts or {})
 
@@ -68,26 +71,38 @@ function M.setup(opts)
   end
 
   local latex_query_files = queries.get_conceal_queries("latex", M.opts.conceal)
-  local latex_queries = queries.read_query_files(latex_query_files)
+  M.queries.latex = queries.read_query_files(latex_query_files)
   local typst_query_files = queries.get_conceal_queries("typst", M.opts.conceal)
-  local typst_queries = queries.read_query_files(typst_query_files)
-  local augroup_id = M.opts.augroup_id or vim.api.nvim_create_augroup("math-conceal", {})
+  M.queries.typst = queries.read_query_files(typst_query_files)
 
+  local augroup_id = M.opts.augroup_id or vim.api.nvim_create_augroup("math-conceal", {})
+  -- ftplugin or FileType cannot work
   vim.api.nvim_create_autocmd("BufReadPost", {
     group = augroup_id,
     pattern = M.opts.ft,
-    callback = function()
-      queries.load_queries()
-      if vim.bo.filetype == "typst" then
-        vim.treesitter.query.set("typst", "highlights", typst_queries)
-      else
-        vim.treesitter.query.set("latex", "highlights", latex_queries)
-        local conceal_map = queries.get_preamble_conceal_map()
-        queries.update_latex_queries(conceal_map, M.opts)
-      end
-      vim.cmd.edit()
-    end,
+    callback = M.load_queries
   })
+end
+
+---load all queries.
+---callback for autocmd
+---@param filetype string?
+function M.load_queries(filetype)
+  filetype = filetype or vim.bo.filetype
+  -- only support typst and latex
+  if filetype ~= "typst" then
+    filetype = "latex"
+  end
+  if M.queries[filetype] == nil then
+    M.setup()
+  end
+  queries.load_queries()
+  vim.treesitter.query.set(filetype, "highlights", M.queries[filetype])
+  if filetype == "latex" then
+    local conceal_map = queries.get_preamble_conceal_map()
+    queries.update_latex_queries(conceal_map, M.opts)
+  end
+  vim.cmd.edit()
 end
 
 return M
