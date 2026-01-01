@@ -1,5 +1,6 @@
 local queries = require("math-conceal.query")
 local M = {
+  files = {},
   queries = {},
   -- Default options
   --- @type LaTeXConcealOptions
@@ -12,7 +13,11 @@ local M = {
       "delim",
       "phy",
     },
-    ft = { "*.tex", "*.md", "*.typ" },
+    filetypes = {
+      latex = { "*.tex" },
+      markdown = { "*.md" },
+      typst = { "*.typ" },
+    },
     depth = 90,
     ns_id = 0,
     highlights = {
@@ -55,7 +60,7 @@ local M = {
 
 --- @class LaTeXConcealOptions
 --- @field conceal string[]?: Enable or disable math symbol concealment. You can add your own custom conceal types here. Default is {"greek", "script", "math", "font", "delim"}.
---- @field ft string[]: A list of filetypes to enable LaTeX conceal. Default is {"tex", "latex", "markdown", "typst"}.
+--- @field filetypes table<"latex" | "typst" | "markdown", string[]>
 --- @field depth integer
 --- @field ns_id integer
 --- @field highlights table<string, table<string, string>>
@@ -70,38 +75,37 @@ function M.setup(opts)
     vim.api.nvim_set_hl(M.opts.ns_id, group, opts)
   end
 
-  local latex_query_files = queries.get_conceal_queries("latex", M.opts.conceal)
-  M.queries.latex = queries.read_query_files(latex_query_files)
-  local typst_query_files = queries.get_conceal_queries("typst", M.opts.conceal)
-  M.queries.typst = queries.read_query_files(typst_query_files)
-
-  local augroup_id = M.opts.augroup_id or vim.api.nvim_create_augroup("math-conceal", {})
+  M.opts.augroup_id = M.opts.augroup_id or vim.api.nvim_create_augroup("math-conceal", {})
   -- ftplugin or FileType cannot work
-  vim.api.nvim_create_autocmd("BufReadPost", {
-    group = augroup_id,
-    pattern = M.opts.ft,
-    callback = M.load_queries
-  })
+  for ft, pattern in pairs(M.opts.filetypes) do
+    vim.api.nvim_create_autocmd("BufReadPost", {
+      group = M.opts.augroup_id,
+      pattern = pattern,
+      callback = function()
+        M.load_queries(ft)
+      end
+    })
+  end
 end
 
 ---load all queries.
 ---callback for autocmd
----@param filetype string?
+---@param filetype "latex" | "typst" | "markdown"
 function M.load_queries(filetype)
-  filetype = filetype or vim.bo.filetype
-  -- only support typst and latex
-  if filetype ~= "typst" then
+  queries.load_queries()
+  local code = ""
+  if filetype == "latex" then
+    local conceal_map = queries.get_preamble_conceal_map()
+    code = queries.update_latex_queries(conceal_map)
+  elseif filetype == "markdown" then
     filetype = "latex"
   end
   if M.queries[filetype] == nil then
-    M.setup()
+    M.files[filetype] = queries.get_conceal_queries(filetype, M.opts.conceal)
+    M.queries[filetype] = queries.read_query_files(M.files[filetype])
   end
-  queries.load_queries()
-  vim.treesitter.query.set(filetype, "highlights", M.queries[filetype])
-  if filetype == "latex" then
-    local conceal_map = queries.get_preamble_conceal_map()
-    queries.update_latex_queries(conceal_map, M.opts)
-  end
+  code = M.queries[filetype] .. "\n" .. code
+  vim.treesitter.query.set(filetype, "highlights", code)
   vim.cmd.edit()
 end
 

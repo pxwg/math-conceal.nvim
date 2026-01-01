@@ -282,7 +282,8 @@ local function get_conceal_queries(language, names)
 
   -- Batch collect conceal files for both languages
   for _, name in ipairs(names) do
-    local conceal_files = vim.api.nvim_get_runtime_file(("queries/%s/conceal_%s.scm"):format(language, name), true)
+    name = "conceal_" .. name
+    local conceal_files = vim.treesitter.query.get_files(language, name)
     for _, file in ipairs(conceal_files) do
       table.insert(files, file)
     end
@@ -293,19 +294,8 @@ end
 
 ---Update user-defined and preamble conceal commands
 ---@param conceal_map table<string, string> Map of LaTeX commands to conceal characters
----@param args LaTeXConcealOptions
-local function update_latex_queries(conceal_map, args)
-  -- Collect all latex highlight files
-  local latex_files = vim.treesitter.query.get_files("latex", "highlights") or {}
-
-  -- Collect conceal files for each command in conceal_map
-  for _, name in ipairs(args.conceal) do
-    local latex_conceal_files = vim.api.nvim_get_runtime_file("queries/latex/conceal_" .. name .. ".scm", true)
-    for _, file in ipairs(latex_conceal_files) do
-      table.insert(latex_files, file)
-    end
-  end
-
+---@return string
+local function update_latex_queries(conceal_map)
   -- Generate conceal queries from conceal_map
   local queries = {}
   for cmd, origin in pairs(conceal_map) do
@@ -325,9 +315,7 @@ local function update_latex_queries(conceal_map, args)
     end
   end
 
-  local latex_strings = read_query_files(latex_files)
-  local all_queries = latex_strings .. "\n" .. table.concat(queries, "\n")
-  vim.treesitter.query.set("latex", "highlights", all_queries)
+  return table.concat(queries, "\n")
 end
 
 -- --- @param text string
