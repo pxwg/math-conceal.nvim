@@ -1,3 +1,4 @@
+---wrap lua module written in rust. independent from neovim.
 local M = {}
 
 local lookup_conceal = require 'lookup_conceal'
