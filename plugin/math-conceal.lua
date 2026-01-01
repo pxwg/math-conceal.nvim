@@ -1,1 +1,0 @@
--- require("math-conceal").setup({})
