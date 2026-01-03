@@ -6,7 +6,7 @@
   "^" @sup_symbol
   sup: (_) @sup_object
   (#has-ancestor? @sup_object math formula)
-  (#match? @sup_object "^[1-9a-z]$")
+  (#match? @sup_object "^[0-9a-z]$")
   (#set! priority 98)
   (#set! @sup_symbol conceal "")
   (#set-sup! @sup_object "sup"))
@@ -17,7 +17,7 @@
   "_" @sub_symbol
   sub: (_) @sub_object
   (#has-ancestor? @sub_object math formula)
-  (#match? @sub_object "^[1-9aehijklmnoprstuvx]$")
+  (#match? @sub_object "^[0-9aehijklmnoprstuvx]$")
   (#set! @sub_symbol conceal "")
   (#set-sub! @sub_object "sub"))
 
@@ -33,7 +33,7 @@
         "(" @open_paren
         (formula) @sup_letter
         ")" @close_paren)
-      (#match? @sup_letter "^[a-z1-9]$")
+      (#match? @sup_letter "^[a-z0-9]$")
       (#has-ancestor? @sup_letter math formula)
       (#set! @open_paren conceal "")
       (#set! @close_paren conceal "")
@@ -65,7 +65,7 @@
         "(" @open_paren
         (_) @sup_object
         ")" @close_paren)
-      (#match? @sup_object "^[A-Za-z1-9]+$")
+      (#match? @sup_object "^[A-Za-z0-9]+$")
       (#has-ancestor? @sup_object math formula)
       (#set! @open_paren conceal "")
       (#set! @close_paren conceal "")))
