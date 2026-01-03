@@ -68,7 +68,8 @@ function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", M.opts, opts or {})
 end
 
----set highlights only when `filetype` is in `M.opts.ft`
+---check if `filetype` is in `M.opts.ft`.
+---if true, call `set_hl`
 ---@param filetype string?
 function M.set(filetype)
   filetype = filetype or vim.bo.filetype
@@ -79,7 +80,7 @@ function M.set(filetype)
   end
 end
 
----set highlights only once
+---do some prepare work, then call `set_highlights`
 ---@param filetype string?
 function M.set_hl(filetype)
   --- first run
@@ -97,7 +98,7 @@ function M.set_hl(filetype)
       group = M.opts.augroup_id,
       buffer = 0,
       callback = function()
-        M.set_highlights(filetype, M.queries.latex)
+        M.set_highlights("latex", M.queries.latex, "tex")
         vim.treesitter.start()
       end
     })
@@ -105,24 +106,27 @@ function M.set_hl(filetype)
 
   -- set typst math conceal for typst
   -- and set latex math conceal for all other filetypes.
-  local ft = filetype == "typst" and filetype or "latex"
+  ---@type "typst" | "latex"
+  local lang = filetype == "typst" and filetype or "latex"
   ---always reset highlights for tex due to preamble
   local should_set_hl = filetype == "tex"
   -- if haven't set highlights, must set highlights
-  if M.queries[ft] == nil then
-    M.files[ft] = queries.get_conceal_queries(ft, M.opts.conceal)
-    M.queries[ft] = queries.read_query_files(M.files[ft])
+  if M.queries[lang] == nil then
+    M.files[lang] = queries.get_conceal_queries(lang, M.opts.conceal)
+    M.queries[lang] = queries.read_query_files(M.files[lang])
     should_set_hl = true
   end
   if should_set_hl then
-    M.set_highlights(filetype, M.queries[ft])
+    M.set_highlights(lang, M.queries[lang], filetype)
   end
 end
 
----set highlights
----@param filetype string?
+---set highlights for lang.
+---if filetype == 'tex', update queries for preamble
+---@param lang string
 ---@param code string?
-function M.set_highlights(filetype, code)
+---@param filetype string?
+function M.set_highlights(lang, code, filetype)
   filetype = filetype or vim.bo.filetype
   code = code or ""
 
@@ -130,7 +134,7 @@ function M.set_highlights(filetype, code)
     local conceal_map = queries.get_preamble_conceal_map()
     code = code .. "\n" .. queries.update_latex_queries(conceal_map)
   end
-  vim.treesitter.query.set(filetype, "highlights", code)
+  vim.treesitter.query.set(lang, "highlights", code)
 end
 
 return M
