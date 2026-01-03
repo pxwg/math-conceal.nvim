@@ -130,7 +130,7 @@ function M.set_highlights(filetype, code)
     local conceal_map = queries.get_preamble_conceal_map()
     code = code .. "\n" .. queries.update_latex_queries(conceal_map)
   end
-  vim.treesitter.query.set(ft, "highlights", code)
+  vim.treesitter.query.set(filetype, "highlights", code)
 end
 
 return M
