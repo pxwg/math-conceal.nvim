@@ -35,11 +35,7 @@ fn main() {
 
     for (key, value) in &merged {
         if let Value::String(val_str) = value {
-            if key.contains("\\") {
-                writeln!(file, "    r\"{}\" => \"{}\",", key, val_str).unwrap();
-            } else {
-                writeln!(file, "    \"{}\" => \"{}\",", key, val_str).unwrap();
-            }
+            writeln!(file, "    {:?} => {:?},", key, val_str).unwrap();
         }
     }
 
