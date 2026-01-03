@@ -1,6 +1,6 @@
 local M = {}
 
-local conceal = require("utils.latex_conceal")
+local conceal = require "math-conceal.conceal"
 
 -- Cache for frequently used symbols to reduce FFI overhead
 local symbol_cache = {}
@@ -155,15 +155,6 @@ end
 -- Export the registration function for extensibility
 M.register_conceal_type = register_conceal_type
 
--- Optimized unified handler function
-local function handle_unified(handler_type)
-  return function(match, pattern_index, source, predicate, metadata)
-    local handler = handler_dispatch[handler_type]
-    if handler then
-      handler(match, pattern_index, source, predicate, metadata)
-    end
-  end
-end
 local handler_dispatch = {
   font = function(match, _, source, predicate, metadata)
     local capture_id, function_name_id = predicate[2], predicate[3]
@@ -177,7 +168,7 @@ local handler_dispatch = {
 
     metadata[capture_id] = metadata[capture_id] or {}
     metadata[capture_id]["conceal"] =
-      cached_lookup(vim.treesitter.get_node_text(node, source), "font", function_name_text)
+        cached_lookup(vim.treesitter.get_node_text(node, source), "font", function_name_text)
   end,
 
   conceal = function(match, _, source, predicate, metadata)
@@ -270,73 +261,41 @@ local function lua_func(match, _, source, predicate, metadata)
   end
 end
 
----@class LaTeXConcealInit
----@field typst string[]
----@field typst_queries string
----@field latex string[]
----@field latex_queries string
-
---- @param args LaTeXConcealOptions
---- @param init_data LaTeXConcealInit
-local function load_queries(args, init_data)
+local function load_queries()
   vim.treesitter.query.add_predicate("has-grandparent?", hasgrandparent, { force = true })
   vim.treesitter.query.add_directive("set-pairs!", setpairs, { force = true })
 
   -- Register all configured conceal types
-  for name, config in pairs(conceal_config) do
+  for _, config in pairs(conceal_config) do
     vim.treesitter.query.add_directive(config.directive_name, handle_unified(config.handler_key), { force = true })
   end
 
   vim.treesitter.query.add_directive("lua_func!", lua_func, { force = true })
-
-  -- Read and set queries in batch
-  local latex_strings = init_data.latex_queries
-  vim.treesitter.query.set("latex", "highlights", latex_strings)
-
-  local typst_strings = init_data.typst_queries
-  vim.treesitter.query.set("typst", "highlights", typst_strings)
 end
 
 ---Get conceal queries
----@param args LaTeXConcealOptions
----@return table<string, string[]> conceal_files Map of language to list of conceal query files
-local function get_conceal_queries(args)
-  local latex_files = vim.treesitter.query.get_files("latex", "highlights")
-  local typst_files = vim.treesitter.query.get_files("typst", "highlights")
+---@param language "latex" | "typst"
+---@param names string[]
+---@return string[] conceal_files Map of language to list of conceal query files
+local function get_conceal_queries(language, names)
+  local files = vim.treesitter.query.get_files(language, "highlights")
 
   -- Batch collect conceal files for both languages
-  for _, name in ipairs(args.conceal) do
-    -- Collect LaTeX files
-    local latex_conceal_files = vim.api.nvim_get_runtime_file("queries/latex/conceal_" .. name .. ".scm", true)
-    for _, file in ipairs(latex_conceal_files) do
-      table.insert(latex_files, file)
-    end
-
-    -- Collect Typst files
-    local typst_conceal_files = vim.api.nvim_get_runtime_file("queries/typst/conceal_" .. name .. ".scm", true)
-    for _, file in ipairs(typst_conceal_files) do
-      table.insert(typst_files, file)
+  for _, name in ipairs(names) do
+    name = "conceal_" .. name
+    local conceal_files = vim.treesitter.query.get_files(language, name)
+    for _, file in ipairs(conceal_files) do
+      table.insert(files, file)
     end
   end
 
-  return { latex = latex_files, typst = typst_files }
+  return files
 end
 
 ---Update user-defined and preamble conceal commands
 ---@param conceal_map table<string, string> Map of LaTeX commands to conceal characters
----@param args LaTeXConcealOptions
-local function update_latex_queries(conceal_map, args)
-  -- Collect all latex highlight files
-  local latex_files = vim.treesitter.query.get_files("latex", "highlights") or {}
-
-  -- Collect conceal files for each command in conceal_map
-  for _, name in ipairs(args.conceal) do
-    local latex_conceal_files = vim.api.nvim_get_runtime_file("queries/latex/conceal_" .. name .. ".scm", true)
-    for _, file in ipairs(latex_conceal_files) do
-      table.insert(latex_files, file)
-    end
-  end
-
+---@return string
+local function update_latex_queries(conceal_map)
   -- Generate conceal queries from conceal_map
   local queries = {}
   for cmd, origin in pairs(conceal_map) do
@@ -356,9 +315,7 @@ local function update_latex_queries(conceal_map, args)
     end
   end
 
-  local latex_strings = read_query_files(latex_files)
-  local all_queries = latex_strings .. "\n" .. table.concat(queries, "\n")
-  vim.treesitter.query.set("latex", "highlights", all_queries)
+  return table.concat(queries, "\n")
 end
 
 -- --- @param text string
@@ -371,11 +328,12 @@ end
 
 ---Get conceal mapping from file pramble, e.g., \newcommand{\R}{\mathbb{R}}, \renewcommand{\a}{\alpha}
 ---The key in the returned table has the form: { ["\\\\R"] = "\mathbb{R}", ["\\\\a"] = "\alpha", ...}
+---@param bufnr integer?
 ---@return table<string, string> Map of LaTeX commands to conceal characters
-local function get_preamble_conceal_map()
+local function get_preamble_conceal_map(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
   local conceal_map = {}
 
-  local bufnr = vim.api.nvim_get_current_buf()
   local ok_parser, parser = pcall(vim.treesitter.get_parser, bufnr, "latex")
   if not ok_parser or not parser then
     return conceal_map
