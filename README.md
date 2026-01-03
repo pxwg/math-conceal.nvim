@@ -118,3 +118,8 @@ return {
 ## References
 
 - [ts_query_lsp](https://github.com/ribru17/ts_query_ls) I use this LSP as a pre-commit hook to format the query file.
+
+## Acknowledgements
+
+- [Freed-Wu](https://github.com/Freed-Wu): Instrumental in publishing this plugin to [LuaRocks](https://luarocks.org/modules/pxwg/math-conceal.nvim) and refactoring the code structure to fit the best practices for Neovim plugins.
+- [latex.nvim](https://github.com/robbielyman/latex.nvim) for the idea of using customized conceal patterns.
