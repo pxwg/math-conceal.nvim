@@ -9,9 +9,23 @@ fn main() {
     let dest_path = Path::new(&out_dir).join("math_symbols_map.rs");
     let mut file = BufWriter::new(File::create(dest_path).unwrap());
 
-    let json_path = Path::new("src").join("math_symbols.json");
-    let json_file = File::open(json_path).expect("Failed to open math_symbols.json");
-    let json_data: Value = serde_json::from_reader(json_file).expect("Failed to parse JSON");
+    let json_paths = [
+        Path::new("src").join("math_symbols_typst.json"),
+        Path::new("src").join("math_symbols_latex.json"),
+        Path::new("src").join("math_fonts_latex.json"),
+        Path::new("src").join("math_fonts_typst.json"),
+    ];
+
+    let mut merged = serde_json::Map::new();
+    for json_path in &json_paths {
+        let json_file = File::open(json_path).expect("Failed to open math_symbols json");
+        let json_data: Value = serde_json::from_reader(json_file).expect("Failed to parse JSON");
+        if let Value::Object(obj) = json_data {
+            for (k, v) in obj {
+                merged.insert(k, v);
+            }
+        }
+    }
 
     writeln!(
         file,
@@ -19,14 +33,12 @@ fn main() {
     )
     .unwrap();
 
-    if let Value::Object(obj) = json_data {
-        for (key, value) in obj {
-            if let Value::String(val_str) = value {
-                if key.contains("\\") {
-                    writeln!(file, "    r\"{}\" => \"{}\",", key, val_str).unwrap();
-                } else {
-                    writeln!(file, "    \"{}\" => \"{}\",", key, val_str).unwrap();
-                }
+    for (key, value) in &merged {
+        if let Value::String(val_str) = value {
+            if key.contains("\\") {
+                writeln!(file, "    r\"{}\" => \"{}\",", key, val_str).unwrap();
+            } else {
+                writeln!(file, "    \"{}\" => \"{}\",", key, val_str).unwrap();
             }
         }
     }
