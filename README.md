@@ -114,10 +114,12 @@ return {
 - [ ] Table conceal for LaTeX and Typst files (inspired from [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim)).
 - [ ] Automatically maintain the conceal query file and `math_symbols.json` file.
 - [ ] Decoupling the `latex` part and `typst` part.
+- [ ] A more fine-grained conceal rendering (reference: [latex_concealer.nvim](http://github.com/dirichy/latex_concealer.nvim)).
 
 ## References
 
 - [ts_query_lsp](https://github.com/ribru17/ts_query_ls) I use this LSP as a pre-commit hook to format the query file.
+- [latex_concealer.nvim](http://github.com/dirichy/latex_concealer.nvim) for some ideas about conceal patterns.
 
 ## Acknowledgements
 
