@@ -49,13 +49,13 @@ M.conceal_math = [[
 
 ; Replace comma with division slash
 ((call
-  item: (ident) @_frac_name
-  (#eq? @_frac_name "frac")
+  item: (ident) @_func_name
+  (#eq? @_func_name "frac")
   (_)
-  .
-  "," @_comma
+  "," @punctuation.comma
   (_))
-  (#set! conceal "/" @_comma))
+  (#set! conceal "/")
+  (#set! priority 105))
 
 ; Conceal "abs" function name
 (call

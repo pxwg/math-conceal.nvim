@@ -56,7 +56,7 @@ end
 
 -- Main
 local src_root = find_queries_dir()
-local dst_root = "dir"
+local dst_root = "lua/math-conceal/symbols"
 ensure_dir(dst_root)
 for entry in lfs.dir(src_root) do
   if entry ~= "." and entry ~= ".." then
