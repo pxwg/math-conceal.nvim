@@ -1,4 +1,5 @@
 local queries = require("math-conceal.query")
+local render = require("math-conceal.render")
 local M = {
   files = {},
   queries = {},
@@ -89,6 +90,7 @@ function M.set_hl(filetype)
       vim.api.nvim_set_hl(M.opts.ns_id, name, val)
     end
     queries.load_queries()
+    render.setup()
   end
 
   --- after editing preamble and save, reset highlights
