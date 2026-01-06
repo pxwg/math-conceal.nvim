@@ -166,7 +166,6 @@ local function setup_decoration_provider(lang, query_string)
             end
           end
         elseif curr_row == r2 then
-          -- 多行：尾行
           if curr_col < c2 then
             is_cursor_inside = true
           end
