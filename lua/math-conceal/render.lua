@@ -112,6 +112,7 @@ local function setup_decoration_provider(lang, query_string)
 
   -- cache render results to avoid redundant rendering
   local render_cache = {}
+  local last_cursor_cache = {}
 
   local function cursor_in_node(curr_row, curr_col, r1, c1, r2, c2)
     if curr_row < r1 or curr_row > r2 then
@@ -126,7 +127,26 @@ local function setup_decoration_provider(lang, query_string)
     if curr_row == r2 then
       return curr_col < c2
     end
-    return true -- curr_row > r1 and curr_row < r2
+    return true
+  end
+
+  local function build_row_index(marks)
+    local row_index = {}
+    for i = 1, #marks do
+      local m = marks[i]
+      local r1, r2 = m[1], m[3]
+      for row = r1, r2 do
+        if not row_index[row] then
+          row_index[row] = {}
+        end
+        table.insert(row_index[row], i)
+      end
+    end
+    return row_index
+  end
+
+  local function get_candidate_marks(row_index, curr_row)
+    return row_index[curr_row] or {}
   end
 
   api.nvim_set_decoration_provider(ns_id, {
@@ -147,6 +167,7 @@ local function setup_decoration_provider(lang, query_string)
           on_changedtree = function()
             tree_cache[buf_id] = nil
             render_cache[buf_id] = nil
+            last_cursor_cache[buf_id] = nil
           end,
         })
       end
@@ -166,22 +187,65 @@ local function setup_decoration_provider(lang, query_string)
       local curr_col = cursor[2]
 
       local cache = render_cache[buf_id]
+      local last_cursor = last_cursor_cache[buf_id]
+
+      -- Check if we can use cached results
       if cache and cache.toprow == toprow and cache.botrow == botrow then
         local marks = cache.marks
-        for i = 1, #marks do
-          local m = marks[i]
-          if not cursor_in_node(curr_row, curr_col, m[1], m[2], m[3], m[4]) then
-            extmark_opts.end_row = m[3]
-            extmark_opts.end_col = m[4]
-            extmark_opts.conceal = m[5]
-            extmark_opts.hl_group = m[6]
-            extmark_opts.priority = m[7]
-            set_extmark(buf_id, ns_id, m[1], m[2], extmark_opts)
+        local row_index = cache.row_index
+
+        local cursor_moved = not last_cursor or last_cursor[1] ~= curr_row or last_cursor[2] ~= curr_col
+
+        if cursor_moved then
+          local affected_marks = {}
+
+          -- Get marks on old cursor position
+          if last_cursor then
+            local old_candidates = get_candidate_marks(row_index, last_cursor[1])
+            for _, idx in ipairs(old_candidates) do
+              affected_marks[idx] = true
+            end
+          end
+
+          -- Get marks on new cursor position
+          local new_candidates = get_candidate_marks(row_index, curr_row)
+          for _, idx in ipairs(new_candidates) do
+            affected_marks[idx] = true
+          end
+
+          -- Only re-render affected marks
+          for idx in pairs(affected_marks) do
+            local m = marks[idx]
+            if not cursor_in_node(curr_row, curr_col, m[1], m[2], m[3], m[4]) then
+              extmark_opts.end_row = m[3]
+              extmark_opts.end_col = m[4]
+              extmark_opts.conceal = m[5]
+              extmark_opts.hl_group = m[6]
+              extmark_opts.priority = m[7]
+              set_extmark(buf_id, ns_id, m[1], m[2], extmark_opts)
+            end
+          end
+
+          last_cursor_cache[buf_id] = { curr_row, curr_col }
+        else
+          -- Cursor didn't move, render all cached marks
+          for i = 1, #marks do
+            local m = marks[i]
+            if not cursor_in_node(curr_row, curr_col, m[1], m[2], m[3], m[4]) then
+              extmark_opts.end_row = m[3]
+              extmark_opts.end_col = m[4]
+              extmark_opts.conceal = m[5]
+              extmark_opts.hl_group = m[6]
+              extmark_opts.priority = m[7]
+              set_extmark(buf_id, ns_id, m[1], m[2], extmark_opts)
+            end
           end
         end
+
         return true
       end
 
+      -- Cache miss: rebuild from scratch
       local root = tree:root()
       local marks = {}
       local n = 0
@@ -216,11 +280,17 @@ local function setup_decoration_provider(lang, query_string)
         end
       end
 
+      -- Build spatial index for fast lookup
+      local row_index = build_row_index(marks)
+
       render_cache[buf_id] = {
         toprow = toprow,
         botrow = botrow,
         marks = marks,
+        row_index = row_index,
       }
+
+      last_cursor_cache[buf_id] = { curr_row, curr_col }
 
       return true
     end,
@@ -233,6 +303,7 @@ local function setup_decoration_provider(lang, query_string)
       parser_cache[buf] = nil
       tree_cache[buf] = nil
       render_cache[buf] = nil
+      last_cursor_cache[buf] = nil
     end,
   })
 
