@@ -98,15 +98,30 @@ fn main() {
     file.write_all(json_output.as_bytes())
         .expect("Failed to write to output.json");
 
-    generate_simple_symbols_query(&simple_symbols, "math_symbols_typst.scm");
+    let bare_content = std::fs::read_to_string("queries/typst/conceal_math_bare.scm")
+        .expect("Failed to read queries/typst/conceal_math_bare.scm");
 
-    generate_dotted_symbols_query(&dotted_symbols, "dotted_symbols_typst.scm");
+    let simple_content = generate_simple_symbols_query(&simple_symbols);
+    let dotted_content = generate_dotted_symbols_query(&dotted_symbols);
+
+    // bare + \n\n + simple + \n\n + dotted
+    let final_scm_content = format!(
+        "{}\n\n{}\n\n{}",
+        bare_content.trim(),
+        simple_content.trim(),
+        dotted_content.trim()
+    );
+
+    let mut scm_file = File::create("queries/typst/conceal_math.scm")
+        .expect("Failed to create queries/typst/conceal_math.scm");
+    scm_file
+        .write_all(final_scm_content.as_bytes())
+        .expect("Failed to write to queries/typst/conceal_math.scm");
 }
 
-/// Generates a Tree-sitter query file for simple math symbols (no dot modifiers).
+/// Generates a Tree-sitter query string for simple math symbols (no dot modifiers).
 /// `symbols`: List of symbol names.
-/// `filename`: Output file name.
-fn generate_simple_symbols_query(symbols: &[String], filename: &str) {
+fn generate_simple_symbols_query(symbols: &[String]) -> String {
     let mut output = String::new();
 
     output.push_str("; Math operators and symbols\n");
@@ -120,15 +135,12 @@ fn generate_simple_symbols_query(symbols: &[String], filename: &str) {
     output.push_str("  (#set! priority 101)\n");
     output.push_str("  (#set-conceal! @typ_math_symbol \"conceal\"))\n");
 
-    let mut file = File::create(filename).expect(&format!("Failed to create {}", filename));
-    file.write_all(output.as_bytes())
-        .expect(&format!("Failed to write to {}", filename));
+    output
 }
 
-/// Generates a Tree-sitter query file for math symbols with dot modifiers.
+/// Generates a Tree-sitter query string for math symbols with dot modifiers.
 /// `symbols`: List of symbol names with dot modifiers.
-/// `filename`: Output file name.
-fn generate_dotted_symbols_query(symbols: &[String], filename: &str) {
+fn generate_dotted_symbols_query(symbols: &[String]) -> String {
     let mut output = String::new();
 
     let escaped_symbols: Vec<String> = symbols.iter().map(|s| s.replace(".", "\\\\.")).collect();
@@ -145,9 +157,7 @@ fn generate_dotted_symbols_query(symbols: &[String], filename: &str) {
     output.push_str("  (#set-conceal! @typ_math_symbol \"conceal\")\n");
     output.push_str("  )\n");
 
-    let mut file = File::create(filename).expect(&format!("Failed to create {}", filename));
-    file.write_all(output.as_bytes())
-        .expect(&format!("Failed to write to {}", filename));
+    output
 }
 
 /// Recursively extracts all symbol names and their Unicode values from a scope.
