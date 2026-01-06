@@ -27,6 +27,7 @@ local function redraw_line(buf, line)
     buf = buf,
     range = { line, line + 1 },
     valid = false,
+    cursor = true, -- redraw cursor position as well (neovim even set it to false by default)
   })
 end
 
@@ -227,17 +228,17 @@ local function setup_cursor_autocmd(pattern)
   vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     group = augroup,
     pattern = pattern,
-    callback = function(ev)
+    callback = function()
       local cursor = vim.api.nvim_win_get_cursor(0)
       local curr_row = cursor[1] - 1
 
       if curr_row ~= last_cursor_row then
         -- vim.cmd("redraw!")
-        redraw_line(ev.buf, last_cursor_row)
-        redraw_line(ev.buf, curr_row)
+        redraw_line(0, last_cursor_row)
+        redraw_line(0, curr_row)
         last_cursor_row = curr_row
       else
-        vim.cmd("redraw")
+        redraw_line(0, curr_row)
       end
     end,
   })
