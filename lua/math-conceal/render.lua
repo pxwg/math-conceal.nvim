@@ -94,15 +94,44 @@ local function setup_decoration_provider(lang, query_string)
   local ts = vim.treesitter
   local set_extmark = api.nvim_buf_set_extmark
   local get_cursor = api.nvim_win_get_cursor
+  local bo = vim.bo
 
   local parser_cache = {}
   local tree_cache = {}
-
   local hl_cache = {}
+  local captures = query.captures
+
+  local extmark_opts = {
+    end_row = 0,
+    end_col = 0,
+    conceal = "",
+    ephemeral = true,
+    hl_group = "",
+    priority = 100,
+  }
+
+  -- cache render results to avoid redundant rendering
+  local render_cache = {}
+
+  local function cursor_in_node(curr_row, curr_col, r1, c1, r2, c2)
+    if curr_row < r1 or curr_row > r2 then
+      return false
+    end
+    if r1 == r2 then
+      return curr_col >= c1 and curr_col < c2
+    end
+    if curr_row == r1 then
+      return curr_col >= c1
+    end
+    if curr_row == r2 then
+      return curr_col < c2
+    end
+    return true -- curr_row > r1 and curr_row < r2
+  end
 
   api.nvim_set_decoration_provider(ns_id, {
     on_win = function(_, win_id, buf_id, toprow, botrow)
-      if vim.bo[buf_id].filetype ~= lang then
+      if bo[buf_id].filetype ~= lang then
         return false
       end
 
@@ -114,10 +143,10 @@ local function setup_decoration_provider(lang, query_string)
         end
         parser = p
         parser_cache[buf_id] = parser
-
         parser:register_cbs({
-          on_changedtree = function(changes, tree)
+          on_changedtree = function()
             tree_cache[buf_id] = nil
+            render_cache[buf_id] = nil
           end,
         })
       end
@@ -135,88 +164,75 @@ local function setup_decoration_provider(lang, query_string)
       local cursor = get_cursor(win_id)
       local curr_row = cursor[1] - 1
       local curr_col = cursor[2]
-      local root = tree:root()
 
-      for id, node, metadata in query:iter_captures(root, buf_id, toprow, botrow) do
-        local capture_data = metadata[id]
-
-        local conceal_char
-        if capture_data then
-          conceal_char = capture_data.conceal
-        end
-        if not conceal_char then
-          conceal_char = metadata.conceal
-        end
-
-        if not conceal_char then
-          goto continue
-        end
-
-        local r1, c1, r2, c2 = node:range()
-
-        local is_cursor_inside = false
-        if curr_row == r1 then
-          if r1 == r2 then
-            if curr_col >= c1 and curr_col < c2 then
-              is_cursor_inside = true
-            end
-          else
-            if curr_col >= c1 then
-              is_cursor_inside = true
-            end
+      local cache = render_cache[buf_id]
+      if cache and cache.toprow == toprow and cache.botrow == botrow then
+        local marks = cache.marks
+        for i = 1, #marks do
+          local m = marks[i]
+          if not cursor_in_node(curr_row, curr_col, m[1], m[2], m[3], m[4]) then
+            extmark_opts.end_row = m[3]
+            extmark_opts.end_col = m[4]
+            extmark_opts.conceal = m[5]
+            extmark_opts.hl_group = m[6]
+            extmark_opts.priority = m[7]
+            set_extmark(buf_id, ns_id, m[1], m[2], extmark_opts)
           end
-        elseif curr_row == r2 then
-          if curr_col < c2 then
-            is_cursor_inside = true
-          end
-        elseif curr_row > r1 and curr_row < r2 then
-          is_cursor_inside = true
         end
-
-        if is_cursor_inside then
-          goto continue
-        end
-
-        local priority = 100
-        if capture_data and capture_data.priority then
-          priority = tonumber(metadata.priority)
-        elseif metadata.priority then
-          priority = tonumber(metadata.priority)
-        end
-
-        local capture_name = query.captures[id]
-        if not capture_name then
-          capture_name = "text"
-        end
-
-        local hl_group = hl_cache[capture_name]
-        if not hl_group then
-          hl_group = "@" .. capture_name .. "." .. lang
-          hl_cache[capture_name] = hl_group
-        end
-
-        set_extmark(buf_id, ns_id, r1, c1, {
-          end_row = r2,
-          end_col = c2,
-          conceal = conceal_char,
-          ephemeral = true,
-          hl_group = hl_group,
-          priority = priority,
-        })
-
-        ::continue::
+        return true
       end
+
+      local root = tree:root()
+      local marks = {}
+      local n = 0
+
+      for id, node, metadata in query:iter_captures(root, buf_id, toprow, botrow + 1) do
+        local capture_data = metadata[id]
+        local conceal_char = capture_data and capture_data.conceal or metadata.conceal
+        if conceal_char then
+          local r1, c1, r2, c2 = node:range()
+
+          local priority = capture_data and capture_data.priority or metadata.priority
+          priority = priority and tonumber(priority) or 100
+
+          local capture_name = captures[id] or "text"
+          local hl_group = hl_cache[capture_name]
+          if not hl_group then
+            hl_group = "@" .. capture_name .. "." .. lang
+            hl_cache[capture_name] = hl_group
+          end
+
+          n = n + 1
+          marks[n] = { r1, c1, r2, c2, conceal_char, hl_group, priority }
+
+          if not cursor_in_node(curr_row, curr_col, r1, c1, r2, c2) then
+            extmark_opts.end_row = r2
+            extmark_opts.end_col = c2
+            extmark_opts.conceal = conceal_char
+            extmark_opts.hl_group = hl_group
+            extmark_opts.priority = priority
+            set_extmark(buf_id, ns_id, r1, c1, extmark_opts)
+          end
+        end
+      end
+
+      render_cache[buf_id] = {
+        toprow = toprow,
+        botrow = botrow,
+        marks = marks,
+      }
 
       return true
     end,
   })
 
-  vim.api.nvim_create_autocmd("BufDelete", {
+  api.nvim_create_autocmd("BufDelete", {
     group = augroup,
     callback = function(ev)
       local buf = ev.buf
       parser_cache[buf] = nil
       tree_cache[buf] = nil
+      render_cache[buf] = nil
     end,
   })
 
