@@ -1,0 +1,60 @@
+name: Auto Update Typst Symbols
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-symbols:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install rust-script
+        run: cargo install rust-script
+
+      - name: Check for Updates and Run
+        id: update_process
+        run: |
+          SCRIPT_PATH="scripts/typst_symbols.rs"
+
+          LATEST_VERSION=$(cargo search typst --limit 1 | grep '^typst =' | sed -E 's/typst = "([^"]+)".*/\1/')
+
+          CURRENT_VERSION=$(grep 'typst = "' $SCRIPT_PATH | head -n 1 | sed -E 's/.*typst = "([^"]+)".*/\1/')
+
+          echo "Latest Version:  $LATEST_VERSION"
+          echo "Current Version: $CURRENT_VERSION"
+
+          if [ "$LATEST_VERSION" != "$CURRENT_VERSION" ]; then
+            echo "Update detected! Upgrading from $CURRENT_VERSION to $LATEST_VERSION"
+
+            sed -i "s/typst = \"[^\"]*\"/typst = \"$LATEST_VERSION\"/" $SCRIPT_PATH
+            sed -i "s/typst-library = \"[^\"]*\"/typst-library = \"$LATEST_VERSION\"/" $SCRIPT_PATH
+
+            echo "Running generation script..."
+            rust-script $SCRIPT_PATH
+
+            echo "updated=true" >> $GITHUB_OUTPUT
+            echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "Already up to date."
+            echo "updated=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and Push
+        if: steps.update_process.outputs.updated == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update symbols to typst ${{ steps.update_process.outputs.version }}"
+          branch: main
+          file_pattern: 'lua/ queries/ crates/ scripts/'
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "github-actions[bot]@users.noreply.github.com"

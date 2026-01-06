@@ -1,8 +1,8 @@
 #!/usr/bin/env rust-script
 //! ```cargo
 //! [dependencies]
-//! typst = "0.*"
-//! typst-library = "0.*"
+//! typst = "0.14.2"
+//! typst-library = "0.14.2"
 //! serde = { version = "1.0", features = ["derive"] }
 //! serde_json = "1.0"
 //! ```
