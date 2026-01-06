@@ -17,7 +17,21 @@ local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = tru
 
 local last_cursor_row = -1
 local query_cache = {}
-local decoration_provider_active = false
+
+---Using neovim internal redraw function to force redraw of a specific line
+---neovim 0.10+ only, for older versions, is vim.api.nvim_buf_redraw_lines
+---ref: https://github.com/nvim-mini/mini.nvim/blob/43ec250/lua/mini/diff.lua#L1905
+---@param line number line number to redraw
+local function redraw_line(buf, line)
+  if line < 0 then
+    return
+  end
+  vim.api.nvim__redraw({
+    buf = buf,
+    range = { line, line + 1 },
+    valid = false,
+  })
+end
 
 local function get_parsed_query(lang, query_string)
   local cache_key = lang .. ":" .. query_string
@@ -160,12 +174,14 @@ local function setup_cursor_autocmd(pattern)
   vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     group = augroup,
     pattern = pattern,
-    callback = function()
+    callback = function(ev)
       local cursor = vim.api.nvim_win_get_cursor(0)
       local curr_row = cursor[1] - 1
 
       if curr_row ~= last_cursor_row then
-        vim.cmd("redraw!")
+        -- vim.cmd("redraw!")
+        redraw_line(ev.buf, last_cursor_row)
+        redraw_line(ev.buf, curr_row)
         last_cursor_row = curr_row
       else
         vim.cmd("redraw")
@@ -174,6 +190,8 @@ local function setup_cursor_autocmd(pattern)
   })
 end
 
+---Setup math conceal rendering for Typst files
+---@param opts MathConcealOptions?
 function M.setup(opts)
   opts = opts or {}
 
