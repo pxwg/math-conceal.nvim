@@ -2,6 +2,7 @@ local M = {}
 
 local latex = require("math-conceal.symbols.latex")
 local typst = require("math-conceal.symbols.typst")
+local utils = require("math-conceal.utils")
 local queries = {
   latex = latex,
   typst = typst,
@@ -11,7 +12,7 @@ local query_obj_cache = {}
 local decoration_provider_active = false
 
 local ns_id = vim.api.nvim_create_namespace("math-conceal-render")
-local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = true })
+local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = false })
 
 local last_cursor_row = -1
 
@@ -77,6 +78,7 @@ end
 ---@param lang "latex" | "typst"
 ---@param query_string string
 local function setup_decoration_provider(lang, query_string)
+  local filetype = utils.lang_to_ft(lang)
   if decoration_provider_active then
     return
   end
@@ -154,7 +156,7 @@ local function setup_decoration_provider(lang, query_string)
 
   api.nvim_set_decoration_provider(ns_id, {
     on_win = function(_, win_id, buf_id, toprow, botrow)
-      if bo[buf_id].filetype ~= lang then
+      if bo[buf_id].filetype ~= filetype then
         return false
       end
 
@@ -271,54 +273,45 @@ local function setup_decoration_provider(lang, query_string)
   decoration_provider_active = true
 end
 
-local function setup_cursor_autocmd(filetypes)
-  vim.api.nvim_create_autocmd("FileType", {
+local function setup_cursor_autocmd()
+  vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     group = augroup,
-    pattern = filetypes,
+    buffer = vim.api.nvim_get_current_buf(),
     callback = function()
-      vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
-        group = augroup,
-        buffer = 0,
-        callback = function()
-          local cursor = vim.api.nvim_win_get_cursor(0)
-          local curr_row = cursor[1] - 1
+      local cursor = vim.api.nvim_win_get_cursor(0)
+      local curr_row = cursor[1] - 1
 
-          if curr_row ~= last_cursor_row then
-            -- vim.cmd("redraw!")
-            -- HACK: Neovim is quite lazy in rendering lines, so we need to force redraw the lines around cursor
-            -- Moreover, since the original cmd redraw! will redraw the whole screen, which is quite expensive,
-            -- we use internal api.nvim__redraw to only redraw the two lines we need
-            redraw_line(0, last_cursor_row)
-            redraw_line(0, curr_row)
-            last_cursor_row = curr_row
-          else
-            redraw_line(0, curr_row)
-          end
-        end,
-      })
+      if curr_row ~= last_cursor_row then
+        -- vim.cmd("redraw!")
+        -- HACK: Neovim is quite lazy in rendering lines, so we need to force redraw the lines around cursor
+        -- Moreover, since the original cmd redraw! will redraw the whole screen, which is quite expensive,
+        -- we use internal api.nvim__redraw to only redraw the two lines we need
+        redraw_line(0, last_cursor_row)
+        redraw_line(0, curr_row)
+        last_cursor_row = curr_row
+      else
+        redraw_line(0, curr_row)
+      end
     end,
   })
 end
 
 ---Setup math conceal rendering for Typst files
 ---@param opts MathConcealOptions?
-function M.setup(opts)
+---@param lang "latex" | "typst"
+function M.setup(opts, lang)
   opts = opts or {}
 
-  local langs = opts.render.enable
-  local pattern = opts.ft
   local conceal = opts.conceal or {}
 
-  for _, lang in ipairs(langs) do
-    local query_string = get_conceal_query(lang, conceal)
-    setup_decoration_provider(lang, query_string)
-  end
+  local query_string = get_conceal_query(lang, conceal)
+  setup_decoration_provider(lang, query_string)
 
-  setup_cursor_autocmd(pattern)
+  setup_cursor_autocmd()
 
-  vim.api.nvim_create_autocmd("FileType", {
+  vim.api.nvim_create_autocmd("BufEnter", {
     group = augroup,
-    pattern = pattern,
+    buffer = 0,
     callback = function()
       vim.opt_local.conceallevel = 2
       vim.opt_local.concealcursor = "nci"

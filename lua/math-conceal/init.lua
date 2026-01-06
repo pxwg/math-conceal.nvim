@@ -15,9 +15,6 @@ local M = {
       "phy",
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
-    render = {
-      enable = { "typst" }, -- support typst only for now
-    },
     depth = 90,
     ns_id = 0,
     highlights = {
@@ -58,9 +55,6 @@ local M = {
 --- @class custum_function
 --- @field custum_functions table<string, function>: A table of custom functions to be used for concealment.
 
---- @class MathConcealRenderOptions
---- @field enable string[]: A list of languages to enable math conceal rendering. Default is {"typst", "latex"}.
-
 --- @class MathConcealOptions
 --- @field conceal string[]?: Enable or disable math symbol concealment. You can add your own custom conceal types here. Default is {"greek", "script", "math", "font", "delim"}.
 --- @field ft string[]: A list of filetypes to enable conceal
@@ -68,7 +62,6 @@ local M = {
 --- @field augroup_id integer?
 --- @field ns_id integer
 --- @field highlights table<string, table<string, string>>
---- @field render MathConcealRenderOptions
 
 ---set up
 ---@param opts MathConcealOptions?
@@ -89,15 +82,20 @@ function M.set(filetype)
 end
 
 ---do some prepare work, then call `set_highlights`
----@param filetype string?
+---@param filetype string
 function M.set_hl(filetype)
+  print(filetype)
+  local file = filetype
+  if filetype == "tex" then
+    file = "latex"
+  end
   --- first run
   if #M.queries == 0 then
     for name, val in pairs(M.opts.highlights) do
       vim.api.nvim_set_hl(M.opts.ns_id, name, val)
     end
     queries.load_queries()
-    render.setup(M.opts)
+    render.setup(M.opts, file)
   end
 
   --- after editing preamble and save, reset highlights
