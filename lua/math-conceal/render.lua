@@ -110,9 +110,7 @@ local function setup_decoration_provider(lang, query_string)
     priority = 100,
   }
 
-  -- cache render results to avoid redundant rendering
   local render_cache = {}
-  local last_cursor_cache = {}
 
   local function cursor_in_node(curr_row, curr_col, r1, c1, r2, c2)
     if curr_row < r1 or curr_row > r2 then
@@ -147,6 +145,15 @@ local function setup_decoration_provider(lang, query_string)
 
   local function get_candidate_marks(row_index, curr_row)
     return row_index[curr_row] or {}
+  end
+
+  local function render_mark(buf_id, m)
+    extmark_opts.end_row = m[3]
+    extmark_opts.end_col = m[4]
+    extmark_opts.conceal = m[5]
+    extmark_opts.hl_group = m[6]
+    extmark_opts.priority = m[7]
+    set_extmark(buf_id, ns_id, m[1], m[2], extmark_opts)
   end
 
   api.nvim_set_decoration_provider(ns_id, {
@@ -187,58 +194,26 @@ local function setup_decoration_provider(lang, query_string)
       local curr_col = cursor[2]
 
       local cache = render_cache[buf_id]
-      local last_cursor = last_cursor_cache[buf_id]
 
-      -- Check if we can use cached results
       if cache and cache.toprow == toprow and cache.botrow == botrow then
         local marks = cache.marks
         local row_index = cache.row_index
 
-        local cursor_moved = not last_cursor or last_cursor[1] ~= curr_row or last_cursor[2] ~= curr_col
+        -- Only check marks on cursor's row
+        local cursor_candidates = get_candidate_marks(row_index, curr_row)
+        local skip_set = {}
 
-        if cursor_moved then
-          local affected_marks = {}
-
-          -- Get marks on old cursor position
-          if last_cursor then
-            local old_candidates = get_candidate_marks(row_index, last_cursor[1])
-            for _, idx in ipairs(old_candidates) do
-              affected_marks[idx] = true
-            end
+        for _, idx in ipairs(cursor_candidates) do
+          local m = marks[idx]
+          if cursor_in_node(curr_row, curr_col, m[1], m[2], m[3], m[4]) then
+            skip_set[idx] = true
           end
+        end
 
-          -- Get marks on new cursor position
-          local new_candidates = get_candidate_marks(row_index, curr_row)
-          for _, idx in ipairs(new_candidates) do
-            affected_marks[idx] = true
-          end
-
-          -- Only re-render affected marks
-          for idx in pairs(affected_marks) do
-            local m = marks[idx]
-            if not cursor_in_node(curr_row, curr_col, m[1], m[2], m[3], m[4]) then
-              extmark_opts.end_row = m[3]
-              extmark_opts.end_col = m[4]
-              extmark_opts.conceal = m[5]
-              extmark_opts.hl_group = m[6]
-              extmark_opts.priority = m[7]
-              set_extmark(buf_id, ns_id, m[1], m[2], extmark_opts)
-            end
-          end
-
-          last_cursor_cache[buf_id] = { curr_row, curr_col }
-        else
-          -- Cursor didn't move, render all cached marks
-          for i = 1, #marks do
-            local m = marks[i]
-            if not cursor_in_node(curr_row, curr_col, m[1], m[2], m[3], m[4]) then
-              extmark_opts.end_row = m[3]
-              extmark_opts.end_col = m[4]
-              extmark_opts.conceal = m[5]
-              extmark_opts.hl_group = m[6]
-              extmark_opts.priority = m[7]
-              set_extmark(buf_id, ns_id, m[1], m[2], extmark_opts)
-            end
+        -- Render all marks except those under cursor
+        for i = 1, #marks do
+          if not skip_set[i] then
+            render_mark(buf_id, marks[i])
           end
         end
 
@@ -270,17 +245,11 @@ local function setup_decoration_provider(lang, query_string)
           marks[n] = { r1, c1, r2, c2, conceal_char, hl_group, priority }
 
           if not cursor_in_node(curr_row, curr_col, r1, c1, r2, c2) then
-            extmark_opts.end_row = r2
-            extmark_opts.end_col = c2
-            extmark_opts.conceal = conceal_char
-            extmark_opts.hl_group = hl_group
-            extmark_opts.priority = priority
-            set_extmark(buf_id, ns_id, r1, c1, extmark_opts)
+            render_mark(buf_id, marks[n])
           end
         end
       end
 
-      -- Build spatial index for fast lookup
       local row_index = build_row_index(marks)
 
       render_cache[buf_id] = {
@@ -289,8 +258,6 @@ local function setup_decoration_provider(lang, query_string)
         marks = marks,
         row_index = row_index,
       }
-
-      last_cursor_cache[buf_id] = { curr_row, curr_col }
 
       return true
     end,
