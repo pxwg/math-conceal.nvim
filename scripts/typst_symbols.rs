@@ -100,7 +100,7 @@ fn main() {
 
     generate_simple_symbols_query(&simple_symbols, "math_symbols_typst.scm");
 
-    generate_dotted_symbols_query(&dotted_symbols, "dotted_symbols.scm");
+    generate_dotted_symbols_query(&dotted_symbols, "dotted_symbols_typst.scm");
 }
 
 /// Generates a Tree-sitter query file for simple math symbols (no dot modifiers).
