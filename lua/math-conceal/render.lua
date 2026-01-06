@@ -1,7 +1,5 @@
 local M = {}
 
-local typst_symbols = require("math-conceal.symbols").typst_symbols
-
 local latex = require("math-conceal.symbols.latex")
 local typst = require("math-conceal.symbols.typst")
 local queries = {
@@ -16,7 +14,6 @@ local ns_id = vim.api.nvim_create_namespace("math-conceal-render")
 local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = true })
 
 local last_cursor_row = -1
-local query_cache = {}
 
 ---Using neovim internal redraw function to force redraw of a specific line
 ---neovim 0.10+ only, for older versions, is vim.api.nvim_buf_redraw_lines
@@ -33,6 +30,10 @@ local function redraw_line(buf, line)
   })
 end
 
+---Get parsed query object from cache or parse a new one
+---@param lang "latex" | "typst"
+---@param query_string string
+---@return table|nil parsed_query
 local function get_parsed_query(lang, query_string)
   local cache_key = lang .. ":" .. query_string
   if query_obj_cache[cache_key] then
@@ -88,18 +89,15 @@ local function setup_decoration_provider(lang, query_string)
     return
   end
 
-  local hl_cache = setmetatable({}, {
-    __index = function(t, key)
-      local val = "@" .. key .. "." .. lang
-      t[key] = val
-      return val
-    end,
-  })
-
   local api = vim.api
   local ts = vim.treesitter
   local set_extmark = api.nvim_buf_set_extmark
   local get_cursor = api.nvim_win_get_cursor
+
+  local parser_cache = {}
+  local tree_cache = {}
+
+  local hl_cache = {}
 
   api.nvim_set_decoration_provider(ns_id, {
     on_win = function(_, win_id, buf_id, toprow, botrow)
@@ -107,49 +105,95 @@ local function setup_decoration_provider(lang, query_string)
         return false
       end
 
-      local success, parser = pcall(ts.get_parser, buf_id, lang)
-      if not success or not parser then
-        return false
+      local parser = parser_cache[buf_id]
+      if not parser then
+        local success, p = pcall(ts.get_parser, buf_id, lang)
+        if not success or not p then
+          return false
+        end
+        parser = p
+        parser_cache[buf_id] = parser
+
+        parser:register_cbs({
+          on_changedtree = function(changes, tree)
+            tree_cache[buf_id] = nil
+          end,
+        })
       end
 
-      local tree = parser:parse()[1]
+      local tree = tree_cache[buf_id]
       if not tree then
-        return false
+        local trees = parser:parse()
+        tree = trees and trees[1]
+        if not tree then
+          return false
+        end
+        tree_cache[buf_id] = tree
       end
 
       local cursor = get_cursor(win_id)
       local curr_row = cursor[1] - 1
       local curr_col = cursor[2]
+      local root = tree:root()
 
-      for id, node, metadata in query:iter_captures(tree:root(), buf_id, toprow, botrow) do
-        local capture_data = metadata[id] or {}
-        local conceal_char = capture_data.conceal or metadata.conceal
+      for id, node, metadata in query:iter_captures(root, buf_id, toprow, botrow) do
+        local capture_data = metadata[id]
 
-        if conceal_char == nil then
+        local conceal_char
+        if capture_data then
+          conceal_char = capture_data.conceal
+        end
+        if not conceal_char then
+          conceal_char = metadata.conceal
+        end
+
+        if not conceal_char then
           goto continue
         end
 
         local r1, c1, r2, c2 = node:range()
 
         local is_cursor_inside = false
-        if curr_row >= r1 and curr_row <= r2 then
-          if curr_row == r1 and curr_row == r2 then
+        if curr_row == r1 then
+          if r1 == r2 then
             if curr_col >= c1 and curr_col < c2 then
               is_cursor_inside = true
             end
           else
+            if curr_col >= c1 then
+              is_cursor_inside = true
+            end
+          end
+        elseif curr_row == r2 then
+          -- 多行：尾行
+          if curr_col < c2 then
             is_cursor_inside = true
           end
+        elseif curr_row > r1 and curr_row < r2 then
+          is_cursor_inside = true
         end
 
         if is_cursor_inside then
           goto continue
         end
 
-        local priority = tonumber(capture_data.priority) or tonumber(metadata.priority) or 100
+        local priority = 100
+        if capture_data and capture_data.priority then
+          priority = tonumber(metadata.priority)
+        elseif metadata.priority then
+          priority = tonumber(metadata.priority)
+        end
 
-        local capture_name = query.captures[id] or "text"
+        local capture_name = query.captures[id]
+        if not capture_name then
+          capture_name = "text"
+        end
+
         local hl_group = hl_cache[capture_name]
+        if not hl_group then
+          hl_group = "@" .. capture_name .. "." .. lang
+          hl_cache[capture_name] = hl_group
+        end
 
         set_extmark(buf_id, ns_id, r1, c1, {
           end_row = r2,
@@ -164,6 +208,15 @@ local function setup_decoration_provider(lang, query_string)
       end
 
       return true
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("BufDelete", {
+    group = augroup,
+    callback = function(ev)
+      local buf = ev.buf
+      parser_cache[buf] = nil
+      tree_cache[buf] = nil
     end,
   })
 
