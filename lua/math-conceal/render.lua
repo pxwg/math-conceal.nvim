@@ -55,18 +55,6 @@ end
 ---@param language "latex" | "typst"
 ---@param names string[]
 ---@return string conceal_query
-local function get_conceal_query_string(language, names)
-  local output = {}
-  for _, name in ipairs(names) do
-    local key = "conceal_" .. name
-    local q_str = queries[language] and queries[language][key]
-    if q_str then
-      table.insert(output, q_str)
-    end
-  end
-  return table.concat(output, "\n")
-end
-
 local function get_conceal_query(language, names)
   local output = {}
   -- Batch collect conceal files for both languages
@@ -80,6 +68,14 @@ local function get_conceal_query(language, names)
   return table.concat(output, "\n")
 end
 
+---Setup decoration provider for conceal rendering
+---Using space to trade for time, caching a lot of parsing results to improve rendering efficiency, including:
+---1. Parser per buffer
+---2. Syntax tree per buffer
+---3. Cursor position based render cache per buffer
+---More optimization can be done in the future if needed
+---@param lang "latex" | "typst"
+---@param query_string string
 local function setup_decoration_provider(lang, query_string)
   if decoration_provider_active then
     return
