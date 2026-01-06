@@ -1,7 +1,7 @@
 ---wrap lua module written in rust. independent from neovim.
 local M = {}
 
-local lookup_conceal = require 'lookup_conceal'
+local lookup_conceal = require("lookup_conceal")
 
 --- Function to convert LaTeX math symbols to Unicode
 --- @param text string: The LaTeX math symbol to convert
@@ -9,8 +9,7 @@ local lookup_conceal = require 'lookup_conceal'
 --- @param type? string: Type of concealment (e.g., "cal", "frak", "bold", etc.)
 --- @return string: The converted Unicode symbol or the original text if not found
 function M.lookup_math_symbol(text, pattern, type)
-  return lookup_conceal.lookup_math_symbol({ text = text, pattern = pattern or "conceal", mode = type or "" })
-      or text
+  return lookup_conceal.lookup_math_symbol({ text = text, pattern = pattern or "conceal", mode = type or "" }) or text
 end
 
 --- Batch lookup function for better performance
