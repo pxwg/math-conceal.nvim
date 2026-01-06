@@ -271,22 +271,28 @@ local function setup_decoration_provider(lang, query_string)
   decoration_provider_active = true
 end
 
-local function setup_cursor_autocmd(pattern)
-  vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+local function setup_cursor_autocmd(filetypes)
+  vim.api.nvim_create_autocmd("FileType", {
     group = augroup,
-    pattern = pattern,
+    pattern = filetypes,
     callback = function()
-      local cursor = vim.api.nvim_win_get_cursor(0)
-      local curr_row = cursor[1] - 1
+      vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+        group = augroup,
+        buffer = 0,
+        callback = function()
+          local cursor = vim.api.nvim_win_get_cursor(0)
+          local curr_row = cursor[1] - 1
 
-      if curr_row ~= last_cursor_row then
-        -- vim.cmd("redraw!")
-        redraw_line(0, last_cursor_row)
-        redraw_line(0, curr_row)
-        last_cursor_row = curr_row
-      else
-        redraw_line(0, curr_row)
-      end
+          if curr_row ~= last_cursor_row then
+            -- vim.cmd("redraw!")
+            redraw_line(0, last_cursor_row)
+            redraw_line(0, curr_row)
+            last_cursor_row = curr_row
+          else
+            redraw_line(0, curr_row)
+          end
+        end,
+      })
     end,
   })
 end
@@ -300,9 +306,8 @@ function M.setup(opts)
   local pattern = opts.ft
   local conceal = opts.conceal or {}
 
-  local query_string = get_conceal_query("typst", conceal)
-
   for _, lang in ipairs(langs) do
+    local query_string = get_conceal_query(lang, conceal)
     setup_decoration_provider(lang, query_string)
   end
 
