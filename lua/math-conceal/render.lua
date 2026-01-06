@@ -174,7 +174,6 @@ local function setup_decoration_provider(lang, query_string)
           on_changedtree = function()
             tree_cache[buf_id] = nil
             render_cache[buf_id] = nil
-            last_cursor_cache[buf_id] = nil
           end,
         })
       end
@@ -270,7 +269,6 @@ local function setup_decoration_provider(lang, query_string)
       parser_cache[buf] = nil
       tree_cache[buf] = nil
       render_cache[buf] = nil
-      last_cursor_cache[buf] = nil
     end,
   })
 
