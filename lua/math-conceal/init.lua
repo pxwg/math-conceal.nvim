@@ -84,9 +84,8 @@ end
 ---do some prepare work, then call `set_highlights`
 ---@param filetype string
 function M.set_hl(filetype)
-  print(filetype)
   local file = filetype
-  if filetype == "tex" then
+  if filetype ~= "typst" then
     file = "latex"
   end
   --- first run

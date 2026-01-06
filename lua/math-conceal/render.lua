@@ -304,8 +304,9 @@ function M.setup(opts, lang)
 
   local conceal = opts.conceal or {}
 
-  local query_string = get_conceal_query(lang, conceal)
-  setup_decoration_provider(lang, query_string)
+  local file_lang = utils.lang_to_lt(lang)
+  local query_string = get_conceal_query(file_lang, conceal)
+  setup_decoration_provider(file_lang, query_string)
 
   setup_cursor_autocmd()
 
