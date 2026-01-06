@@ -15,7 +15,7 @@ local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = tru
 
 local last_cursor_row = -1
 
----Using neovim internal redraw function to force redraw of a specific line
+---HACK: Using neovim internal redraw function to force redraw of a specific line
 ---neovim 0.10+ only, for older versions, is vim.api.nvim_buf_redraw_lines
 ---ref: https://github.com/nvim-mini/mini.nvim/blob/43ec250/lua/mini/diff.lua#L1905
 ---@param line number line number to redraw
@@ -285,6 +285,9 @@ local function setup_cursor_autocmd(filetypes)
 
           if curr_row ~= last_cursor_row then
             -- vim.cmd("redraw!")
+            -- HACK: Neovim is quite lazy in rendering lines, so we need to force redraw the lines around cursor
+            -- Moreover, since the original cmd redraw! will redraw the whole screen, which is quite expensive,
+            -- we use internal api.nvim__redraw to only redraw the two lines we need
             redraw_line(0, last_cursor_row)
             redraw_line(0, curr_row)
             last_cursor_row = curr_row
