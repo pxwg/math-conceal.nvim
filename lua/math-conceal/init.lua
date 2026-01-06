@@ -16,7 +16,7 @@ local M = {
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
     render = {
-      enable = { "typst", "latex" },
+      enable = { "typst" }, -- support typst only for now
     },
     depth = 90,
     ns_id = 0,
@@ -68,6 +68,7 @@ local M = {
 --- @field augroup_id integer?
 --- @field ns_id integer
 --- @field highlights table<string, table<string, string>>
+--- @field render MathConcealRenderOptions
 
 ---set up
 ---@param opts MathConcealOptions?
@@ -96,7 +97,7 @@ function M.set_hl(filetype)
       vim.api.nvim_set_hl(M.opts.ns_id, name, val)
     end
     queries.load_queries()
-    render.setup()
+    render.setup(M.opts)
   end
 
   --- after editing preamble and save, reset highlights

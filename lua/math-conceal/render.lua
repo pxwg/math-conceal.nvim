@@ -296,25 +296,21 @@ end
 function M.setup(opts)
   opts = opts or {}
 
-  local lang = opts.lang or "typst"
-  local pattern = opts.pattern or ("*." .. (opts.file_extension or "typ"))
+  local langs = opts.render.enable
+  local pattern = opts.ft
+  local conceal = opts.conceal or {}
 
-  local query_string = get_conceal_query("typst", {
-    "greek",
-    "script",
-    "math",
-    "font",
-    "delim",
-    "phy",
-  })
+  local query_string = get_conceal_query("typst", conceal)
 
-  setup_decoration_provider(lang, query_string)
+  for _, lang in ipairs(langs) do
+    setup_decoration_provider(lang, query_string)
+  end
 
   setup_cursor_autocmd(pattern)
 
   vim.api.nvim_create_autocmd("FileType", {
     group = augroup,
-    pattern = lang,
+    pattern = pattern,
     callback = function()
       vim.opt_local.conceallevel = 2
       vim.opt_local.concealcursor = "nci"
