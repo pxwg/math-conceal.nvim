@@ -4,7 +4,7 @@ local M = {
   files = {},
   queries = {},
   -- Default options
-  --- @type LaTeXConcealOptions
+  --- @type MathConcealOptions
   opts = {
     conceal = {
       "greek",
@@ -55,7 +55,7 @@ local M = {
 --- @class custum_function
 --- @field custum_functions table<string, function>: A table of custom functions to be used for concealment.
 
---- @class LaTeXConcealOptions
+--- @class MathConcealOptions
 --- @field conceal string[]?: Enable or disable math symbol concealment. You can add your own custom conceal types here. Default is {"greek", "script", "math", "font", "delim"}.
 --- @field ft string[]: A list of filetypes to enable LaTeX conceal
 --- @field depth integer
@@ -64,7 +64,7 @@ local M = {
 --- @field highlights table<string, table<string, string>>
 
 ---set up
----@param opts LaTeXConcealOptions?
+---@param opts MathConcealOptions?
 function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", M.opts, opts or {})
 end
