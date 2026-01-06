@@ -15,6 +15,9 @@ local M = {
       "phy",
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+    render = {
+      enable = { "typst", "latex" },
+    },
     depth = 90,
     ns_id = 0,
     highlights = {
@@ -46,8 +49,8 @@ local M = {
       ["@punctuation"] = { link = "@conceal" },
       ["@left_paren"] = { link = "@conceal" },
       ["@right_paren"] = { link = "@conceal" },
-    }
-  }
+    },
+  },
 }
 
 --- TODO: add custum_function setup
@@ -55,9 +58,12 @@ local M = {
 --- @class custum_function
 --- @field custum_functions table<string, function>: A table of custom functions to be used for concealment.
 
+--- @class MathConcealRenderOptions
+--- @field enable string[]: A list of languages to enable math conceal rendering. Default is {"typst", "latex"}.
+
 --- @class MathConcealOptions
 --- @field conceal string[]?: Enable or disable math symbol concealment. You can add your own custom conceal types here. Default is {"greek", "script", "math", "font", "delim"}.
---- @field ft string[]: A list of filetypes to enable LaTeX conceal
+--- @field ft string[]: A list of filetypes to enable conceal
 --- @field depth integer
 --- @field augroup_id integer?
 --- @field ns_id integer
@@ -102,7 +108,7 @@ function M.set_hl(filetype)
       callback = function()
         M.set_highlights("latex", M.queries.latex, "tex")
         vim.treesitter.start()
-      end
+      end,
     })
   end
 
