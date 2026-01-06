@@ -10,6 +10,11 @@ local queries = {
 
 local query_obj_cache = {}
 local decoration_provider_active = false
+local configs = {} -- cache different configs
+
+local parser_cache = {}
+local tree_cache = {}
+local render_cache = {}
 
 local ns_id = vim.api.nvim_create_namespace("math-conceal-render")
 local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = false })
@@ -79,12 +84,19 @@ end
 ---@param query_string string
 local function setup_decoration_provider(lang, query_string)
   local filetype = utils.lang_to_ft(lang)
-  if decoration_provider_active then
-    return
-  end
 
   local query = get_parsed_query(lang, query_string)
   if not query then
+    return
+  end
+
+  configs[filetype] = {
+    query = query,
+    lang = lang,
+    hl_cache = {},
+  }
+
+  if decoration_provider_active then
     return
   end
 
@@ -94,11 +106,6 @@ local function setup_decoration_provider(lang, query_string)
   local get_cursor = api.nvim_win_get_cursor
   local bo = vim.bo
 
-  local parser_cache = {}
-  local tree_cache = {}
-  local hl_cache = {}
-  local captures = query.captures
-
   local extmark_opts = {
     end_row = 0,
     end_col = 0,
@@ -107,8 +114,6 @@ local function setup_decoration_provider(lang, query_string)
     hl_group = "",
     priority = 100,
   }
-
-  local render_cache = {}
 
   local function cursor_in_node(curr_row, curr_col, r1, c1, r2, c2)
     if curr_row < r1 or curr_row > r2 then
@@ -156,9 +161,17 @@ local function setup_decoration_provider(lang, query_string)
 
   api.nvim_set_decoration_provider(ns_id, {
     on_win = function(_, win_id, buf_id, toprow, botrow)
-      if bo[buf_id].filetype ~= filetype then
+      local ft = bo[buf_id].filetype
+      local config = configs[ft]
+
+      if not config then
         return false
       end
+
+      local query = config.query
+      local lang = config.lang -- tree-sitter lang (e.g. "latex", "typst")
+      local hl_cache = config.hl_cache
+      local captures = query.captures
 
       local parser = parser_cache[buf_id]
       if not parser then
@@ -297,7 +310,7 @@ local function setup_cursor_autocmd()
 end
 
 ---Setup math conceal rendering for Typst files
----@param opts MathConcealOptions?
+---@param opts table?
 ---@param lang "latex" | "typst"
 function M.setup(opts, lang)
   opts = opts or {}
