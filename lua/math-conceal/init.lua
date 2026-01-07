@@ -1,9 +1,10 @@
 local queries = require("math-conceal.query")
+local render = require("math-conceal.render")
 local M = {
   files = {},
   queries = {},
   -- Default options
-  --- @type LaTeXConcealOptions
+  --- @type MathConcealOptions
   opts = {
     conceal = {
       "greek",
@@ -45,8 +46,8 @@ local M = {
       ["@punctuation"] = { link = "@conceal" },
       ["@left_paren"] = { link = "@conceal" },
       ["@right_paren"] = { link = "@conceal" },
-    }
-  }
+    },
+  },
 }
 
 --- TODO: add custum_function setup
@@ -54,16 +55,16 @@ local M = {
 --- @class custum_function
 --- @field custum_functions table<string, function>: A table of custom functions to be used for concealment.
 
---- @class LaTeXConcealOptions
+--- @class MathConcealOptions
 --- @field conceal string[]?: Enable or disable math symbol concealment. You can add your own custom conceal types here. Default is {"greek", "script", "math", "font", "delim"}.
---- @field ft string[]: A list of filetypes to enable LaTeX conceal
+--- @field ft string[]: A list of filetypes to enable conceal
 --- @field depth integer
 --- @field augroup_id integer?
 --- @field ns_id integer
 --- @field highlights table<string, table<string, string>>
 
 ---set up
----@param opts LaTeXConcealOptions?
+---@param opts MathConcealOptions?
 function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", M.opts, opts or {})
 end
@@ -81,14 +82,19 @@ function M.set(filetype)
 end
 
 ---do some prepare work, then call `set_highlights`
----@param filetype string?
+---@param filetype string
 function M.set_hl(filetype)
+  local file = filetype
+  if filetype ~= "typst" then
+    file = "latex"
+  end
   --- first run
   if #M.queries == 0 then
     for name, val in pairs(M.opts.highlights) do
       vim.api.nvim_set_hl(M.opts.ns_id, name, val)
     end
     queries.load_queries()
+    render.setup(M.opts, file)
   end
 
   --- after editing preamble and save, reset highlights
@@ -100,7 +106,7 @@ function M.set_hl(filetype)
       callback = function()
         M.set_highlights("latex", M.queries.latex, "tex")
         vim.treesitter.start()
-      end
+      end,
     })
   end
 
