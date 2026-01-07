@@ -4,6 +4,8 @@
 
 Faster and More Precise [LaTeX](https://www.latex-project.org/) and [typst](https://github.com/typst/typst) conceal for [Neovim](https://github.com/neovim/neovim) with the power of [rust](https://www.rust-lang.org/).
 
+https://github.com/user-attachments/assets/65826ae2-2cd5-48a4-aa37-bfd3d9748b31
+
 <table style="width: 80%; margin: auto; text-align: center;">
   <tr>
     <td style="width: 50%;">
@@ -16,24 +18,6 @@ Faster and More Precise [LaTeX](https://www.latex-project.org/) and [typst](http
       <figure>
         <img src="https://github.com/user-attachments/assets/affbcc24-df83-4a45-9f02-aeba891f7727" alt="LaTeX Showcase" style="width: 99%;">
         <figcaption>LaTeX-After</figcaption>
-      </figure>
-    </td>
-  </tr>
-</table>
-
-
-<table style="width: 80%; margin: auto; text-align: center;">
-  <tr>
-    <td style="width: 50%;">
-      <figure>
-        <img src="https://github.com/user-attachments/assets/e0823415-fd78-43c5-9744-13c2313adedb" alt="Typst Showcase" style="width: 95%;">
-        <figcaption>Typst-Before</figcaption>
-      </figure>
-    </td>
-    <td style="width: 50%;">
-      <figure>
-        <img src="https://github.com/user-attachments/assets/c1effd1b-f7e9-41df-b97c-a7bddca0ee82" alt="Typst Showcase" style="width: 99%;">
-        <figcaption>Typst-After</figcaption>
       </figure>
     </td>
   </tr>
