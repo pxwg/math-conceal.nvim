@@ -34,7 +34,7 @@
     "{" @open_paren
     (_) @sup_letter
     "}" @close_paren) @sup_object
-  (#match? @sup_object "^\\{[a-z1-9]\\}$")
+  (#match? @sup_object "^\\{[a-z0-9]\\}$")
   (#set! @sup_symbol conceal "")
   (#set! @open_paren conceal "")
   (#set! @close_paren conceal "")
@@ -52,6 +52,6 @@
 (superscript
   "^" @sup_symbol
   superscript: (_) @sup_object
-  (#match? @sup_object "^[a-z1-9]$")
+  (#match? @sup_object "^[a-z0-9]$")
   (#set! @sup_symbol conceal "")
   (#set-sup! @sup_object))
