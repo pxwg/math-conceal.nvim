@@ -149,7 +149,7 @@ local function register_conceal_type(name, pattern, directive_name)
 
     -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, pattern, value)
-    
+
     -- Only set concealment if Rust found a symbol (result != original text)
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}
@@ -175,7 +175,7 @@ local handler_dispatch = {
 
     -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, "font", function_name_text)
-    
+
     -- Only set concealment if Rust found a symbol (result != original text)
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}
@@ -197,7 +197,7 @@ local handler_dispatch = {
 
     -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, "conceal", value)
-    
+
     -- Only set concealment if Rust found a symbol (result != original text)
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}
@@ -213,10 +213,10 @@ local handler_dispatch = {
 
     local node = match[capture_id]
     local node_text = vim.treesitter.get_node_text(node, source)
-    
+
     -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, "sub", value)
-    
+
     -- Only set concealment if Rust found a symbol (result != original text)
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}
@@ -232,10 +232,10 @@ local handler_dispatch = {
 
     local node = match[capture_id]
     local node_text = vim.treesitter.get_node_text(node, source)
-    
+
     -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, "sup", value)
-    
+
     -- Only set concealment if Rust found a symbol (result != original text)
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}
@@ -257,7 +257,7 @@ local handler_dispatch = {
 
     -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, "escape", value)
-    
+
     -- Only set concealment if Rust found a symbol (result != original text)
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}
