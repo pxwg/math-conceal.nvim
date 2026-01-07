@@ -32,6 +32,9 @@ The basic solution of the problem above comes from [latex.nvim](https://github.c
 ## Features
 
 - High performance conceal for LaTeX and typst files.
+- Fine grained conceal patterns:
+    - Original neovim conceal patterns: expand *all* concealed nodes on the line where the cursor is located.
+  - Fine grained conceal patterns: only expand the concealed node under the cursor.
 - Support multiple conceal patterns, including greek letters, script letters, math symbols, font styles, delimiters, and physical units.
 - Multiple highlight groups for different conceal patterns, allowing you to customize the appearance of each pattern (all highlight groups can be found in [highlights](./highlights/highlights.md)).
 
@@ -94,11 +97,13 @@ return {
 ## To-do
 
 - [ ] Better support for typst files, and customizable conceal patterns.
+    - [x] LaTeX customizable conceal patterns.
+  - [ ]  Typst customizable conceal patterns.
 - [ ] Commutative diagram conceal for Typst files.
 - [ ] Table conceal for LaTeX and Typst files (inspired from [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim)).
 - [ ] Automatically maintain the conceal query file and `math_symbols.json` file.
-- [ ] Decoupling the `latex` part and `typst` part.
-- [ ] A more fine-grained conceal rendering (reference: [latex_concealer.nvim](http://github.com/dirichy/latex_concealer.nvim)).
+    - [x] Typst
+  - [ ]  LaTeX
 
 ## References
 
@@ -108,4 +113,6 @@ return {
 ## Acknowledgements
 
 - [Freed-Wu](https://github.com/Freed-Wu): Instrumental in publishing this plugin to [LuaRocks](https://luarocks.org/modules/pxwg/math-conceal.nvim) and refactoring the code structure to fit the best practices for Neovim plugins.
+- [Dirichy](https://github.com/dirichy): for helpful discussions about LaTeX conceal patterns and optimizations.
 - [latex.nvim](https://github.com/robbielyman/latex.nvim) for the idea of using customized conceal patterns.
+- [latex_concealer.nvim](http://github.com/dirichy/latex_concealer.nvim) for the idea of fine grained conceal patterns.
