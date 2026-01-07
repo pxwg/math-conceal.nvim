@@ -1,6 +1,6 @@
 local M = {}
 
-local conceal = require "math-conceal.conceal"
+local conceal = require("math-conceal.conceal")
 
 -- Cache for frequently used symbols to reduce FFI overhead
 local symbol_cache = {}
@@ -168,7 +168,7 @@ local handler_dispatch = {
 
     metadata[capture_id] = metadata[capture_id] or {}
     metadata[capture_id]["conceal"] =
-        cached_lookup(vim.treesitter.get_node_text(node, source), "font", function_name_text)
+      cached_lookup(vim.treesitter.get_node_text(node, source), "font", function_name_text)
   end,
 
   conceal = function(match, _, source, predicate, metadata)
