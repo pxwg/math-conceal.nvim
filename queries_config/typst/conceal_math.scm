@@ -28,18 +28,22 @@
 
 ; Conceal "frac" and replace with opening parenthesis
 ((call
-  item: (ident) @func_name
-  "(" @left_paren
-  (_)
-  ")" @right_paren)
-  (#eq? @func_name "frac")
-  (#has-ancestor? @func_name math formula)
-  (#set! conceal "(" @left_paren)
-  (#set! conceal ")" @right_paren)
-  (#set! conceal "" @func_name)
-  (#set! priority 100))
+  item: (ident) @_frac_name
+  (#eq? @_frac_name "frac"))
+  (#set! conceal "" @_frac_name)
+  (#set! priority 1000))
 
-; Conceal "abs" function
+; Replace comma with division slash
+((call
+  item: (ident) @_func_name
+  (#eq? @_func_name "frac")
+  (_)
+  "," @punctuation.comma
+  (_))
+  (#set! conceal "/")
+  (#set! priority 105))
+
+; Conceal "abs" function name
 (call
   item: (ident) @abs_name
   (#eq? @abs_name "abs")

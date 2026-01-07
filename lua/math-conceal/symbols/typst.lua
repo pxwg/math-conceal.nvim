@@ -1,78 +1,60 @@
 local M = {}
 
-M.conceal_math = [[
-; Typst math conceals
-; Based on Typst math mode syntax tree structure
-; Math function calls with special symbols
+M.conceal_delim = [[
+; Typst delimiter conceals
+; Math delimiters - parentheses, brackets, braces
 (call
-  item: (ident) @typ_math_symbol
-  (#any-of? @typ_math_symbol "root" "sum" "product" "integral" "sqrt")
-  ; (#has-ancestor? @func math formula)
-  (#set! priority 99)
-  (#set-conceal! @typ_math_symbol "conceal"))
+  item: (ident) @typ_math_delim
+  (#any-of? @typ_math_delim "lr" "left" "right")
+  (#has-ancestor? @typ_math_delim math formula)
+  (#set! conceal ""))
 
-(((ident) @typ_math_symbol
-  (#any-of? @typ_math_symbol "root" "sum" "product" "integral"))
-  ; (#has-ancestor? @conceal math formula)
-  ; (#set! @conceal "m"))
-  (#set! priority 99)
-  (#set-conceal! @typ_math_symbol "conceal"))
+; Angle brackets
+(call
+  item: (ident) @typ_math_delim
+  (#any-of? @typ_math_delim "angle" "langle" "rangle")
+  (#has-ancestor? @typ_math_delim math formula)
+  (#set-conceal! @typ_math_delim "conceal"))
 
-; Escape sequences - regex removed, Rust will filter
-((escape) @typ_math_symbol
-  (#set! priority 102)
-  (#set-escape! @typ_math_symbol "conceal"))
+; Floor and ceiling
+(call
+  item: (ident) @typ_math_delim
+  (#any-of? @typ_math_delim "floor" "ceil" "lfloor" "rfloor" "lceil" "rceil")
+  (#has-ancestor? @typ_math_delim math formula)
+  (#set-conceal! @typ_math_delim "conceal"))
 
-; Special symbols in math mode
-((symbol) @symbol
-  (#any-of? @symbol "+" "-" "*" "/" "=" "<" ">" "(" ")" "[" "]" "{" "}")
-  (#has-ancestor? @symbol math formula)
-  (#set! priority 90))
-
-; Conceal "frac" and replace with opening parenthesis
+; Norm delimiters
 ((call
-  item: (ident) @func_name
-  "(" @left_paren
-  (_)
-  ")" @right_paren)
-  (#eq? @func_name "frac")
-  (#has-ancestor? @func_name math formula)
-  (#set! conceal "(" @left_paren)
-  (#set! conceal ")" @right_paren)
-  (#set! conceal "" @func_name)
-  (#set! priority 100))
+        item: (ident) @cmd
+        "(" @left_brace
+        (_)
+        ")" @right_brace)
+ (#eq? @cmd "norm")
+ (#set! @cmd conceal "")
+ (#set! @left_brace conceal "‖")
+ (#set! @right_brace conceal "‖"))
 
-; Conceal "abs" function
-(call
-  item: (ident) @abs_name
-  (#eq? @abs_name "abs")
-  (#set! conceal "")
-  (#set! priority 100))
+; Vertical bars and double bars
+((symbol) @typ_math_delim
+  (#any-of? @typ_math_delim "|" "||")
+  (#has-ancestor? @typ_math_delim math formula)
+  (#set-conceal! @typ_math_delim "conceal"))
 
-; Conceal parentheses for abs function
-(call
-  item: (ident) @func_name
-  "(" @left_paren
-  (_)
-  ")" @right_paren
-  (#eq? @func_name "abs")
-  (#set! conceal "|" @left_paren)
-  (#set! conceal "|" @right_paren)
-  (#set! priority 90))
+; Inline math dollars and quotes
+(math
+  "$" @typ_inline_dollar
+  (#set! @typ_inline_dollar conceal ""))
 
-; Math operators and symbols - regex removed, Rust will filter
-((ident) @typ_math_symbol
-  (#has-ancestor? @typ_math_symbol math formula)
-  ; (#not-has-ancestor? @typ_math_symbol call)
-  (#set! priority 101)
-  (#set-conceal! @typ_math_symbol "conceal"))
+(string
+  "\"" @typ_inline_quote
+  (#set! @typ_inline_quote conceal ""))
 
-; Math operators and symbols with modifiers - regex removed, Rust will filter
-((field) @typ_math_symbol
-  (#set! priority 102)
-  (#has-ancestor? @typ_math_symbol math formula)
-  ; (#not-has-ancestor? @typ_math_symbol call)
-  (#set-conceal! @typ_math_symbol "conceal"))
+(strong
+  "*" @typ_inline_asterisk
+  (#set! @typ_inline_asterisk conceal ""))
+
+((align "&" @typ_inline_ampersand)
+  (#set! @typ_inline_ampersand conceal ""))
 
 ]]
 
@@ -135,6 +117,170 @@ M.conceal_font = [[
   (#any-of? @func "upright" "italic" "script" "mono" "sans")
   (#has-ancestor? @func math formula)
   (#set! conceal ""))
+
+]]
+
+M.conceal_greek = [[
+; Typst Greek letter conceals - regex removed, Rust hash table will filter
+; Greek letters as function calls
+(call
+  item: (ident) @typ_greek_symbol
+  (#set! priority 102)
+  (#set-conceal! @typ_greek_symbol "conceal"))
+  ; (#has-ancestor? @conceal math formula)
+
+; (#lua_func! @conceal "conceal"))
+; Greek letters as direct identifiers
+((ident) @typ_greek_symbol
+  (#set! priority 102)
+  ; (#has-ancestor? @conceal math formula)
+  ; (#set! @conceal "m"))
+  (#set-conceal! @typ_greek_symbol "conceal"))
+
+]]
+
+M.conceal_math = [[
+; Typst math conceals
+; Based on Typst math mode syntax tree structure
+; Math function calls with special symbols
+(call
+  item: (ident) @typ_math_symbol
+  (#any-of? @typ_math_symbol "root" "sum" "product" "integral" "sqrt")
+  ; (#has-ancestor? @func math formula)
+  (#set! priority 99)
+  (#set-conceal! @typ_math_symbol "conceal"))
+
+(((ident) @typ_math_symbol
+  (#any-of? @typ_math_symbol "root" "sum" "product" "integral"))
+  ; (#has-ancestor? @conceal math formula)
+  ; (#set! @conceal "m"))
+  (#set! priority 99)
+  (#set-conceal! @typ_math_symbol "conceal"))
+
+; Escape sequences - regex removed, Rust will filter
+((escape) @typ_math_symbol
+  (#set! priority 102)
+  (#set-escape! @typ_math_symbol "conceal"))
+
+; Special symbols in math mode
+((symbol) @symbol
+  (#any-of? @symbol "+" "-" "*" "/" "=" "<" ">" "(" ")" "[" "]" "{" "}")
+  (#has-ancestor? @symbol math formula)
+  (#set! priority 90))
+
+; Conceal "frac" and replace with opening parenthesis
+((call
+  item: (ident) @_frac_name
+  (#eq? @_frac_name "frac"))
+  (#set! conceal "" @_frac_name)
+  (#set! priority 1000))
+
+; Replace comma with division slash
+((call
+  item: (ident) @_func_name
+  (#eq? @_func_name "frac")
+  (_)
+  "," @punctuation.comma
+  (_))
+  (#set! conceal "/")
+  (#set! priority 105))
+
+; Conceal "abs" function name
+(call
+  item: (ident) @abs_name
+  (#eq? @abs_name "abs")
+  (#set! conceal "")
+  (#set! priority 100))
+
+; Conceal parentheses for abs function
+(call
+  item: (ident) @func_name
+  "(" @left_paren
+  (_)
+  ")" @right_paren
+  (#eq? @func_name "abs")
+  (#set! conceal "|" @left_paren)
+  (#set! conceal "|" @right_paren)
+  (#set! priority 90))
+
+; Math operators and symbols - regex removed, Rust will filter
+((ident) @typ_math_symbol
+  (#has-ancestor? @typ_math_symbol math formula)
+  ; (#not-has-ancestor? @typ_math_symbol call)
+  (#set! priority 101)
+  (#set-conceal! @typ_math_symbol "conceal"))
+
+; Math operators and symbols with modifiers - regex removed, Rust will filter  
+((field) @typ_math_symbol
+  (#set! priority 102)
+  (#has-ancestor? @typ_math_symbol math formula)
+  ; (#not-has-ancestor? @typ_math_symbol call)
+  (#set-conceal! @typ_math_symbol "conceal"))
+
+]]
+
+M.conceal_math_bare = [[
+; Typst math conceals
+; Based on Typst math mode syntax tree structure
+; Math function calls with special symbols
+(call
+  item: (ident) @typ_math_symbol
+  (#any-of? @typ_math_symbol "root" "sum" "product" "integral" "sqrt")
+  ; (#has-ancestor? @func math formula)
+  (#set! priority 99)
+  (#set-conceal! @typ_math_symbol "conceal"))
+
+(((ident) @typ_math_symbol
+  (#any-of? @typ_math_symbol "root" "sum" "product" "integral"))
+  ; (#has-ancestor? @conceal math formula)
+  ; (#set! @conceal "m"))
+  (#set! priority 99)
+  (#set-conceal! @typ_math_symbol "conceal"))
+
+((escape) @typ_math_symbol
+  (#set! priority 102)
+  (#set-escape! @typ_math_symbol "conceal"))
+
+; Special symbols in math mode
+((symbol) @symbol
+  (#any-of? @symbol "+" "-" "*" "/" "=" "<" ">" "(" ")" "[" "]" "{" "}")
+  (#has-ancestor? @symbol math formula)
+  (#set! priority 90))
+
+; Conceal "frac" and replace with opening parenthesis
+((call
+  item: (ident) @_frac_name
+  (#eq? @_frac_name "frac"))
+  (#set! conceal "" @_frac_name)
+  (#set! priority 1000))
+
+; Replace comma with division slash
+((call
+  item: (ident) @_frac_name
+  (#eq? @_frac_name "frac")
+  (_)
+  .
+  "," @_comma
+  (_))
+  (#set! conceal "/" @_comma))
+
+; Conceal "abs" function name
+(call
+  item: (ident) @abs_name
+  (#eq? @abs_name "abs")
+  (#set! conceal "")
+  (#set! priority 100))
+
+; Conceal parentheses for abs function
+(call
+  item: (ident) @func_name
+  "(" @left_paren
+  (_)
+  ")" @right_paren
+  (#eq? @func_name "abs")
+  (#set! conceal "|" @left_paren)
+  (#set! conceal "|" @right_paren)
+  (#set! priority 90))
 
 ]]
 
@@ -211,64 +357,6 @@ M.conceal_phy = [[
   (#set! @cmd conceal "")
   (#set! @left_brace conceal "⟨")
   (#set! @right_brace conceal "⟩"))
-
-]]
-
-M.conceal_delim = [[
-; Typst delimiter conceals
-; Math delimiters - parentheses, brackets, braces
-(call
-  item: (ident) @typ_math_delim
-  (#any-of? @typ_math_delim "lr" "left" "right")
-  (#has-ancestor? @typ_math_delim math formula)
-  (#set! conceal ""))
-
-; Angle brackets
-(call
-  item: (ident) @typ_math_delim
-  (#any-of? @typ_math_delim "angle" "langle" "rangle")
-  (#has-ancestor? @typ_math_delim math formula)
-  (#set-conceal! @typ_math_delim "conceal"))
-
-; Floor and ceiling
-(call
-  item: (ident) @typ_math_delim
-  (#any-of? @typ_math_delim "floor" "ceil" "lfloor" "rfloor" "lceil" "rceil")
-  (#has-ancestor? @typ_math_delim math formula)
-  (#set-conceal! @typ_math_delim "conceal"))
-
-; Norm delimiters
-((call
-        item: (ident) @cmd
-        "(" @left_brace
-        (_)
-        ")" @right_brace)
- (#eq? @cmd "norm")
- (#set! @cmd conceal "")
- (#set! @left_brace conceal "‖")
- (#set! @right_brace conceal "‖"))
-
-; Vertical bars and double bars
-((symbol) @typ_math_delim
-  (#any-of? @typ_math_delim "|" "||")
-  (#has-ancestor? @typ_math_delim math formula)
-  (#set-conceal! @typ_math_delim "conceal"))
-
-; Inline math dollars and quotes
-(math
-  "$" @typ_inline_dollar
-  (#set! @typ_inline_dollar conceal ""))
-
-(string
-  "\"" @typ_inline_quote
-  (#set! @typ_inline_quote conceal ""))
-
-(strong
-  "*" @typ_inline_asterisk
-  (#set! @typ_inline_asterisk conceal ""))
-
-((align "&" @typ_inline_ampersand)
-  (#set! @typ_inline_ampersand conceal ""))
 
 ]]
 
@@ -351,90 +439,6 @@ M.conceal_script = [[
       (#has-ancestor? @sub_object math formula)
       (#set! @close_paren conceal "")
       (#set! @open_paren conceal "")))
-
-]]
-
-M.conceal_math_bare = [[
-; Typst math conceals
-; Based on Typst math mode syntax tree structure
-; Math function calls with special symbols
-(call
-  item: (ident) @typ_math_symbol
-  (#any-of? @typ_math_symbol "root" "sum" "product" "integral" "sqrt")
-  ; (#has-ancestor? @func math formula)
-  (#set! priority 99)
-  (#set-conceal! @typ_math_symbol "conceal"))
-
-(((ident) @typ_math_symbol
-  (#any-of? @typ_math_symbol "root" "sum" "product" "integral"))
-  ; (#has-ancestor? @conceal math formula)
-  ; (#set! @conceal "m"))
-  (#set! priority 99)
-  (#set-conceal! @typ_math_symbol "conceal"))
-
-((escape) @typ_math_symbol
-  (#set! priority 102)
-  (#set-escape! @typ_math_symbol "conceal"))
-
-; Special symbols in math mode
-((symbol) @symbol
-  (#any-of? @symbol "+" "-" "*" "/" "=" "<" ">" "(" ")" "[" "]" "{" "}")
-  (#has-ancestor? @symbol math formula)
-  (#set! priority 90))
-
-; Conceal "frac" and replace with opening parenthesis
-((call
-  item: (ident) @_frac_name
-  (#eq? @_frac_name "frac"))
-  (#set! conceal "" @_frac_name)
-  (#set! priority 1000))
-
-; Replace comma with division slash
-((call
-  item: (ident) @_frac_name
-  (#eq? @_frac_name "frac")
-  (_)
-  .
-  "," @_comma
-  (_))
-  (#set! conceal "/" @_comma))
-
-; Conceal "abs" function name
-(call
-  item: (ident) @abs_name
-  (#eq? @abs_name "abs")
-  (#set! conceal "")
-  (#set! priority 100))
-
-; Conceal parentheses for abs function
-(call
-  item: (ident) @func_name
-  "(" @left_paren
-  (_)
-  ")" @right_paren
-  (#eq? @func_name "abs")
-  (#set! conceal "|" @left_paren)
-  (#set! conceal "|" @right_paren)
-  (#set! priority 90))
-
-]]
-
-M.conceal_greek = [[
-; Typst Greek letter conceals - regex removed, Rust hash table will filter
-; Greek letters as function calls
-(call
-  item: (ident) @typ_greek_symbol
-  (#set! priority 102)
-  (#set-conceal! @typ_greek_symbol "conceal"))
-  ; (#has-ancestor? @conceal math formula)
-
-; (#lua_func! @conceal "conceal"))
-; Greek letters as direct identifiers
-((ident) @typ_greek_symbol
-  (#set! priority 102)
-  ; (#has-ancestor? @conceal math formula)
-  ; (#set! @conceal "m"))
-  (#set-conceal! @typ_greek_symbol "conceal"))
 
 ]]
 

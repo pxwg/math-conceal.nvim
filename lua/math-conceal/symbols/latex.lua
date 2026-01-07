@@ -1,5 +1,131 @@
 local M = {}
 
+M.conceal_delim = [[
+(curly_group
+  "{" @conceal
+  (#not-has-grandparent? @conceal
+    title_declaration author_declaration chapter part section subsection subsubsection paragraph
+    subparagraph command generic_command subscript superscript)
+  (#set! conceal ""))
+
+(curly_group
+  "}" @conceal
+  (#not-has-grandparent? @conceal
+    title_declaration author_declaration chapter part section subsection subsubsection paragraph
+    subparagraph command generic_command subscript superscript)
+  (#set! conceal ""))
+
+(math_delimiter
+  left_command: _ @conceal
+  (#set! conceal ""))
+
+(math_delimiter
+  right_command: _ @conceal
+  (#set! conceal ""))
+
+(inline_formula
+  "$" @conceal_dollar
+  (#set! conceal ""))
+
+(inline_formula
+  "\\(" @conceal_dollar
+  (_)
+  "\\)" @conceal_dollar
+  (#set! @conceal_dollar conceal ""))
+
+(displayed_equation
+  "\\[" @conceal_dollar
+  "\\]" @conceal_dollar
+  (#set! @conceal_dollar conceal ""))
+
+(displayed_equation
+  "$$" @conceal_dollar
+  (#set! conceal ""))
+  ; (#set! conceal_lines ""))
+
+(text_mode
+  command: _ @conceal
+  (#set! conceal ""))
+
+("\\item" @punctuation.special @conceal
+  (#set! conceal "○"))
+
+((text
+  word: (delimiter) @conceal)
+  (#eq? @conceal "&")
+  (#has-ancestor? @conceal math_environment inline_formula displayed_equation)
+  (#not-has-ancestor? @conceal label_definition text_mode)
+  (#set! conceal ""))
+
+(math_delimiter
+  left_delimiter: (command_name) @punctuation.delimiter
+  (#eq? @punctuation.delimiter "\\{")
+  (#set! conceal "{")
+  (_))
+
+(math_delimiter
+  (_)
+  right_delimiter: (command_name) @punctuation.delimiter
+  (#eq? @punctuation.delimiter "\\}")
+  (#set! conceal "}"))
+
+]]
+
+M.conceal_font = [[
+(generic_command
+  command: (command_name) @conceal
+  (#any-of? @conceal "\\emph" "\\mathit" "\\textit" "\\mathbf" "\\textbf" "\\mathbb" "\\mathcal" "\\mathfrak" "\\mathscr" "\\mathsf" "\\mathrm")
+  (#set! conceal ""))
+
+((generic_command
+  command: (command_name) @tex_font_name
+  arg: (curly_group
+    "{" @left_paren
+    (_)
+    "}" @right_paren))
+  (#any-of? @tex_font_name "\\emph" "\\mathit" "\\textit" "\\mathbf" "\\textbf" "\\mathbb" "\\mathcal" "\\mathfrak" "\\mathscr" "\\mathsf" "\\mathrm")
+  (#set! @left_paren conceal "")
+  (#set! @right_paren conceal "")
+  (#set! @tex_font_name conceal ""))
+
+((generic_command
+  command: (command_name) @tex_font_name
+  arg: (curly_group
+    "{" @left_paren
+    (text
+      word: (word) @font_letter)
+    "}" @right_paren))
+  (#any-of? @tex_font_name "\\mathbb" "\\mathcal" "\\mathfrak" "\\mathscr" "\\mathsf" "\\mathrm")
+  (#set! @left_paren conceal "")
+  (#set! @right_paren conceal "")
+  (#set! @tex_font_name conceal "")
+  ; Regex removed - Rust hash table will filter valid font letters
+  (#set-font! @font_letter @tex_font_name))
+
+((generic_command
+  command: (command_name) @tex_font_name
+  arg: (curly_group
+    "{" @left_paren
+    (_) @font_letter
+    "}" @right_paren))
+  (#any-of? @tex_font_name "\\bar" "\\widetilde" "\\hat" "\\dot" "\\ddot")
+  (#set! @left_paren conceal "")
+  (#set! @right_paren conceal "")
+  (#set! @tex_font_name conceal "")
+  ; Regex removed - Rust hash table will filter valid characters/greek letters
+  (#set-font! @font_letter @tex_font_name))
+
+]]
+
+M.conceal_greek = [[
+; greek conceal - regex removed, Rust hash table will filter
+(generic_command
+  command: (command_name) @tex_greek
+  ; (#has-parent? @tex_greek math_environment)
+  (#set-conceal! @tex_greek "conceal"))
+
+]]
+
 M.conceal_math = [[
 ; math conceals - regex removed, Rust hash table will filter
 (generic_command
@@ -72,52 +198,6 @@ arg: (curly_group
 
 ]]
 
-M.conceal_font = [[
-(generic_command
-  command: (command_name) @conceal
-  (#any-of? @conceal "\\emph" "\\mathit" "\\textit" "\\mathbf" "\\textbf" "\\mathbb" "\\mathcal" "\\mathfrak" "\\mathscr" "\\mathsf" "\\mathrm")
-  (#set! conceal ""))
-
-((generic_command
-  command: (command_name) @tex_font_name
-  arg: (curly_group
-    "{" @left_paren
-    (_)
-    "}" @right_paren))
-  (#any-of? @tex_font_name "\\emph" "\\mathit" "\\textit" "\\mathbf" "\\textbf" "\\mathbb" "\\mathcal" "\\mathfrak" "\\mathscr" "\\mathsf" "\\mathrm")
-  (#set! @left_paren conceal "")
-  (#set! @right_paren conceal "")
-  (#set! @tex_font_name conceal ""))
-
-((generic_command
-  command: (command_name) @tex_font_name
-  arg: (curly_group
-    "{" @left_paren
-    (text
-      word: (word) @font_letter)
-    "}" @right_paren))
-  (#any-of? @tex_font_name "\\mathbb" "\\mathcal" "\\mathfrak" "\\mathscr" "\\mathsf" "\\mathrm")
-  (#set! @left_paren conceal "")
-  (#set! @right_paren conceal "")
-  (#set! @tex_font_name conceal "")
-  ; Regex removed - Rust hash table will filter valid font letters
-  (#set-font! @font_letter @tex_font_name))
-
-((generic_command
-  command: (command_name) @tex_font_name
-  arg: (curly_group
-    "{" @left_paren
-    (_) @font_letter
-    "}" @right_paren))
-  (#any-of? @tex_font_name "\\bar" "\\widetilde" "\\hat" "\\dot" "\\ddot")
-  (#set! @left_paren conceal "")
-  (#set! @right_paren conceal "")
-  (#set! @tex_font_name conceal "")
-  ; Regex removed - Rust hash table will filter valid characters/greek letters
-  (#set-font! @font_letter @tex_font_name))
-
-]]
-
 M.conceal_phy = [[
 ; physics conceal rules for LaTeX
 ; \bra{a} -> |a> \ket{a} -> <a|
@@ -147,77 +227,6 @@ M.conceal_phy = [[
   (#set! @cmd conceal "")
   (#set! @left_brace conceal "|")
   (#set! @right_brace conceal "⟩"))
-
-]]
-
-M.conceal_delim = [[
-(curly_group
-  "{" @conceal
-  (#not-has-grandparent? @conceal
-    title_declaration author_declaration chapter part section subsection subsubsection paragraph
-    subparagraph command generic_command subscript superscript)
-  (#set! conceal ""))
-
-(curly_group
-  "}" @conceal
-  (#not-has-grandparent? @conceal
-    title_declaration author_declaration chapter part section subsection subsubsection paragraph
-    subparagraph command generic_command subscript superscript)
-  (#set! conceal ""))
-
-(math_delimiter
-  left_command: _ @conceal
-  (#set! conceal ""))
-
-(math_delimiter
-  right_command: _ @conceal
-  (#set! conceal ""))
-
-(inline_formula
-  "$" @conceal_dollar
-  (#set! conceal ""))
-
-(inline_formula
-  "\\(" @conceal_dollar
-  (_)
-  "\\)" @conceal_dollar
-  (#set! @conceal_dollar conceal ""))
-
-(displayed_equation
-  "\\[" @conceal_dollar
-  "\\]" @conceal_dollar
-  (#set! @conceal_dollar conceal ""))
-
-(displayed_equation
-  "$$" @conceal_dollar
-  (#set! conceal ""))
-  ; (#set! conceal_lines ""))
-
-(text_mode
-  command: _ @conceal
-  (#set! conceal ""))
-
-("\\item" @punctuation.special @conceal
-  (#set! conceal "○"))
-
-((text
-  word: (delimiter) @conceal)
-  (#eq? @conceal "&")
-  (#has-ancestor? @conceal math_environment inline_formula displayed_equation)
-  (#not-has-ancestor? @conceal label_definition text_mode)
-  (#set! conceal ""))
-
-(math_delimiter
-  left_delimiter: (command_name) @punctuation.delimiter
-  (#eq? @punctuation.delimiter "\\{")
-  (#set! conceal "{")
-  (_))
-
-(math_delimiter
-  (_)
-  right_delimiter: (command_name) @punctuation.delimiter
-  (#eq? @punctuation.delimiter "\\}")
-  (#set! conceal "}"))
 
 ]]
 
@@ -260,15 +269,6 @@ M.conceal_script = [[
   superscript: (_) @sup_object
   (#set! @sup_symbol conceal "")
   (#set-sup! @sup_object))
-
-]]
-
-M.conceal_greek = [[
-; greek conceal - regex removed, Rust hash table will filter
-(generic_command
-  command: (command_name) @tex_greek
-  ; (#has-parent? @tex_greek math_environment)
-  (#set-conceal! @tex_greek "conceal"))
 
 ]]
 
