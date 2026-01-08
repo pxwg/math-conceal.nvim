@@ -126,10 +126,10 @@ fn generate_simple_symbols_query(symbols: &[String]) -> String {
 
     output.push_str("; Math operators and symbols\n");
     output.push_str("(((ident) @typ_math_symbol\n");
-    output.push_str(&format!(
-        "  (#match? @typ_math_symbol \"^({})$\"))\n",
-        symbols.join("|")
-    ));
+    // output.push_str(&format!(
+    //     "  (#match? @typ_math_symbol \"^({})$\"))\n",
+    //     symbols.join("|")
+    // ));
     output.push_str("  (#has-ancestor? @typ_math_symbol math formula)\n");
     output.push_str("  ; (#not-has-ancestor? @typ_math_symbol call)\n");
     output.push_str("  (#set! priority 101)\n");
@@ -147,11 +147,11 @@ fn generate_dotted_symbols_query(symbols: &[String]) -> String {
 
     output.push_str("; Math operators and symbols with modifiers\n");
     output.push_str("(((field) @typ_math_symbol\n");
-    output.push_str(&format!(
-        "  (#match? @typ_math_symbol \"^({})$\"))\n",
-        escaped_symbols.join("|")
-    ));
-    output.push_str("  (#set! priority 102)\n");
+    // output.push_str(&format!(
+    //     "  (#match? @typ_math_symbol \"^({})$\"))\n",
+    //     escaped_symbols.join("|")
+    // ));
+    output.push_str("  (#set! priority 103)\n");
     output.push_str("  (#has-ancestor? @typ_math_symbol math formula)\n");
     output.push_str("  ; (#not-has-ancestor? @typ_math_symbol call)\n");
     output.push_str("  (#set-conceal! @typ_math_symbol \"conceal\")\n");
