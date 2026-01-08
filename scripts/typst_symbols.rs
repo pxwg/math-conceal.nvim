@@ -93,7 +93,7 @@ fn main() {
     }
 
     let json_output = serde_json::to_string_pretty(&symbol_map).expect("Failed to serialize JSON");
-    let mut file = File::create("crates/conceal/src/math_symbols_typst.json")
+    let mut file = File::create("queries_config/symbols/math_symbols_typst.json")
         .expect("Failed to create output.json");
     file.write_all(json_output.as_bytes())
         .expect("Failed to write to output.json");
