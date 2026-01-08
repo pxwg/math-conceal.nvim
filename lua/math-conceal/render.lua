@@ -239,7 +239,6 @@ function M.setup(opts, lang)
     group = ft_group,
     buffer = 0,
     callback = function(ev)
-      print("hi")
       vim.opt_local.conceallevel = 2
       vim.opt_local.concealcursor = "nci"
       attach_to_buffer(ev.buf, parser_lang, query_string)
