@@ -125,14 +125,12 @@ local function cursor_refresh(buf)
     hidden_extmarks[buf] = {}
   end
 
-  for id, original_opts in pairs(hidden_extmarks[buf]) do
-    local r1, c1 = original_opts.row, original_opts.col -- Wait, opts doesn't usually have row/col
-    local saved = hidden_extmarks[buf][id]
-    if saved then
-      local r1, c1, r2, c2 = saved.r1, saved.c1, saved.r2, saved.c2
-      if not is_cursor_inside(row, col, r1, c1, r2, c2) then
-        -- Restore
-        pcall(vim.api.nvim_buf_set_extmark, buf, ns_id, r1, c1, saved.opts)
+  -- Restore extmarks that are no longer under cursor
+  for id, saved in pairs(hidden_extmarks[buf]) do
+    if saved and saved.r1 and saved.c1 and saved.r2 and saved.c2 then
+      if not is_cursor_inside(row, col, saved.r1, saved.c1, saved.r2, saved.c2) then
+        -- Restore the extmark
+        pcall(vim.api.nvim_buf_set_extmark, buf, ns_id, saved.r1, saved.c1, saved.opts)
         hidden_extmarks[buf][id] = nil
       end
     end
