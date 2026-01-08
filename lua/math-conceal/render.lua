@@ -1,230 +1,236 @@
----realization of fine grained math conceal rendering using neovim decoration provider API
----only expand conceal when the cursor is under the math node
+---realization of fine grained math conceal rendering using persistent extmarks with incremental updates
+---@class MathConcealRender
 local M = {}
-local uv = vim.loop
 
-local latex = require("math-conceal.symbols.latex")
-local typst = require("math-conceal.symbols.typst")
 local utils = require("math-conceal.utils")
 local queries = {
-  latex = latex,
-  typst = typst,
+  latex = require("math-conceal.symbols.latex"),
+  typst = require("math-conceal.symbols.typst"),
 }
 
-local query_obj_cache = {}
+---@class BufferCacheItem
+---@field parser vim.treesitter.LanguageTree
+---@field query table Tree-sitter query object
+---@field lang string Language type
+
+---@type table<number, BufferCacheItem>
 local buffer_cache = {}
 local ns_id = vim.api.nvim_create_namespace("math-conceal-render")
-local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = false })
+local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = true })
 
----Safe wrapper for internal redraw
----@param buf number
----@param line number
-local function safe_redraw_line(buf, line)
-  if line < 0 then
-    return
-  end
-  if not vim.api.nvim_buf_is_valid(buf) then
-    return
-  end
-  pcall(vim.api.nvim__redraw, {
-    buf = buf,
-    range = { line, line + 1 },
-    valid = false,
-    cursor = false,
-  })
-end
+---Store currently revealed extmarks to restore them later
+---Structure: { [buf_id] = { [extmark_id] = { r1, c1, opts } } }
+local revealed_extmarks = {}
 
----Get parsed query object from cache or parse a new one
----@param lang "latex" | "typst"
----@param query_string string
----@return table|nil parsed_query
+---Safe wrapper for get_parsed_query
+local query_obj_cache = {}
 local function get_parsed_query(lang, query_string)
   local cache_key = lang .. ":" .. query_string
   if query_obj_cache[cache_key] then
     return query_obj_cache[cache_key]
   end
+
   local success, query = pcall(vim.treesitter.query.parse, lang, query_string)
   if success and query then
     query_obj_cache[cache_key] = query
     return query
   else
-    vim.notify_once("Math-Conceal: Failed to parse query", vim.log.levels.ERROR)
     return nil
   end
 end
 
----Update buffer cache: parse tree and build row-based spatial index
+---Render conceal extmarks for a specific range of rows
 ---@param buf number
----@param lang string
----@param query table
-local function update_buffer_cache(buf, lang, query)
-  local cache = buffer_cache[buf]
-  if not cache then
+---@param start_row number 0-indexed, inclusive
+---@param end_row number 0-indexed, exclusive (like TS ranges)
+local function render_range(buf, start_row, end_row)
+  if not buffer_cache[buf] then
     return
   end
-  local parser = cache.parser
-  parser:parse(true)
-  local trees = parser:trees()
+  local cache = buffer_cache[buf]
+
+  vim.api.nvim_buf_clear_namespace(buf, ns_id, start_row, end_row)
+
+  local trees = cache.parser:trees()
   local tree = trees and trees[1]
   if not tree then
     return
   end
   local root = tree:root()
-  local marks_by_row = {}
-  for id, node, metadata in query:iter_captures(root, buf, 0, -1) do
-    local capture_data = metadata[id]
-    local conceal_char = capture_data and capture_data.conceal or metadata.conceal
-    if conceal_char then
-      local r1, c1, r2, c2 = node:range()
-      if not marks_by_row[r1] then
-        marks_by_row[r1] = {}
+
+  for id, node, metadata in cache.query:iter_captures(root, buf, start_row, end_row) do
+    local r1, c1, r2, c2 = node:range()
+
+    -- We only create extmarks for nodes that *start* within our update range
+    -- to prevent duplication when updating adjacent chunks.
+    if r1 >= start_row and r1 < end_row then
+      local capture_data = metadata[id]
+      local conceal_char = capture_data and capture_data.conceal or metadata.conceal
+
+      if conceal_char then
+        local priority = (capture_data and capture_data.priority) or metadata.priority or 100
+        local hl_group = (capture_data and capture_data.highlight) or metadata.highlight or "Conceal"
+
+        local opts = {
+          conceal = conceal_char,
+          hl_group = hl_group,
+          priority = tonumber(priority),
+          end_row = r2,
+          end_col = c2,
+          ephemeral = false,
+        }
+
+        pcall(vim.api.nvim_buf_set_extmark, buf, ns_id, r1, c1, opts)
       end
-      local priority = (capture_data and capture_data.priority) or metadata.priority or 100
-      local hl_group = (capture_data and capture_data.highlight) or metadata.highlight or "Conceal"
-      table.insert(marks_by_row[r1], {
-        col_start = c1,
-        col_end = c2,
-        row_end = r2,
-        conceal = conceal_char,
-        hl_group = hl_group,
-        priority = tonumber(priority),
-      })
     end
   end
-  cache.marks_by_row = marks_by_row
-  cache.tree_version = vim.b[buf].changedtick
 end
 
----Setup decoration provider for conceal rendering (global, only once)
-local function setup_decoration_provider()
-  vim.api.nvim_set_decoration_provider(ns_id, {
-    on_win = function(_, win_id, buf_id, toprow, botrow)
-      local cache = buffer_cache[buf_id]
-      if not cache or not cache.marks_by_row then
-        return false
-      end
-      local cursor = vim.api.nvim_win_get_cursor(win_id)
-      local curr_row = cursor[1] - 1
-      local curr_col = cursor[2]
-      local set_extmark = vim.api.nvim_buf_set_extmark
-      local extmark_opts = {
-        conceal = "",
-        ephemeral = true,
-        hl_group = "",
-        priority = 100,
-        end_row = 0,
-        end_col = 0,
+local function cursor_refresh(buf)
+  if not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local row, col = cursor[1] - 1, cursor[2]
+
+  if not revealed_extmarks[buf] then
+    revealed_extmarks[buf] = {}
+  end
+
+  local to_remove = {}
+  for id, data in pairs(revealed_extmarks[buf]) do
+    -- Check if cursor is strictly outside the range
+    local r1, c1, r2, c2 = data.r1, data.c1, data.r2, data.c2
+    local is_inside = (row > r1 and row < r2)
+      or (row == r1 and row == r2 and col >= c1 and col < c2)
+      or (row == r1 and row < r2 and col >= c1)
+      or (row > r1 and row == r2 and col < c2)
+
+    if not is_inside then
+      -- Restore the extmark using saved options
+      pcall(vim.api.nvim_buf_set_extmark, buf, ns_id, r1, c1, data.opts)
+      to_remove[id] = true
+    end
+  end
+  for id, _ in pairs(to_remove) do
+    revealed_extmarks[buf][id] = nil
+  end
+
+  -- usage of details=true gives us the current config
+  local marks = vim.api.nvim_buf_get_extmarks(buf, ns_id, { row, col }, { row, col }, { details = true })
+  for _, m in ipairs(marks) do
+    local id, r1, c1, details = m[1], m[2], m[3], m[4]
+
+    -- Double check range (get_extmarks can be loose)
+    local r2, c2 = details.end_row, details.end_col
+    local is_inside = (row > r1 and row < r2)
+      or (row == r1 and row == r2 and col >= c1 and col < c2)
+      or (row == r1 and row < r2 and col >= c1)
+      or (row > r1 and row == r2 and col < c2)
+
+    if is_inside and not revealed_extmarks[buf][id] then
+      -- Save info to restore later
+      revealed_extmarks[buf][id] = {
+        r1 = r1,
+        c1 = c1,
+        r2 = r2,
+        c2 = c2,
+        opts = {
+          conceal = details.conceal,
+          hl_group = details.hl_group,
+          priority = details.priority,
+          end_row = r2,
+          end_col = c2,
+          ephemeral = false,
+        },
       }
-      for row = toprow, botrow do
-        local marks = cache.marks_by_row[row]
-        if marks then
-          for _, m in ipairs(marks) do
-            local r1, c1, r2, c2 = row, m.col_start, m.row_end, m.col_end
-            local is_cursor_inside = false
-            if curr_row >= r1 and curr_row <= r2 then
-              if r1 == r2 then
-                if curr_col >= c1 and curr_col < c2 then
-                  is_cursor_inside = true
-                end
-              else
-                if curr_row == r1 and curr_col >= c1 then
-                  is_cursor_inside = true
-                elseif curr_row == r2 and curr_col < c2 then
-                  is_cursor_inside = true
-                elseif curr_row > r1 and curr_row < r2 then
-                  is_cursor_inside = true
-                end
-              end
-            end
-            if not is_cursor_inside then
-              extmark_opts.conceal = m.conceal
-              extmark_opts.hl_group = m.hl_group
-              extmark_opts.priority = m.priority
-              extmark_opts.end_row = r2
-              extmark_opts.end_col = c2
-              set_extmark(buf_id, ns_id, r1, c1, extmark_opts)
-            end
-          end
-        end
-      end
-      return false
-    end,
-  })
+      -- Delete the extmark to "reveal" the underlying text
+      vim.api.nvim_buf_del_extmark(buf, ns_id, id)
+    end
+  end
 end
 
----Attach conceal logic to buffer
----@param buf number
----@param lang string
----@param query_string string
+---Attach to buffer: Initial render + Event listeners
 local function attach_to_buffer(buf, lang, query_string)
   if buffer_cache[buf] then
     return
   end
+
   local query = get_parsed_query(lang, query_string)
-  if not query then
-    return
-  end
   local parser = vim.treesitter.get_parser(buf, lang)
-  if not parser then
+  if not query or not parser then
     return
   end
+
   buffer_cache[buf] = {
     parser = parser,
-    marks_by_row = {},
+    query = query,
+    lang = lang,
   }
-  update_buffer_cache(buf, lang, query)
+
+  -- We defer slightly to ensure buffer is ready
+  vim.schedule(function()
+    if vim.api.nvim_buf_is_valid(buf) then
+      local line_count = vim.api.nvim_buf_line_count(buf)
+      render_range(buf, 0, line_count)
+    end
+  end)
+
   parser:register_cbs({
-    on_changedtree = function()
+    on_changedtree = function(changes, tree)
       vim.schedule(function()
-        if vim.api.nvim_buf_is_valid(buf) then
-          update_buffer_cache(buf, lang, query)
-          vim.api.nvim__redraw({ buf = buf, valid = false })
+        if not vim.api.nvim_buf_is_valid(buf) then
+          return
+        end
+
+        local root = tree:root()
+        local line_count = vim.api.nvim_buf_line_count(buf)
+
+        for _, change in ipairs(changes) do
+          local start_row = change[1]
+          local start_col = change[2]
+
+          local node = root:named_descendant_for_range(start_row, start_col, start_row, start_col)
+
+          local end_row
+          if node then
+            local _, _, r2, _ = node:range()
+            end_row = r2 + 1
+          else
+            end_row = start_row + 1
+          end
+
+          if end_row > line_count then
+            end_row = line_count
+          end
+
+          if start_row < end_row then
+            render_range(buf, start_row, end_row)
+          end
         end
       end)
     end,
   })
+
   vim.api.nvim_create_autocmd("BufDelete", {
     group = augroup,
     buffer = buf,
     callback = function()
       buffer_cache[buf] = nil
+      revealed_extmarks[buf] = nil
     end,
   })
-  local last_cursor_row = -1
+
   vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     group = augroup,
     buffer = buf,
     callback = function()
-      local cursor = vim.api.nvim_win_get_cursor(0)
-      local curr_row = cursor[1] - 1
-      if curr_row ~= last_cursor_row then
-        safe_redraw_line(buf, last_cursor_row)
-        safe_redraw_line(buf, curr_row)
-        last_cursor_row = curr_row
-      else
-        safe_redraw_line(buf, curr_row)
-      end
+      cursor_refresh(buf)
     end,
   })
 end
 
----Get conceal query string for a given language and list of names
----@param language "latex" | "typst"
----@param names string[]
----@return string conceal_query
-local function get_conceal_query(language, names)
-  local output = {}
-  for _, name in ipairs(names) do
-    name = "conceal_" .. name
-    local conceal_querys = queries[language][name]
-    if conceal_querys then
-      table.insert(output, conceal_querys)
-    end
-  end
-  return table.concat(output, "\n")
-end
-
----Setup math conceal rendering for Typst/Latex files
+---Setup math conceal rendering
 ---@param opts table?
 ---@param lang "latex" | "typst"
 function M.setup(opts, lang)
@@ -232,9 +238,19 @@ function M.setup(opts, lang)
   local conceal = opts.conceal or {}
   local file_lang = utils.lang_to_ft(lang)
   local parser_lang = utils.lang_to_lt(lang)
-  local query_string = get_conceal_query(parser_lang, conceal)
-  setup_decoration_provider()
+
+  -- Generate query string once
+  local query_string_parts = {}
+  for _, name in ipairs(conceal) do
+    local q = queries[parser_lang]["conceal_" .. name]
+    if q then
+      table.insert(query_string_parts, q)
+    end
+  end
+  local query_string = table.concat(query_string_parts, "\n")
+
   local ft_group = vim.api.nvim_create_augroup("math-conceal-ft-" .. file_lang, { clear = false })
+
   vim.api.nvim_create_autocmd("BufEnter", {
     group = ft_group,
     buffer = 0,
@@ -244,6 +260,7 @@ function M.setup(opts, lang)
       attach_to_buffer(ev.buf, parser_lang, query_string)
     end,
   })
+
   if vim.bo.filetype == file_lang then
     attach_to_buffer(vim.api.nvim_get_current_buf(), parser_lang, query_string)
   end
