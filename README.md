@@ -75,7 +75,6 @@ $ luarocks --lua-version 5.1 --local --tree ~/.local/share/nvim/rocks install ma
 ### lazy.nvim
 
 ```lua
-vim.o.conceallevel = 1 -- or 2
 return {
   "pxwg/math-conceal.nvim",
   event = "VeryLazy",

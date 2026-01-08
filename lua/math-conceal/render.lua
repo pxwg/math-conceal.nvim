@@ -3,13 +3,7 @@
 local M = {}
 local uv = vim.loop
 
-local latex = require("math-conceal.symbols.latex")
-local typst = require("math-conceal.symbols.typst")
-local utils = require("math-conceal.utils")
-local queries = {
-  latex = latex,
-  typst = typst,
-}
+local queries = require("math-conceal.query")
 
 local query_obj_cache = {}
 local buffer_cache = {}
