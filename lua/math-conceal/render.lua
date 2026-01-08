@@ -235,10 +235,11 @@ function M.setup(opts, lang)
   local query_string = get_conceal_query(parser_lang, conceal)
   setup_decoration_provider()
   local ft_group = vim.api.nvim_create_augroup("math-conceal-ft-" .. file_lang, { clear = false })
-  vim.api.nvim_create_autocmd("FileType", {
+  vim.api.nvim_create_autocmd("BufEnter", {
     group = ft_group,
-    pattern = file_lang,
+    buffer = 0,
     callback = function(ev)
+      print("hi")
       vim.opt_local.conceallevel = 2
       vim.opt_local.concealcursor = "nci"
       attach_to_buffer(ev.buf, parser_lang, query_string)
