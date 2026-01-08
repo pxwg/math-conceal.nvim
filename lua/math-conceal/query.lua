@@ -147,14 +147,8 @@ local function register_conceal_type(name, pattern, directive_name)
       return
     end
 
-    -- Call Rust to check if this symbol should be concealed
-    local result = cached_lookup(node_text, pattern, value)
-
-    -- Only set concealment if Rust found a symbol (result != original text)
-    if result ~= node_text then
-      metadata[capture_id] = metadata[capture_id] or {}
-      metadata[capture_id][key or "conceal"] = result
-    end
+    metadata[capture_id] = metadata[capture_id] or {}
+    metadata[capture_id][key or "conceal"] = cached_lookup(node_text, pattern, value)
   end
 end
 
@@ -171,16 +165,10 @@ local handler_dispatch = {
     local node = match[capture_id]
     local function_name_node = match[function_name_id]
     local function_name_text = function_name_node and vim.treesitter.get_node_text(function_name_node, source) or "cal"
-    local node_text = vim.treesitter.get_node_text(node, source)
 
-    -- Call Rust to check if this symbol should be concealed
-    local result = cached_lookup(node_text, "font", function_name_text)
-
-    -- Only set concealment if Rust found a symbol (result != original text)
-    if result ~= node_text then
-      metadata[capture_id] = metadata[capture_id] or {}
-      metadata[capture_id]["conceal"] = result
-    end
+    metadata[capture_id] = metadata[capture_id] or {}
+    metadata[capture_id]["conceal"] =
+      cached_lookup(vim.treesitter.get_node_text(node, source), "font", function_name_text)
   end,
 
   conceal = function(match, _, source, predicate, metadata)
@@ -195,14 +183,8 @@ local handler_dispatch = {
       return
     end
 
-    -- Call Rust to check if this symbol should be concealed
-    local result = cached_lookup(node_text, "conceal", value)
-
-    -- Only set concealment if Rust found a symbol (result != original text)
-    if result ~= node_text then
-      metadata[capture_id] = metadata[capture_id] or {}
-      metadata[capture_id][key] = result
-    end
+    metadata[capture_id] = metadata[capture_id] or {}
+    metadata[capture_id][key] = cached_lookup(node_text, "conceal", value)
   end,
 
   sub = function(match, _, source, predicate, metadata)
@@ -212,16 +194,8 @@ local handler_dispatch = {
     end
 
     local node = match[capture_id]
-    local node_text = vim.treesitter.get_node_text(node, source)
-
-    -- Call Rust to check if this symbol should be concealed
-    local result = cached_lookup(node_text, "sub", value)
-
-    -- Only set concealment if Rust found a symbol (result != original text)
-    if result ~= node_text then
-      metadata[capture_id] = metadata[capture_id] or {}
-      metadata[capture_id]["conceal"] = result
-    end
+    metadata[capture_id] = metadata[capture_id] or {}
+    metadata[capture_id]["conceal"] = cached_lookup(vim.treesitter.get_node_text(node, source), "sub", value)
   end,
 
   sup = function(match, _, source, predicate, metadata)
@@ -231,16 +205,8 @@ local handler_dispatch = {
     end
 
     local node = match[capture_id]
-    local node_text = vim.treesitter.get_node_text(node, source)
-
-    -- Call Rust to check if this symbol should be concealed
-    local result = cached_lookup(node_text, "sup", value)
-
-    -- Only set concealment if Rust found a symbol (result != original text)
-    if result ~= node_text then
-      metadata[capture_id] = metadata[capture_id] or {}
-      metadata[capture_id]["conceal"] = result
-    end
+    metadata[capture_id] = metadata[capture_id] or {}
+    metadata[capture_id]["conceal"] = cached_lookup(vim.treesitter.get_node_text(node, source), "sup", value)
   end,
 
   escape = function(match, _, source, predicate, metadata)
@@ -255,14 +221,8 @@ local handler_dispatch = {
       return
     end
 
-    -- Call Rust to check if this symbol should be concealed
-    local result = cached_lookup(node_text, "escape", value)
-
-    -- Only set concealment if Rust found a symbol (result != original text)
-    if result ~= node_text then
-      metadata[capture_id] = metadata[capture_id] or {}
-      metadata[capture_id][key] = result
-    end
+    metadata[capture_id] = metadata[capture_id] or {}
+    metadata[capture_id][key] = cached_lookup(node_text, "escape", value)
   end,
 }
 

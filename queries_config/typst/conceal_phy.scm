@@ -1,13 +1,15 @@
-; Typst physics symbol conceals - regex removed, Rust will filter
+; Typst physics symbol conceals
 ; Physics constants and symbols
 (call
   item: (ident) @typ_phy_symbol
+  (#match? @typ_phy_symbol "^(hbar|planck|boltzmann|avogadro|gas|electron|proton|neutron|muon|tau|charge|mass|energy|momentum|angular|spin|magnetic|electric|permittivity|permeability|speed|light|gravity|acceleration|force|pressure|temperature|entropy|enthalpy|helmholtz|gibbs)$")
   ; (#has-ancestor? @typ_phy_symbol math formula)
   (#set! priority 98)
   (#set-conceal! @typ_phy_symbol "conceal"))
 
 ; Physics units and quantities
 ((ident) @typ_phy_symbol
+  (#match? @typ_phy_symbol "^(hbar|planck|boltzmann|avogadro|electron|proton|neutron|speed|light|gravity|charge|mass|energy|momentum|angular|spin|magnetic|electric|force|pressure|temperature|entropy|enthalpy|helmholtz|gibbs)$")
   ; (#has-ancestor? @typ_phy_symbol math formula)
   (#set! priority 98)
   (#set-conceal! @typ_phy_symbol "conceal"))
