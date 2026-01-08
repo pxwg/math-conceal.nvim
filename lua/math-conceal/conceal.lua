@@ -1,7 +1,7 @@
 local M = {}
 
-local raw_data_latex = require("math-conceal.conceel.latex")
-local raw_data_typst = require("math-conceal.conceel.typst")
+local raw_data_latex = require("math-conceal.conceal.latex")
+local raw_data_typst = require("math-conceal.conceal.typst")
 local raw_data = {
   font = vim.tbl_extend("force", raw_data_latex.font or {}, raw_data_typst.font or {}),
   subsup = vim.tbl_extend("force", raw_data_latex.subsup or {}, raw_data_typst.subsup or {}),
