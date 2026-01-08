@@ -5,7 +5,7 @@ local conceal = require("math-conceal.conceal")
 -- Cache for frequently used symbols to reduce FFI overhead
 local symbol_cache = {}
 local cache_size = 0
-local max_cache_size = 500
+local max_cache_size = 3000
 
 -- Helper function to get from cache or lookup
 local function cached_lookup(text, pattern, mode)
