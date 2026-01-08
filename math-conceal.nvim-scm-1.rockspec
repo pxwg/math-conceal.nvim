@@ -40,7 +40,7 @@ if modrev == 'scm' or modrev == 'dev' then
 end
 
 build = {
-  type = 'rust-mlua',
+  type = 'builtin',
   copy_directories = {'ftplugin', 'queries_config'},
   modules = {
     "lookup_conceal"
