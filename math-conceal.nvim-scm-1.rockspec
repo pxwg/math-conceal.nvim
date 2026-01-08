@@ -41,7 +41,7 @@ end
 
 build = {
   type = 'rust-mlua',
-  copy_directories = {'ftplugin', 'queries'},
+  copy_directories = {'ftplugin', 'queries_config'},
   modules = {
     "lookup_conceal"
   },
@@ -51,6 +51,8 @@ build = {
       ["math-conceal.query"] = "lua/math-conceal/query.lua",
       ["math-conceal.init"] = "lua/math-conceal/init.lua",
       ["math-conceal.render"] = "lua/math-conceal/render.lua",
+      ["math-conceal.symbols.latex"] = "lua/math-conceal/symbols/latex.lua",
+      ["math-conceal.symbols.typst"] = "lua/math-conceal/symbols/typst.lua",
     }
   },
 }
