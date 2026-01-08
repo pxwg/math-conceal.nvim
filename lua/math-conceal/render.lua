@@ -2,7 +2,6 @@ local M = {}
 
 local latex = require("math-conceal.symbols.latex")
 local typst = require("math-conceal.symbols.typst")
-local utils = require("math-conceal.utils")
 local queries = {
   latex = latex,
   typst = typst,
@@ -263,19 +262,17 @@ local function reparse_and_render(buf_id, config)
 end
 
 ---Setup math conceal rendering
----@param lang "latex" | "typst"
+---@param filetype string
 ---@param query_string string
-local function setup_rendering(lang, query_string)
-  local filetype = utils.lang_to_ft(lang)
-
-  local query = get_parsed_query(lang, query_string)
+local function setup_rendering(filetype, query_string)
+  local query = get_parsed_query(filetype, query_string)
   if not query then
     return
   end
 
   configs[filetype] = {
     query = query,
-    lang = lang,
+    lang = filetype,
     hl_cache = {},
   }
 end
@@ -335,15 +332,15 @@ end
 ---Setup math conceal rendering for files
 ---@param opts table?
 ---@param lang "latex" | "typst"
-function M.setup(opts, lang)
+---@param filetype string
+function M.setup(opts, lang, filetype)
   opts = opts or {}
 
   local conceal = opts.conceal or {}
 
-  local file_lang = utils.lang_to_lt(lang)
-  local query_string = get_conceal_query(file_lang, conceal)
+  local query_string = get_conceal_query(lang, conceal)
 
-  setup_rendering(file_lang, query_string)
+  setup_rendering(filetype, query_string)
 
   local buf_id = vim.api.nvim_get_current_buf()
   local ft = vim.bo[buf_id].filetype
@@ -352,15 +349,6 @@ function M.setup(opts, lang)
   if config then
     setup_buffer_autocmds(buf_id, config)
     setup_cursor_autocmd()
-
-    vim.api.nvim_create_autocmd("BufEnter", {
-      group = augroup,
-      buffer = buf_id,
-      callback = function()
-        vim.opt_local.conceallevel = 2
-        vim.opt_local.concealcursor = "nci"
-      end,
-    })
   end
 end
 

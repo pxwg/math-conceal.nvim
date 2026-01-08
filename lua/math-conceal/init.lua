@@ -84,17 +84,22 @@ end
 ---do some prepare work, then call `set_highlights`
 ---@param filetype string
 function M.set_hl(filetype)
-  local file = filetype
-  if filetype ~= "typst" then
-    file = "latex"
+  if vim.o.conceallevel == 0 then
+    vim.opt_local.conceallevel = 2
+    vim.opt_local.concealcursor = "nci"
   end
+
+  -- set typst math conceal for typst
+  -- and set latex math conceal for all other filetypes.
+  ---@type "typst" | "latex"
+  local lang = filetype == "typst" and filetype or "latex"
   --- first run
   if #M.queries == 0 then
     for name, val in pairs(M.opts.highlights) do
       vim.api.nvim_set_hl(M.opts.ns_id, name, val)
     end
     queries.load_queries()
-    render.setup(M.opts, file)
+    render.setup(M.opts, lang, filetype)
   end
 
   --- after editing preamble and save, reset highlights
@@ -110,10 +115,6 @@ function M.set_hl(filetype)
     })
   end
 
-  -- set typst math conceal for typst
-  -- and set latex math conceal for all other filetypes.
-  ---@type "typst" | "latex"
-  local lang = filetype == "typst" and filetype or "latex"
   ---always reset highlights for tex due to preamble
   local should_set_hl = filetype == "tex"
   -- if haven't set highlights, must set highlights
