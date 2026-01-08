@@ -70,7 +70,7 @@
 
 ; Math operators and symbols with modifiers - regex removed, Rust will filter  
 ((field) @typ_math_symbol
-  (#set! priority 102)
+  (#set! priority 103)
   (#has-ancestor? @typ_math_symbol math formula)
   ; (#not-has-ancestor? @typ_math_symbol call)
   (#set-conceal! @typ_math_symbol "conceal"))

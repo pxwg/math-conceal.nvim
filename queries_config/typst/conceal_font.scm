@@ -42,13 +42,12 @@
   item: (ident) @typ_math_font
   (#any-of? @typ_math_font "dif")
   ; (#has-ancestor? @func math formula)
-  (#set! conceal ""))
+  (#set! conceal "d"))
 
 (((ident) @typ_math_font
   (#any-of? @typ_math_font "dif"))
   ; (#has-ancestor? @conceal math formula)
-  ; (#set! @conceal "m"))
-  (#set-conceal! @typ_math_font "conceal"))
+  (#set! @typ_math_font "d"))
 
 ; Script functions like upright, script, etc.
 (call
