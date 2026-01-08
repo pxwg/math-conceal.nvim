@@ -16,6 +16,7 @@
   (#set-conceal! @typ_math_symbol "conceal"))
 
 ((escape) @typ_math_symbol
+  (#match? @typ_math_symbol "^\\\\(,|/)$")
   (#set! priority 102)
   (#set-escape! @typ_math_symbol "conceal"))
 

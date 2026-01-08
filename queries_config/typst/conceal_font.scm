@@ -1,4 +1,4 @@
-; Typst font style conceals - regex removed, Rust will filter
+; Typst font style conceals
 ; Bold math symbols
 (call
   item: (ident) @typ_font_name
@@ -8,11 +8,12 @@
   "(" @left_paren
   (#set! @left_paren conceal "")
   (formula) @font_letter
+  (#match? @font_letter "^[a-zA-Z]$")
   (#set-font! @font_letter @typ_font_name "font")
   ")" @right_paren
   (#set! @right_paren conceal ""))
 
-; overline conceal for ident - regex removed, Rust will filter
+; overline conceal for ident
 (call
   item: (_) @typ_font_name
   (#any-of? @typ_font_name "overline" "tilde" "hat" "dot" "dot.double")
@@ -20,6 +21,7 @@
   "(" @left_paren
   (#set! @left_paren conceal "")
   (formula) @font_letter
+  (#match? @font_letter "^([a-zA-Z]|alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|partial|chi|psi|omega|varepsilon|vartheta|varpi|varrho|varsigma|varphi|digamma|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|Varepsilon|Vartheta|Varpi|Varrho|Varsigma|Varphi)$")
   (#set-font! @font_letter @typ_font_name "font")
   ")" @right_paren
   (#set! @right_paren conceal "")
@@ -32,6 +34,7 @@
   "(" @left_paren
   (#set! @left_paren conceal "")
   (formula) @font_letter
+  (#match? @font_letter "diff")
   (#set-font! @font_letter @typ_font_name "font")
   ")" @right_paren
   (#set! @right_paren conceal "")
@@ -42,12 +45,13 @@
   item: (ident) @typ_math_font
   (#any-of? @typ_math_font "dif")
   ; (#has-ancestor? @func math formula)
-  (#set! conceal "d"))
+  (#set! conceal ""))
 
 (((ident) @typ_math_font
   (#any-of? @typ_math_font "dif"))
   ; (#has-ancestor? @conceal math formula)
-  (#set! @typ_math_font "d"))
+  ; (#set! @conceal "m"))
+  (#set-conceal! @typ_math_font "conceal"))
 
 ; Script functions like upright, script, etc.
 (call

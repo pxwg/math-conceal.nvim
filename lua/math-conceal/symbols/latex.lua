@@ -1,9 +1,17 @@
 local M = {}
 
 M.conceal_math = [[
-; math conceals - regex removed, Rust hash table will filter
+; math conceals
 (generic_command
-  command: (command_name) @tex_math_command
+  command: ((command_name) @tex_math_command
+  (#match? @tex_math_command "^\\\\(\\||amalg|angle|approx|ast|asymp|backslash|bigcap|bigcirc|bigcup|bigodot|bigoplus|bigotimes|bigsqcup|bigtriangledown|bigtriangleup|bigvee|bigwedge|bot|bowtie|bullet|cap|cdot|cdots|circ|cong|coprod|copyright|cup|dagger|dashv|ddagger|ddots|diamond|div|doteq|dots|downarrow|Downarrow|equiv|exists|flat|forall|frown|ge|geq|gets|gg|hookleftarrow|hookrightarrow|iff|Im|in|int|jmath|land|lceil|ldots|le|left|leftarrow|Leftarrow|leftharpoondown|leftharpoonup|leftrightarrow|Leftrightarrow|leq|lfloor|ll|lmoustache|lor|mapsto|mid|models|mp|nabla|natural|ne|nearrow|neg|neq|ni|notin|nwarrow|odot|oint|ominus|oplus|oslash|otimes|owns|P|parallel|partial|perp|pm|prec|preceq|prime|prod|propto|rceil|Re|quad|qquad|rfloor|right|rightarrow|Rightarrow|rightleftharpoons|rmoustache|S|searrow|setminus|sharp|sim|simeq|smile|sqcap|sqcup|sqsubset|sqsubseteq|sqsupset|sqsupseteq|star|subset|subseteq|succ|succeq|sum|supset|supseteq|surd|swarrow|times|to|top|triangle|triangleleft|triangleright|uparrow|Uparrow|updownarrow|Updownarrow|vdash|vdots|vee|wedge|wp|wr|langle|rangle|\\{|\\}|,|circ|dashint|nolimits|leadsto|Box|)$"))
+  (#has-ancestor? @tex_math_command math_environment inline_formula displayed_equation generic_command)
+  (#not-has-ancestor? @tex_math_command label_definition text_mode)
+  (#set-conceal! @tex_math_command "conceal"))
+
+(generic_command
+  command: ((command_name) @tex_math_command
+    (#match? @tex_math_command "^\\\\(aleph|clubsuit|diamondsuit|heartsuit|spadesuit|ell|emptyset|varnothing|hbar|imath|infty)$"))
   (#has-ancestor? @tex_math_command math_environment inline_formula displayed_equation generic_command)
   (#not-has-ancestor? @tex_math_command label_definition text_mode)
   (#set-conceal! @tex_math_command "conceal"))
@@ -100,7 +108,7 @@ M.conceal_font = [[
   (#set! @left_paren conceal "")
   (#set! @right_paren conceal "")
   (#set! @tex_font_name conceal "")
-  ; Regex removed - Rust hash table will filter valid font letters
+  (#match? @font_letter "^[a-zA-Z]$")
   (#set-font! @font_letter @tex_font_name))
 
 ((generic_command
@@ -113,7 +121,7 @@ M.conceal_font = [[
   (#set! @left_paren conceal "")
   (#set! @right_paren conceal "")
   (#set! @tex_font_name conceal "")
-  ; Regex removed - Rust hash table will filter valid characters/greek letters
+  (#match? @font_letter "^([a-zA-Z]|\\\\(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|varepsilon|vartheta|varpi|varrho|varsigma|varphi|digamma|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|Varepsilon|Vartheta|Varpi|Varrho|Varsigma|Varphi))$")
   (#set-font! @font_letter @tex_font_name))
 
 ]]
@@ -283,9 +291,16 @@ M.conceal_script = [[
 ]]
 
 M.conceal_greek = [[
-; greek conceal - regex removed, Rust hash table will filter
+; greek conceal
 (generic_command
-  command: (command_name) @tex_greek
+  command: ((command_name) @tex_greek
+    (#match? @tex_greek "^\\\\(varalpha|varbeta|vargamma|vardelta|varepsilon|varzeta|vareta|vartheta|variota|varkappa|varlambda|varmu|varnu|varxi|varpi|varrho|varsigma|vartau|varupsilon|varphi|varchi|varpsi|varomega|alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega)$"))
+  ; (#has-parent? @tex_greek math_environment)
+  (#set-conceal! @tex_greek "conceal"))
+
+(generic_command
+  command: ((command_name) @tex_greek
+    (#match? @tex_greek "^\\\\(Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Chi|Psi|Omega)$"))
   ; (#has-parent? @tex_greek math_environment)
   (#set-conceal! @tex_greek "conceal"))
 

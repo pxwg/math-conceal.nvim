@@ -25,7 +25,7 @@
   (#set! @left_paren conceal "")
   (#set! @right_paren conceal "")
   (#set! @tex_font_name conceal "")
-  ; Regex removed - Rust hash table will filter valid font letters
+  (#match? @font_letter "^[a-zA-Z]$")
   (#set-font! @font_letter @tex_font_name))
 
 ((generic_command
@@ -38,5 +38,5 @@
   (#set! @left_paren conceal "")
   (#set! @right_paren conceal "")
   (#set! @tex_font_name conceal "")
-  ; Regex removed - Rust hash table will filter valid characters/greek letters
+  (#match? @font_letter "^([a-zA-Z]|\\\\(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|varepsilon|vartheta|varpi|varrho|varsigma|varphi|digamma|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|Varepsilon|Vartheta|Varpi|Varrho|Varsigma|Varphi))$")
   (#set-font! @font_letter @tex_font_name))
