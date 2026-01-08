@@ -99,7 +99,7 @@ function M.set_hl(filetype)
       vim.api.nvim_set_hl(M.opts.ns_id, name, val)
     end
     queries.load_queries()
-    render.setup(M.opts, lang)
+    render.setup(M.opts, lang, filetype)
   end
 
   --- after editing preamble and save, reset highlights
