@@ -1,11 +1,6 @@
 local M = {}
 
-local latex = require("math-conceal.symbols.latex")
-local typst = require("math-conceal.symbols.typst")
-local queries = {
-  latex = latex,
-  typst = typst,
-}
+local queries = require("math-conceal.query")
 
 local query_obj_cache = {}
 local configs = {} -- cache different configs
@@ -54,22 +49,6 @@ local function get_parsed_query(lang, query_string)
     vim.notify("Math-Conceal: Failed to parse query: " .. tostring(query), vim.log.levels.ERROR)
     return nil
   end
-end
-
----Get conceal query string for a given language and list of names
----@param language "latex" | "typst"
----@param names string[]
----@return string conceal_query
-local function get_conceal_query(language, names)
-  local output = {}
-  for _, name in ipairs(names) do
-    name = "conceal_" .. name
-    local conceal_querys = queries[language][name]
-    if conceal_querys then
-      table.insert(output, conceal_querys)
-    end
-  end
-  return table.concat(output, "\n")
 end
 
 local function cursor_in_node(curr_row, curr_col, r1, c1, r2, c2)
@@ -262,17 +241,17 @@ local function reparse_and_render(buf_id, config)
 end
 
 ---Setup math conceal rendering
----@param filetype string
+---@param lang "latex" | "typst"
 ---@param query_string string
-local function setup_rendering(filetype, query_string)
-  local query = get_parsed_query(filetype, query_string)
+local function setup_rendering(lang, query_string)
+  local query = get_parsed_query(lang, query_string)
   if not query then
     return
   end
 
-  configs[filetype] = {
+  configs[lang] = {
     query = query,
-    lang = filetype,
+    lang = lang,
     hl_cache = {},
   }
 end
@@ -332,15 +311,14 @@ end
 ---Setup math conceal rendering for files
 ---@param opts table?
 ---@param lang "latex" | "typst"
----@param filetype string
-function M.setup(opts, lang, filetype)
+function M.setup(opts, lang)
   opts = opts or {}
 
   local conceal = opts.conceal or {}
 
-  local query_string = get_conceal_query(lang, conceal)
+  local query_string = queries.read_query_files(queries.get_conceal_queries(lang, conceal))
 
-  setup_rendering(filetype, query_string)
+  setup_rendering(lang, query_string)
 
   local buf_id = vim.api.nvim_get_current_buf()
   local ft = vim.bo[buf_id].filetype
