@@ -1,1 +1,3 @@
-require 'math-conceal'.set()
+vim.schedule(function()
+  require("math-conceal").set()
+end)
