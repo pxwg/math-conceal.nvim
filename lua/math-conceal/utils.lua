@@ -43,29 +43,17 @@ function M.read_conceal_symbols(type, lang)
   return data
 end
 
----Clean raw_data into pattern_type sub-tables
----@param raw_data table<string, table<string, string>>
----@return table<string, table<string, string>>
-function M.clean_conceal_data(raw_data)
-  local result = {
-    conceal = {},
-    font = {},
-    subsup = {},
-    escape = {},
-  }
-  for k, data in pairs(raw_data.symbols or {}) do
-    result.conceal[k] = data
+---Init conceal symbols
+---@param lang "latex" | "typst"
+---@return table<string, string>
+function M.init_conceal_symbols(lang)
+  local type = { "symbols", "fonts" }
+  local raw_data = {}
+  for _, t in ipairs(type) do
+    local data = M.read_conceal_symbols(t, lang)
+    raw_data = vim.tbl_deep_extend("force", raw_data, data)
   end
-  for key, value in pairs(raw_data.fonts or {}) do
-    if key == "sub" or key == "sup" then
-      result.subsup[key] = value
-    elseif key == "escape" then
-      result.escape[key] = value
-    else
-      result.font[key] = value
-    end
-  end
-  return result
+  return raw_data
 end
 
 ---Get queries file from symbols directory
