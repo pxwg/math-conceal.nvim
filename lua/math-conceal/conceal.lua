@@ -1,13 +1,9 @@
+local utils = require("math-conceal.utils")
 local M = {}
 
-local raw_data_latex = require("math-conceal.conceal.latex")
-local raw_data_typst = require("math-conceal.conceal.typst")
-local raw_data = {
-  font = vim.tbl_extend("force", raw_data_latex.font or {}, raw_data_typst.font or {}),
-  subsup = vim.tbl_extend("force", raw_data_latex.subsup or {}, raw_data_typst.subsup or {}),
-  escape = vim.tbl_extend("force", raw_data_latex.escape or {}, raw_data_typst.escape or {}),
-  conceal = vim.tbl_extend("force", raw_data_latex.conceal or {}, raw_data_typst.conceal or {}),
-}
+local latex_data = utils.init_conceal_symbols("latex")
+local typst_data = utils.init_conceal_symbols("typst")
+local raw_data = vim.tbl_deep_extend("force", latex_data, typst_data)
 
 -- cache_by_type: M.lookup_math_symbol
 -- cache_full_string: M.lookup_all
@@ -35,10 +31,17 @@ local function init()
   end
 
   -- Sub/Sup
-  for key, symbol in pairs(raw_data.subsup or {}) do
+  for key, symbol in pairs(raw_data.sub or {}) do
     local type_name, char = key:match("^(.*):(.*)$")
-    if type_name == "sub" or type_name == "sup" then
-      cache_by_type[type_name][char] = symbol
+    if type_name == "sub" then
+      cache_by_type.sub[char] = symbol
+    end
+  end
+
+  for key, symbol in pairs(raw_data.sup or {}) do
+    local type_name, char = key:match("^(.*):(.*)$")
+    if type_name == "sup" then
+      cache_by_type.sup[char] = symbol
     end
   end
 
