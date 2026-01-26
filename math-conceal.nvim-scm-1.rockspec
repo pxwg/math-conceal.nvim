@@ -41,10 +41,7 @@ end
 
 build = {
   type = 'builtin',
-  copy_directories = {'ftplugin', 'queries_config'},
-  modules = {
-    "lookup_conceal"
-  },
+  copy_directories = {'ftplugin'},
   install = {
     lua = {
       ["math-conceal.conceal"] = "lua/math-conceal/conceal.lua",
