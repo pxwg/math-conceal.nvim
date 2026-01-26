@@ -2,10 +2,11 @@
 ---only expand conceal when the cursor is under the math node
 local M = {}
 local _uv = vim.uv
-
-local latex = require("math-conceal.symbols.latex")
-local typst = require("math-conceal.symbols.typst")
 local utils = require("math-conceal.utils")
+
+local latex = utils.init_queries_table("latex")
+local typst = utils.init_queries_table("typst")
+
 local queries = {
   latex = latex,
   typst = typst,

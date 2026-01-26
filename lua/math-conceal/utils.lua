@@ -68,4 +68,34 @@ function M.clean_conceal_data(raw_data)
   return result
 end
 
+---Get queries file from symbols directory
+---@param lang "latex" | "typst"
+---@param query_name "greek" | "script" | "math" | "font" | "delim" | "phy"
+---@return string
+local function get_queries_file(lang, query_name)
+  local info = debug.getinfo(1, "S")
+  local script_path = info.source:sub(2)
+  local dir = vim.fn.fnamemodify(script_path, ":h")
+  local queries_path = dir .. "/symbols/" .. lang .. "/conceal_" .. query_name .. ".scm"
+  return queries_path
+end
+
+---Init query table
+---@param lang "latex" | "typst"
+---@return table<string, string>
+function M.init_queries_table(lang)
+  local queries_name = { "greek", "script", "math", "font", "delim", "phy" }
+  local queries = {}
+  for _, name in ipairs(queries_name) do
+    local query_file = get_queries_file(lang, name)
+    local file = io.open(query_file, "r")
+    if file then
+      local content = file:read("*a")
+      queries["conceal_" .. name] = content
+      file:close()
+    end
+  end
+  return queries
+end
+
 return M
