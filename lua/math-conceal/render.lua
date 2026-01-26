@@ -1,7 +1,7 @@
 ---realization of fine grained math conceal rendering using neovim decoration provider API
 ---only expand conceal when the cursor is under the math node
 local M = {}
-local uv = vim.loop
+local _uv = vim.uv
 
 local latex = require("math-conceal.symbols.latex")
 local typst = require("math-conceal.symbols.typst")
