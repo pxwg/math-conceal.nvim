@@ -1,13 +1,16 @@
+local utils = require("math-conceal.utils")
 local M = {}
+local init_type = { "symbols", "fonts" }
 
-local raw_data_latex = require("math-conceal.conceal.latex")
-local raw_data_typst = require("math-conceal.conceal.typst")
-local raw_data = {
-  font = vim.tbl_extend("force", raw_data_latex.font or {}, raw_data_typst.font or {}),
-  subsup = vim.tbl_extend("force", raw_data_latex.subsup or {}, raw_data_typst.subsup or {}),
-  escape = vim.tbl_extend("force", raw_data_latex.escape or {}, raw_data_typst.escape or {}),
-  conceal = vim.tbl_extend("force", raw_data_latex.conceal or {}, raw_data_typst.conceal or {}),
-}
+-- init raw data
+local raw_data = {}
+for _, p_type in ipairs(init_type) do
+  local latex_data = utils.read_conceal_symbols(p_type, "latex")
+  local typst_data = utils.read_conceal_symbols(p_type, "typst")
+  raw_data[p_type] = vim.tbl_extend("force", latex_data, typst_data)
+end
+
+raw_data = utils.clean_conceal_data(raw_data)
 
 -- cache_by_type: M.lookup_math_symbol
 -- cache_full_string: M.lookup_all
