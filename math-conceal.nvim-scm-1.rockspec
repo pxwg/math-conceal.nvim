@@ -42,12 +42,4 @@ end
 build = {
   type = 'builtin',
   copy_directories = {'ftplugin'},
-  install = {
-    lua = {
-      ["math-conceal.conceal"] = "lua/math-conceal/conceal.lua",
-      ["math-conceal.query"] = "lua/math-conceal/query.lua",
-      ["math-conceal.init"] = "lua/math-conceal/init.lua",
-      ["math-conceal.render"] = "lua/math-conceal/render.lua",
-    }
-  },
 }
