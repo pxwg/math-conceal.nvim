@@ -198,12 +198,24 @@ local function attach_to_buffer(buf, lang, query_string)
     callback = function()
       local cursor = vim.api.nvim_win_get_cursor(0)
       local curr_row = cursor[1] - 1
+
+      local function row_has_marks(r)
+        local cache = buffer_cache[buf]
+        return cache and cache.marks_by_row and cache.marks_by_row[r]
+      end
+
       if curr_row ~= last_cursor_row then
-        safe_redraw_line(buf, last_cursor_row)
-        safe_redraw_line(buf, curr_row)
+        if row_has_marks(last_cursor_row) then
+          safe_redraw_line(buf, last_cursor_row)
+        end
+        if row_has_marks(curr_row) then
+          safe_redraw_line(buf, curr_row)
+        end
         last_cursor_row = curr_row
       else
-        safe_redraw_line(buf, curr_row)
+        if row_has_marks(curr_row) then
+          safe_redraw_line(buf, curr_row)
+        end
       end
     end,
   })
