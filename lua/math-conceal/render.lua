@@ -17,6 +17,8 @@ local buffer_cache = {}
 local ns_id = vim.api.nvim_create_namespace("math-conceal-render")
 local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = false })
 
+local active_configs = {}
+
 ---Safe wrapper for internal redraw
 ---@param buf number
 ---@param line number
@@ -159,6 +161,9 @@ end
 ---@param query_string string
 local function attach_to_buffer(buf, lang, query_string)
   if buffer_cache[buf] then
+    -- If already attached, just update the cache once to be safe
+    -- local query = get_parsed_query(lang, query_string)
+    -- if query then update_buffer_cache(buf, lang, query) end
     return
   end
   local query = get_parsed_query(lang, query_string)
@@ -237,6 +242,36 @@ local function get_conceal_query(language, names)
   return table.concat(output, "\n")
 end
 
+---Attach to a specific buffer
+---@param buf number
+---@param lang string
+function M.attach(buf, lang)
+  if buf == 0 then
+    buf = vim.api.nvim_get_current_buf()
+  end
+  local config = active_configs[lang]
+  if not config then
+    return
+  end
+
+  attach_to_buffer(buf, config.parser_lang, config.query_string)
+
+  vim.opt_local.conceallevel = 2
+  vim.opt_local.concealcursor = "nci"
+
+  local buf_group = vim.api.nvim_create_augroup("math-conceal-buf-" .. buf, { clear = true })
+  vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
+    group = buf_group,
+    buffer = buf,
+    callback = function()
+      vim.opt_local.conceallevel = 2
+      vim.opt_local.concealcursor = "nci"
+    end,
+  })
+
+  vim.api.nvim__redraw({ buf = buf, valid = false })
+end
+
 ---Setup math conceal rendering for Typst/Latex files
 ---@param opts table?
 ---@param lang "latex" | "typst"
@@ -245,20 +280,18 @@ function M.setup(opts, lang)
   local conceal = opts.conceal or {}
   local file_lang = utils.lang_to_ft(lang)
   local parser_lang = utils.lang_to_lt(lang)
+
   local query_string = get_conceal_query(parser_lang, conceal)
+  active_configs[lang] = {
+    file_lang = file_lang,
+    parser_lang = parser_lang,
+    query_string = query_string,
+  }
+
   setup_decoration_provider()
-  local ft_group = vim.api.nvim_create_augroup("math-conceal-ft-" .. file_lang, { clear = false })
-  vim.api.nvim_create_autocmd("BufEnter", {
-    group = ft_group,
-    buffer = 0,
-    callback = function(ev)
-      vim.opt_local.conceallevel = 2
-      vim.opt_local.concealcursor = "nci"
-      attach_to_buffer(ev.buf, parser_lang, query_string)
-    end,
-  })
+
   if vim.bo.filetype == file_lang then
-    attach_to_buffer(vim.api.nvim_get_current_buf(), parser_lang, query_string)
+    M.attach(vim.api.nvim_get_current_buf(), lang)
   end
 end
 

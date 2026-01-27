@@ -126,6 +126,9 @@ function M.set_hl(filetype)
   if should_set_hl then
     M.set_highlights(lang, M.queries[lang], filetype)
   end
+
+  -- Always try to attach render to current buffer
+  render.attach(vim.api.nvim_get_current_buf(), lang)
 end
 
 ---set highlights for lang.
