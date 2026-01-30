@@ -1,6 +1,6 @@
 # math-conceal.nvim ☀️
 
-基于 [rust](https://www.rust-lang.org/) 的强大功能，为 [Neovim](https://github.com/neovim/neovim) 提供更快、更精确的 [LaTeX](https://www.latex-project.org/) 和 [typst](https://github.com/typst/typst) 隐藏功能。
+为 [Neovim](https://github.com/neovim/neovim) 提供更快、更精确的 [LaTeX](https://www.latex-project.org/) 和 [typst](https://github.com/typst/typst) 隐藏功能。
 
 https://github.com/user-attachments/assets/65826ae2-2cd5-48a4-aa37-bfd3d9748b31
 
@@ -71,7 +71,6 @@ $ luarocks --lua-version 5.1 --local --tree ~/.local/share/nvim/rocks install ma
 ### lazy.nvim
 
 ```lua
-vim.o.conceallevel = 1 -- 或 2
 return {
   "pxwg/math-conceal.nvim",
   event = "VeryLazy",

@@ -256,19 +256,6 @@ function M.attach(buf, lang)
 
   attach_to_buffer(buf, config.parser_lang, config.query_string)
 
-  vim.opt_local.conceallevel = 2
-  vim.opt_local.concealcursor = "nci"
-
-  local buf_group = vim.api.nvim_create_augroup("math-conceal-buf-" .. buf, { clear = true })
-  vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
-    group = buf_group,
-    buffer = buf,
-    callback = function()
-      vim.opt_local.conceallevel = 2
-      vim.opt_local.concealcursor = "nci"
-    end,
-  })
-
   vim.api.nvim__redraw({ buf = buf, valid = false })
 end
 
