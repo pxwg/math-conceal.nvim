@@ -1,27 +1,19 @@
----realization of fine grained math conceal rendering using neovim decoration provider API
----only expand conceal when the cursor is under the math node
+--- render.lua - Attachment state tracker and decoration provider for conceal rendering
+--- Note: Highlighting is now handled by vim.treesitter.query.set() in loader.lua
+--- This module tracks which buffers have conceal enabled via the TreeSitter highlight pipeline
 local M = {}
-local utils = require("math-conceal.utils")
 
-local latex = utils.init_queries_table("latex")
-local typst = utils.init_queries_table("typst")
-
-local queries = {
-  latex = latex,
-  typst = typst,
-}
-
-local query_obj_cache = {}
+-- Buffer cache: buffer_cache[bufnr] = { langs = {...} }
+-- Tracks which languages are enabled for conceal in each buffer
 local buffer_cache = {}
--- Viewport caching: store computed node lists per window
+
+-- Window viewport state cache for performance optimization
 local win_states = {}
 
 local ns_id = vim.api.nvim_create_namespace("math-conceal-render")
 local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = true })
 
-local active_configs = {}
-
--- Clean up window cache on window close
+-- Cleanup window cache on window close
 vim.api.nvim_create_autocmd("WinClosed", {
   group = augroup,
   callback = function(args)
@@ -32,35 +24,16 @@ vim.api.nvim_create_autocmd("WinClosed", {
   end,
 })
 
----Get parsed query object from cache or parse a new one
----@param lang "latex" | "typst"
----@param query_string string
----@return table|nil parsed_query
-local function get_parsed_query(lang, query_string)
-  local cache_key = lang .. ":" .. query_string
-  if query_obj_cache[cache_key] then
-    return query_obj_cache[cache_key]
-  end
-  local success, query = pcall(vim.treesitter.query.parse, lang, query_string)
-  if success and query then
-    query_obj_cache[cache_key] = query
-    return query
-  else
-    vim.notify_once("Math-Conceal: Failed to parse query", vim.log.levels.ERROR)
-    return nil
-  end
-end
-
----Setup decoration provider for conceal rendering (global, only once)
+--- Core rendering logic via Decoration Provider
+--- Handles fine-grained cursor detection and conceal rendering
 local function setup_decoration_provider()
   vim.api.nvim_set_decoration_provider(ns_id, {
     on_win = function(_, win_id, buf_id, toprow, botrow)
-      local cache = buffer_cache[buf_id]
-      if not cache or not cache.parser then
+      local buf_config = buffer_cache[buf_id]
+      if not buf_config then
         return false
       end
 
-      -- Get current buffer version (changedtick)
       local buf_tick = vim.b[buf_id].changedtick
 
       -- Get or initialize window state
@@ -70,60 +43,73 @@ local function setup_decoration_provider()
         win_states[win_id] = state
       end
 
-      -- Core optimization: cache hit check
-      -- Reuse marks if buffer unchanged AND viewport unchanged
+      -- Cache hit check: if buffer unchanged and viewport unchanged, use cache
       local is_cache_valid = (state.tick == buf_tick) and (state.top == toprow) and (state.bot == botrow)
 
       if not is_cache_valid then
-        -- Cache miss: requery Tree-sitter
+        -- Cache miss, recalculate
         state.marks = {}
         state.tick = buf_tick
         state.top = toprow
         state.bot = botrow
 
-        -- Incremental parse (use true for full correctness)
-        cache.parser:parse(true)
+        local ok, parser = pcall(vim.treesitter.get_parser, buf_id)
+        if not ok or not parser then
+          return false
+        end
 
-        -- Iterate over all trees (including injected ones like latex in markdown)
-        cache.parser:for_each_tree(function(t, language_tree)
-          local tree_lang = language_tree:lang()
-          local query = cache.queries[tree_lang]
+        -- Incremental parse
+        pcall(parser.parse, parser)
 
-          if query then
-            local root = t:root()
-            -- Query only visible range + small buffer (30 lines) for smooth scrolling
-            local query_top = math.max(0, toprow - 30)
-            local query_bot = botrow + 30
+        -- Iterate all relevant trees (main tree + injected trees)
+        -- Use pcall to safely handle potential errors
+        local ok_iter = pcall(function()
+          parser:for_each_tree(function(tree, language_tree)
+            local lang = language_tree:lang()
+            local root = tree:root()
 
-            for id, node, metadata in query:iter_captures(root, buf_id, query_top, query_bot) do
-              local capture_data = metadata[id]
-              local conceal_char = capture_data and capture_data.conceal or metadata.conceal
+            -- Get highlights query for this language
+            -- (which now includes our conceal directives from loader.lua)
+            local ok_query, query = pcall(vim.treesitter.query.get, lang, "highlights")
+            if ok_query and query then
+              -- Expand query range for smooth scrolling
+              local query_top = math.max(0, toprow - 30)
+              local query_bot = botrow + 30
 
-              if conceal_char then
-                local r1, c1, r2, c2 = node:range()
-                -- Only cache marks within actual viewport
-                if r1 <= botrow and r2 >= toprow then
-                  local priority = (capture_data and capture_data.priority) or metadata.priority or 100
-                  local hl_group = (capture_data and capture_data.highlight) or metadata.highlight or "Conceal"
+              for id, node, metadata in query:iter_captures(root, buf_id, query_top, query_bot) do
+                local capture_data = metadata[id]
+                -- Get conceal character from metadata (set by directives in query)
+                local conceal_char = (capture_data and capture_data.conceal) or metadata.conceal
 
-                  -- Store all rendering data in pure Lua table (array is faster than hash)
-                  table.insert(state.marks, {
-                    r1,
-                    c1,
-                    r2,
-                    c2, -- [1-4] position
-                    conceal_char, -- [5]
-                    hl_group, -- [6]
-                    tonumber(priority) or 100, -- [7]
-                  })
+                if conceal_char then
+                  local r1, c1, r2, c2 = node:range()
+                  -- Only cache nodes within viewport
+                  if r1 <= botrow and r2 >= toprow then
+                    local priority = (capture_data and capture_data.priority) or metadata.priority or 100
+                    local hl_group = (capture_data and capture_data.highlight) or metadata.highlight or "Conceal"
+
+                    table.insert(state.marks, {
+                      r1,
+                      c1,
+                      r2,
+                      c2, -- [1-4] Position
+                      conceal_char, -- [5] Conceal char
+                      hl_group, -- [6] Highlight group
+                      tonumber(priority), -- [7] Priority
+                    })
+                  end
                 end
               end
             end
-          end
+          end)
         end)
+
+        if not ok_iter then
+          return false
+        end
       end
 
-      -- Render phase: ultra-fast iteration over cached Lua table
+      -- Render phase: fast iteration over pure Lua table and set extmarks
       local cursor = vim.api.nvim_win_get_cursor(win_id)
       local curr_row = cursor[1] - 1
       local curr_col = cursor[2]
@@ -132,7 +118,7 @@ local function setup_decoration_provider()
       for _, m in ipairs(state.marks) do
         local r1, c1, r2, c2 = m[1], m[2], m[3], m[4]
 
-        -- Collision detection: check if cursor is inside node
+        -- Fine-grained control: detect if cursor is inside node
         local is_cursor_inside = false
         if curr_row >= r1 and curr_row <= r2 then
           if r1 == r2 then
@@ -167,39 +153,19 @@ local function setup_decoration_provider()
   })
 end
 
----Attach conceal logic to buffer
----@param buf number
----@param lang string
----@param query_string string
-local function attach_to_buffer(buf, lang, query_string)
-  local query = get_parsed_query(lang, query_string)
-  if not query then
-    return
+--- Register a buffer as having conceal enabled (for tracking purposes)
+--- @param buf integer Buffer number
+--- @param lang string Tree-sitter language name
+function M.register_query(buf, lang, _)
+  if buf == 0 then
+    buf = vim.api.nvim_get_current_buf()
   end
 
+  -- Initialize buffer cache
   if not buffer_cache[buf] then
-    -- Use the buffer's default parser (e.g. "markdown" for md files)
-    -- It will automatically handle injections (e.g. "latex" inside md)
-    local parser = vim.treesitter.get_parser(buf)
-    if not parser then
-      return
-    end
+    buffer_cache[buf] = { langs = {} }
 
-    buffer_cache[buf] = {
-      parser = parser,
-      queries = {}, -- Allow multiple queries per buffer (e.g. latex query in markdown)
-    }
-
-    parser:register_cbs({
-      on_changedtree = function()
-        vim.schedule(function()
-          if vim.api.nvim_buf_is_valid(buf) then
-            vim.api.nvim__redraw({ buf = buf, valid = false })
-          end
-        end)
-      end,
-    })
-
+    -- Cleanup on buffer delete
     vim.api.nvim_create_autocmd("BufDelete", {
       group = augroup,
       buffer = buf,
@@ -208,6 +174,7 @@ local function attach_to_buffer(buf, lang, query_string)
       end,
     })
 
+    -- Trigger redraw on cursor move
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
       group = augroup,
       buffer = buf,
@@ -217,90 +184,95 @@ local function attach_to_buffer(buf, lang, query_string)
     })
   end
 
-  -- Register the query for this specific language
-  buffer_cache[buf].queries[lang] = query
+  -- Track language
+  if not vim.tbl_contains(buffer_cache[buf].langs, lang) then
+    table.insert(buffer_cache[buf].langs, lang)
+  end
 end
 
----Get conceal query string for a given language and list of names
----@param language "latex" | "typst"
----@param names string[]
----@return string conceal_query
-local function get_conceal_query(language, names)
-  local output = {}
-
-  for _, name in ipairs(names) do
-    name = "conceal_" .. name
-    local conceal_querys = queries[language][name]
-    if conceal_querys then
-      table.insert(output, conceal_querys)
-    end
-  end
-
-  local default_query_files = vim.treesitter.query.get_files(language, "highlights")
-  if default_query_files and #default_query_files > 0 then
-    for _, file_path in ipairs(default_query_files) do
-      if not file_path:find("math%-conceal") then
-        local file = io.open(file_path, "r")
-        if file then
-          local content = file:read("*a")
-          file:close()
-          if content and content ~= "" then
-            table.insert(output, content)
-          end
-        end
-      end
-    end
-  end
-
-  return table.concat(output, "\n")
-end
-
----Attach to a specific buffer
----@param buf number
----@param langs string|string[] Single language or array of languages to attach
-function M.attach(buf, langs)
+--- Unregister a language query from a buffer
+--- @param buf integer Buffer number
+--- @param lang string Language to unregister
+function M.unregister_query(buf, lang)
   if buf == 0 then
     buf = vim.api.nvim_get_current_buf()
   end
-
-  -- Normalize to array
-  if type(langs) == "string" then
-    langs = { langs }
+  if buffer_cache[buf] then
+    buffer_cache[buf].langs = vim.tbl_filter(function(l)
+      return l ~= lang
+    end, buffer_cache[buf].langs)
   end
+end
 
-  -- Attach all specified languages
-  for _, lang in ipairs(langs) do
-    local config = active_configs[lang]
-    if config then
-      attach_to_buffer(buf, config.parser_lang, config.query_string)
+--- Check if a buffer has any registered queries
+--- @param buf integer Buffer number
+--- @return boolean
+function M.is_attached(buf)
+  if buf == 0 then
+    buf = vim.api.nvim_get_current_buf()
+  end
+  return buffer_cache[buf] ~= nil and #buffer_cache[buf].langs > 0
+end
+
+--- Get registered languages for a buffer
+--- @param buf integer Buffer number
+--- @return string[] List of registered language names
+function M.get_registered_langs(buf)
+  if buf == 0 then
+    buf = vim.api.nvim_get_current_buf()
+  end
+  if buffer_cache[buf] then
+    return buffer_cache[buf].langs
+  end
+  return {}
+end
+
+--- Clear all queries for a buffer
+--- @param buf integer Buffer number
+function M.clear_buffer(buf)
+  if buf == 0 then
+    buf = vim.api.nvim_get_current_buf()
+  end
+  buffer_cache[buf] = nil
+  -- Invalidate window states for this buffer
+  for win_id, _ in pairs(win_states) do
+    local ok, win_buf = pcall(vim.api.nvim_win_get_buf, win_id)
+    if ok and win_buf == buf then
+      win_states[win_id] = nil
     end
   end
+end
 
+--- Force refresh rendering for a buffer
+--- @param buf integer Buffer number (0 for current)
+function M.refresh(buf)
+  if buf == 0 then
+    buf = vim.api.nvim_get_current_buf()
+  end
+  -- Invalidate cache for all windows showing this buffer
+  for win_id, _ in pairs(win_states) do
+    local ok, win_buf = pcall(vim.api.nvim_win_get_buf, win_id)
+    if ok and win_buf == buf then
+      win_states[win_id] = nil
+    end
+  end
   vim.api.nvim__redraw({ buf = buf, valid = false })
 end
 
----Setup math conceal rendering for Typst/Latex files
----@param opts table?
----@param lang "latex" | "typst"
-function M.setup(opts, lang)
-  opts = opts or {}
-  local conceal = opts.conceal or {}
-  local file_lang = utils.lang_to_ft(lang)
-  local parser_lang = utils.lang_to_lt(lang)
+--- Setup render engine
+function M.setup()
+  -- Nothing to configure for now
+end
 
-  local query_string = get_conceal_query(parser_lang, conceal)
-  query_string = query_string:gsub("; extends [^\n]+", "")
-  active_configs[lang] = {
-    file_lang = file_lang,
-    parser_lang = parser_lang,
-    query_string = query_string,
-  }
-
+--- Enable the rendering engine (call once)
+function M.enable()
   setup_decoration_provider()
+end
 
-  if vim.bo.filetype == file_lang then
-    M.attach(vim.api.nvim_get_current_buf(), lang)
-  end
+--- Get namespace ID
+--- @return integer
+function M.get_ns_id()
+  return ns_id
 end
 
 return M
