@@ -222,20 +222,24 @@ local function attach_to_buffer(buf, lang, query_string)
 end
 
 ---Get conceal query string for a given language and list of names
----@param language "latex" | "typst"
+---@param language string
 ---@param names string[]
 ---@return string conceal_query
 local function get_conceal_query(language, names)
   local output = {}
 
-  for _, name in ipairs(names) do
-    name = "conceal_" .. name
-    local conceal_querys = queries[language][name]
-    if conceal_querys then
-      table.insert(output, conceal_querys)
+  -- For latex and typst, load custom conceal queries
+  if language == "latex" or language == "typst" then
+    for _, name in ipairs(names) do
+      name = "conceal_" .. name
+      local conceal_querys = queries[language][name]
+      if conceal_querys then
+        table.insert(output, conceal_querys)
+      end
     end
   end
 
+  -- Load built-in runtime queries for all languages
   local default_query_files = vim.treesitter.query.get_files(language, "highlights")
   if default_query_files and #default_query_files > 0 then
     for _, file_path in ipairs(default_query_files) do
@@ -279,14 +283,24 @@ function M.attach(buf, langs)
   vim.api.nvim__redraw({ buf = buf, valid = false })
 end
 
----Setup math conceal rendering for Typst/Latex files
+---Setup math conceal rendering for any language
 ---@param opts table?
----@param lang "latex" | "typst"
+---@param lang string
 function M.setup(opts, lang)
   opts = opts or {}
   local conceal = opts.conceal or {}
-  local file_lang = utils.lang_to_ft(lang)
-  local parser_lang = utils.lang_to_lt(lang)
+
+  -- For latex/typst, use the utility functions
+  -- For other languages, use the language name directly as parser language
+  local file_lang, parser_lang
+  if lang == "latex" or lang == "typst" then
+    file_lang = utils.lang_to_ft(lang)
+    parser_lang = utils.lang_to_lt(lang)
+  else
+    -- For other languages, use the language name as-is
+    file_lang = lang
+    parser_lang = lang
+  end
 
   local query_string = get_conceal_query(parser_lang, conceal)
   query_string = query_string:gsub("; extends [^\n]+", "")

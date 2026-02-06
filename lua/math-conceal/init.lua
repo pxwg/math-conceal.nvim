@@ -119,17 +119,16 @@ function M.set_hl(filetype)
 
   local langs_to_setup = { lang }
 
-  -- Check if buffer has treesitter parser and detect injected languages
+  -- Check if buffer has treesitter parser and detect all injected languages
   local buf = vim.api.nvim_get_current_buf()
   local ok, parser = pcall(vim.treesitter.get_parser, buf)
   if ok and parser then
     -- Get all language trees (including injections)
     parser:for_each_tree(function(tree, language_tree)
       local tree_lang = language_tree:lang()
-      if tree_lang == "latex" and not vim.tbl_contains(langs_to_setup, "latex") then
-        table.insert(langs_to_setup, "latex")
-      elseif tree_lang == "typst" and not vim.tbl_contains(langs_to_setup, "typst") then
-        table.insert(langs_to_setup, "typst")
+      -- Add all detected languages (not just latex/typst)
+      if not vim.tbl_contains(langs_to_setup, tree_lang) then
+        table.insert(langs_to_setup, tree_lang)
       end
     end)
   end
@@ -137,8 +136,17 @@ function M.set_hl(filetype)
   -- Setup all required languages
   for _, l in ipairs(langs_to_setup) do
     if M.queries[l] == nil then
-      M.files[l] = queries.get_conceal_queries(l, M.opts.conceal)
-      M.queries[l] = queries.read_query_files(M.files[l])
+      -- For latex and typst, load custom queries
+      if l == "latex" or l == "typst" then
+        M.files[l] = queries.get_conceal_queries(l, M.opts.conceal)
+        M.queries[l] = queries.read_query_files(M.files[l])
+      else
+        -- For other languages, use empty string as placeholder.
+        -- The actual builtin runtime queries will be loaded by get_conceal_query()
+        -- in render.lua, which loads vim.treesitter.query.get_files(language, "highlights")
+        -- This ensures standard Tree-sitter highlighting for non-latex/typst languages.
+        M.queries[l] = ""
+      end
       render.setup(M.opts, l)
       should_set_hl = true
     end
