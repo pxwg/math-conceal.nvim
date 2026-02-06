@@ -19,24 +19,6 @@ local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = fal
 
 local active_configs = {}
 
----Safe wrapper for internal redraw
----@param buf number
----@param line number
-local function safe_redraw_line(buf, line)
-  if line < 0 then
-    return
-  end
-  if not vim.api.nvim_buf_is_valid(buf) then
-    return
-  end
-  pcall(vim.api.nvim__redraw, {
-    buf = buf,
-    range = { line, line + 1 },
-    valid = false,
-    cursor = false,
-  })
-end
-
 ---Get parsed query object from cache or parse a new one
 ---@param lang "latex" | "typst"
 ---@param query_string string
@@ -56,97 +38,67 @@ local function get_parsed_query(lang, query_string)
   end
 end
 
----Update buffer cache: parse tree and build row-based spatial index
----@param buf number
----@param lang string
----@param query table
-local function update_buffer_cache(buf, lang, query)
-  local cache = buffer_cache[buf]
-  if not cache then
-    return
-  end
-  local parser = cache.parser
-  parser:parse(true)
-  local trees = parser:trees()
-  local tree = trees and trees[1]
-  if not tree then
-    return
-  end
-  local root = tree:root()
-  local marks_by_row = {}
-  for id, node, metadata in query:iter_captures(root, buf, 0, -1) do
-    local capture_data = metadata[id]
-    local conceal_char = capture_data and capture_data.conceal or metadata.conceal
-    if conceal_char then
-      local r1, c1, r2, c2 = node:range()
-      if not marks_by_row[r1] then
-        marks_by_row[r1] = {}
-      end
-      local priority = (capture_data and capture_data.priority) or metadata.priority or 100
-      local hl_group = (capture_data and capture_data.highlight) or metadata.highlight or "Conceal"
-      table.insert(marks_by_row[r1], {
-        col_start = c1,
-        col_end = c2,
-        row_end = r2,
-        conceal = conceal_char,
-        hl_group = hl_group,
-        priority = tonumber(priority),
-      })
-    end
-  end
-  cache.marks_by_row = marks_by_row
-  cache.tree_version = vim.b[buf].changedtick
-end
-
 ---Setup decoration provider for conceal rendering (global, only once)
 local function setup_decoration_provider()
   vim.api.nvim_set_decoration_provider(ns_id, {
     on_win = function(_, win_id, buf_id, toprow, botrow)
       local cache = buffer_cache[buf_id]
-      if not cache or not cache.marks_by_row then
+      if not cache or not cache.parser or not cache.query then
         return false
       end
+
+      -- Ensure tree is up to date (parse is incremental, usually fast)
+      cache.parser:parse(true)
+      local trees = cache.parser:trees()
+      local tree = trees and trees[1]
+      if not tree then
+        return false
+      end
+      local root = tree:root()
+
       local cursor = vim.api.nvim_win_get_cursor(win_id)
       local curr_row = cursor[1] - 1
       local curr_col = cursor[2]
       local set_extmark = vim.api.nvim_buf_set_extmark
-      local extmark_opts = {
-        conceal = "",
-        ephemeral = true,
-        hl_group = "",
-        priority = 100,
-        end_row = 0,
-        end_col = 0,
-      }
-      for row = toprow, botrow do
-        local marks = cache.marks_by_row[row]
-        if marks then
-          for _, m in ipairs(marks) do
-            local r1, c1, r2, c2 = row, m.col_start, m.row_end, m.col_end
-            local is_cursor_inside = false
-            if curr_row >= r1 and curr_row <= r2 then
-              if r1 == r2 then
-                if curr_col >= c1 and curr_col < c2 then
-                  is_cursor_inside = true
-                end
-              else
-                if curr_row == r1 and curr_col >= c1 then
-                  is_cursor_inside = true
-                elseif curr_row == r2 and curr_col < c2 then
-                  is_cursor_inside = true
-                elseif curr_row > r1 and curr_row < r2 then
-                  is_cursor_inside = true
-                end
+
+      -- Query only in visible range (core optimization: only query toprow to botrow)
+      for id, node, metadata in cache.query:iter_captures(root, buf_id, toprow, botrow) do
+        local capture_data = metadata[id]
+        local conceal_char = capture_data and capture_data.conceal or metadata.conceal
+
+        if conceal_char then
+          local r1, c1, r2, c2 = node:range()
+
+          -- Cursor collision detection logic remains the same
+          local is_cursor_inside = false
+          if curr_row >= r1 and curr_row <= r2 then
+            if r1 == r2 then
+              if curr_col >= c1 and curr_col < c2 then
+                is_cursor_inside = true
+              end
+            else
+              if curr_row == r1 and curr_col >= c1 then
+                is_cursor_inside = true
+              elseif curr_row == r2 and curr_col < c2 then
+                is_cursor_inside = true
+              elseif curr_row > r1 and curr_row < r2 then
+                is_cursor_inside = true
               end
             end
-            if not is_cursor_inside then
-              extmark_opts.conceal = m.conceal
-              extmark_opts.hl_group = m.hl_group
-              extmark_opts.priority = m.priority
-              extmark_opts.end_row = r2
-              extmark_opts.end_col = c2
-              set_extmark(buf_id, ns_id, r1, c1, extmark_opts)
-            end
+          end
+
+          if not is_cursor_inside then
+            local priority = (capture_data and capture_data.priority) or metadata.priority or 100
+            local hl_group = (capture_data and capture_data.highlight) or metadata.highlight or "Conceal"
+
+            set_extmark(buf_id, ns_id, r1, c1, {
+              conceal = conceal_char,
+              hl_group = hl_group,
+              priority = tonumber(priority),
+              end_row = r2,
+              end_col = c2,
+              ephemeral = true,
+            })
           end
         end
       end
@@ -161,34 +113,36 @@ end
 ---@param query_string string
 local function attach_to_buffer(buf, lang, query_string)
   if buffer_cache[buf] then
-    -- If already attached, just update the cache once to be safe
-    -- local query = get_parsed_query(lang, query_string)
-    -- if query then update_buffer_cache(buf, lang, query) end
     return
   end
+
   local query = get_parsed_query(lang, query_string)
   if not query then
     return
   end
+
   local parser = vim.treesitter.get_parser(buf, lang)
   if not parser then
     return
   end
+
+  -- Only need to store parser and query, no longer need marks_by_row
   buffer_cache[buf] = {
     parser = parser,
-    marks_by_row = {},
+    query = query,
   }
-  update_buffer_cache(buf, lang, query)
+
+  -- Only need to trigger redraw on tree changes, computation is done in on_win
   parser:register_cbs({
     on_changedtree = function()
       vim.schedule(function()
         if vim.api.nvim_buf_is_valid(buf) then
-          update_buffer_cache(buf, lang, query)
           vim.api.nvim__redraw({ buf = buf, valid = false })
         end
       end)
     end,
   })
+
   vim.api.nvim_create_autocmd("BufDelete", {
     group = augroup,
     buffer = buf,
@@ -196,32 +150,13 @@ local function attach_to_buffer(buf, lang, query_string)
       buffer_cache[buf] = nil
     end,
   })
-  local last_cursor_row = -1
+
+  -- Simple redraw trigger on cursor movement
   vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     group = augroup,
     buffer = buf,
     callback = function()
-      local cursor = vim.api.nvim_win_get_cursor(0)
-      local curr_row = cursor[1] - 1
-
-      local function row_has_marks(r)
-        local cache = buffer_cache[buf]
-        return cache and cache.marks_by_row and cache.marks_by_row[r]
-      end
-
-      if curr_row ~= last_cursor_row then
-        if row_has_marks(last_cursor_row) then
-          safe_redraw_line(buf, last_cursor_row)
-        end
-        if row_has_marks(curr_row) then
-          safe_redraw_line(buf, curr_row)
-        end
-        last_cursor_row = curr_row
-      else
-        if row_has_marks(curr_row) then
-          safe_redraw_line(buf, curr_row)
-        end
-      end
+      vim.api.nvim__redraw({ buf = buf, valid = false })
     end,
   })
 end
