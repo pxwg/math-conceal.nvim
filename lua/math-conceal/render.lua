@@ -56,7 +56,7 @@ local function setup_decoration_provider()
   vim.api.nvim_set_decoration_provider(ns_id, {
     on_win = function(_, win_id, buf_id, toprow, botrow)
       local cache = buffer_cache[buf_id]
-      if not cache or not cache.parser or not cache.query then
+      if not cache or not cache.parser then
         return false
       end
 
@@ -83,40 +83,44 @@ local function setup_decoration_provider()
 
         -- Incremental parse (use true for full correctness)
         cache.parser:parse(true)
-        local trees = cache.parser:trees()
-        local tree = trees and trees[1]
 
-        if tree then
-          local root = tree:root()
-          -- Query only visible range + small buffer (30 lines) for smooth scrolling
-          local query_top = math.max(0, toprow - 30)
-          local query_bot = botrow + 30
+        -- Iterate over all trees (including injected ones like latex in markdown)
+        cache.parser:for_each_tree(function(t, language_tree)
+          local tree_lang = language_tree:lang()
+          local query = cache.queries[tree_lang]
 
-          for id, node, metadata in cache.query:iter_captures(root, buf_id, query_top, query_bot) do
-            local capture_data = metadata[id]
-            local conceal_char = capture_data and capture_data.conceal or metadata.conceal
+          if query then
+            local root = t:root()
+            -- Query only visible range + small buffer (30 lines) for smooth scrolling
+            local query_top = math.max(0, toprow - 30)
+            local query_bot = botrow + 30
 
-            if conceal_char then
-              local r1, c1, r2, c2 = node:range()
-              -- Only cache marks within actual viewport
-              if r1 <= botrow and r2 >= toprow then
-                local priority = (capture_data and capture_data.priority) or metadata.priority or 100
-                local hl_group = (capture_data and capture_data.highlight) or metadata.highlight or "Conceal"
+            for id, node, metadata in query:iter_captures(root, buf_id, query_top, query_bot) do
+              local capture_data = metadata[id]
+              local conceal_char = capture_data and capture_data.conceal or metadata.conceal
 
-                -- Store all rendering data in pure Lua table (array is faster than hash)
-                table.insert(state.marks, {
-                  r1,
-                  c1,
-                  r2,
-                  c2, -- [1-4] position
-                  conceal_char, -- [5]
-                  hl_group, -- [6]
-                  tonumber(priority) or 100, -- [7]
-                })
+              if conceal_char then
+                local r1, c1, r2, c2 = node:range()
+                -- Only cache marks within actual viewport
+                if r1 <= botrow and r2 >= toprow then
+                  local priority = (capture_data and capture_data.priority) or metadata.priority or 100
+                  local hl_group = (capture_data and capture_data.highlight) or metadata.highlight or "Conceal"
+
+                  -- Store all rendering data in pure Lua table (array is faster than hash)
+                  table.insert(state.marks, {
+                    r1,
+                    c1,
+                    r2,
+                    c2, -- [1-4] position
+                    conceal_char, -- [5]
+                    hl_group, -- [6]
+                    tonumber(priority) or 100, -- [7]
+                  })
+                end
               end
             end
           end
-        end
+        end)
       end
 
       -- Render phase: ultra-fast iteration over cached Lua table
@@ -168,50 +172,53 @@ end
 ---@param lang string
 ---@param query_string string
 local function attach_to_buffer(buf, lang, query_string)
-  if buffer_cache[buf] then
-    return
-  end
-
   local query = get_parsed_query(lang, query_string)
   if not query then
     return
   end
 
-  local parser = vim.treesitter.get_parser(buf, lang)
-  if not parser then
-    return
+  if not buffer_cache[buf] then
+    -- Use the buffer's default parser (e.g. "markdown" for md files)
+    -- It will automatically handle injections (e.g. "latex" inside md)
+    local parser = vim.treesitter.get_parser(buf)
+    if not parser then
+      return
+    end
+
+    buffer_cache[buf] = {
+      parser = parser,
+      queries = {}, -- Allow multiple queries per buffer (e.g. latex query in markdown)
+    }
+
+    parser:register_cbs({
+      on_changedtree = function()
+        vim.schedule(function()
+          if vim.api.nvim_buf_is_valid(buf) then
+            vim.api.nvim__redraw({ buf = buf, valid = false })
+          end
+        end)
+      end,
+    })
+
+    vim.api.nvim_create_autocmd("BufDelete", {
+      group = augroup,
+      buffer = buf,
+      callback = function()
+        buffer_cache[buf] = nil
+      end,
+    })
+
+    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+      group = augroup,
+      buffer = buf,
+      callback = function()
+        vim.api.nvim__redraw({ buf = buf, valid = false })
+      end,
+    })
   end
 
-  buffer_cache[buf] = {
-    parser = parser,
-    query = query,
-  }
-
-  parser:register_cbs({
-    on_changedtree = function()
-      vim.schedule(function()
-        if vim.api.nvim_buf_is_valid(buf) then
-          vim.api.nvim__redraw({ buf = buf, valid = false })
-        end
-      end)
-    end,
-  })
-
-  vim.api.nvim_create_autocmd("BufDelete", {
-    group = augroup,
-    buffer = buf,
-    callback = function()
-      buffer_cache[buf] = nil
-    end,
-  })
-
-  vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
-    group = augroup,
-    buffer = buf,
-    callback = function()
-      vim.api.nvim__redraw({ buf = buf, valid = false })
-    end,
-  })
+  -- Register the query for this specific language
+  buffer_cache[buf].queries[lang] = query
 end
 
 ---Get conceal query string for a given language and list of names
@@ -250,17 +257,24 @@ end
 
 ---Attach to a specific buffer
 ---@param buf number
----@param lang string
-function M.attach(buf, lang)
+---@param langs string|string[] Single language or array of languages to attach
+function M.attach(buf, langs)
   if buf == 0 then
     buf = vim.api.nvim_get_current_buf()
   end
-  local config = active_configs[lang]
-  if not config then
-    return
+
+  -- Normalize to array
+  if type(langs) == "string" then
+    langs = { langs }
   end
 
-  attach_to_buffer(buf, config.parser_lang, config.query_string)
+  -- Attach all specified languages
+  for _, lang in ipairs(langs) do
+    local config = active_configs[lang]
+    if config then
+      attach_to_buffer(buf, config.parser_lang, config.query_string)
+    end
+  end
 
   vim.api.nvim__redraw({ buf = buf, valid = false })
 end
