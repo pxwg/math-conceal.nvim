@@ -92,13 +92,13 @@ function M.set_hl(filetype)
   -- and set latex math conceal for all other filetypes.
   ---@type "typst" | "latex"
   local lang = filetype == "typst" and filetype or "latex"
+
   --- first run
   if #M.queries == 0 then
     for name, val in pairs(M.opts.highlights) do
       vim.api.nvim_set_hl(M.opts.ns_id, name, val)
     end
     queries.load_queries()
-    render.setup(M.opts, lang)
   end
 
   --- after editing preamble and save, reset highlights
@@ -116,18 +116,42 @@ function M.set_hl(filetype)
 
   ---always reset highlights for tex due to preamble
   local should_set_hl = filetype == "tex"
-  -- if haven't set highlights, must set highlights
-  if M.queries[lang] == nil then
-    M.files[lang] = queries.get_conceal_queries(lang, M.opts.conceal)
-    M.queries[lang] = queries.read_query_files(M.files[lang])
-    should_set_hl = true
-  end
-  if should_set_hl then
-    M.set_highlights(lang, M.queries[lang], filetype)
+
+  local langs_to_setup = { lang }
+
+  -- Check if buffer has treesitter parser and detect injected languages
+  local buf = vim.api.nvim_get_current_buf()
+  local ok, parser = pcall(vim.treesitter.get_parser, buf)
+  if ok and parser then
+    -- Get all language trees (including injections)
+    parser:for_each_tree(function(tree, language_tree)
+      local tree_lang = language_tree:lang()
+      if tree_lang == "latex" and not vim.tbl_contains(langs_to_setup, "latex") then
+        table.insert(langs_to_setup, "latex")
+      elseif tree_lang == "typst" and not vim.tbl_contains(langs_to_setup, "typst") then
+        table.insert(langs_to_setup, "typst")
+      end
+    end)
   end
 
-  -- Always try to attach render to current buffer
-  render.attach(vim.api.nvim_get_current_buf(), lang)
+  -- Setup all required languages
+  for _, l in ipairs(langs_to_setup) do
+    if M.queries[l] == nil then
+      M.files[l] = queries.get_conceal_queries(l, M.opts.conceal)
+      M.queries[l] = queries.read_query_files(M.files[l])
+      render.setup(M.opts, l)
+      should_set_hl = true
+    end
+  end
+
+  if should_set_hl then
+    for _, l in ipairs(langs_to_setup) do
+      M.set_highlights(l, M.queries[l], filetype)
+    end
+  end
+
+  -- Attach all required languages to the buffer
+  render.attach(buf, langs_to_setup)
 end
 
 ---set highlights for lang.
