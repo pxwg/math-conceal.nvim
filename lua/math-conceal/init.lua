@@ -84,11 +84,9 @@ end
 ---do some prepare work, then call `set_highlights`
 ---@param filetype string
 function M.set_hl(filetype)
-  -- set correct conceallevel
-  if vim.o.conceallevel == 0 then
-    vim.opt_local.conceallevel = 2
-    vim.opt_local.concealcursor = "nci"
-  end
+  -- force set conceallevel and concealcursor for current buffer
+  vim.opt_local.conceallevel = 2
+  vim.opt_local.concealcursor = "nci"
 
   -- set typst math conceal for typst
   -- and set latex math conceal for all other filetypes.
