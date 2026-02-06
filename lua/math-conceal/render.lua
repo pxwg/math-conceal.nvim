@@ -227,11 +227,14 @@ local function attach_to_buffer(buf, lang, query_string)
 end
 
 ---Get conceal query string for a given language and list of names
+---Includes both project-internal queries and Neovim runtime queries
 ---@param language "latex" | "typst"
 ---@param names string[]
 ---@return string conceal_query
 local function get_conceal_query(language, names)
   local output = {}
+
+  -- First, add project-internal conceal queries
   for _, name in ipairs(names) do
     name = "conceal_" .. name
     local conceal_querys = queries[language][name]
@@ -239,6 +242,26 @@ local function get_conceal_query(language, names)
       table.insert(output, conceal_querys)
     end
   end
+
+  -- Then, add default Neovim runtime queries
+  -- Try to get the default conceal query from Neovim's runtime
+  local default_query_files = vim.treesitter.query.get_files(language, "highlights")
+  if default_query_files and #default_query_files > 0 then
+    for _, file_path in ipairs(default_query_files) do
+      -- Skip files that are already in our project
+      if not file_path:find("math%-conceal") then
+        local file = io.open(file_path, "r")
+        if file then
+          local content = file:read("*a")
+          file:close()
+          if content and content ~= "" then
+            table.insert(output, content)
+          end
+        end
+      end
+    end
+  end
+
   return table.concat(output, "\n")
 end
 
@@ -269,6 +292,8 @@ function M.setup(opts, lang)
   local parser_lang = utils.lang_to_lt(lang)
 
   local query_string = get_conceal_query(parser_lang, conceal)
+  -- HACK: remove `; extends` from query to avoid unexpected behavior of inheriting Neovim's default queries
+  query_string = query_string:gsub("; extends [^\n]+", "")
   active_configs[lang] = {
     file_lang = file_lang,
     parser_lang = parser_lang,
