@@ -1,149 +1,145 @@
-local queries = require("math-conceal.query")
+--- init.lua - Math Conceal plugin entry point
+--- Simplified configuration and setup
+local M = {}
+
+local loader = require("math-conceal.loader")
 local render = require("math-conceal.render")
-local M = {
-  files = {},
-  queries = {},
-  -- Default options
-  --- @type MathConcealOptions
-  opts = {
-    conceal = {
-      "greek",
-      "script",
-      "math",
-      "font",
-      "delim",
-      "phy",
-    },
-    ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
-    depth = 90,
-    ns_id = 0,
-    highlights = {
-      ["@_cmd"] = { link = "@conceal" },
-      ["@cmd"] = { link = "@conceal" },
-      ["@func"] = { link = "@conceal" },
-      ["@font_letter"] = { link = "@conceal" },
-      ["@sub"] = { link = "@conceal" },
-      ["@sub_ident"] = { link = "@conceal" },
-      ["@sub_letter"] = { link = "@conceal" },
-      ["@sub_number"] = { link = "@conceal" },
-      ["@sup"] = { link = "@conceal" },
-      ["@sup_ident"] = { link = "@conceal" },
-      ["@sup_letter"] = { link = "@conceal" },
-      ["@sup_number"] = { link = "@conceal" },
-      ["@symbol"] = { link = "@conceal" },
-      ["@typ_font_name"] = { link = "@conceal" },
-      ["@typ_greek_symbol"] = { link = "@conceal" },
-      ["@typ_inline_dollar"] = { link = "@conceal" },
-      ["@typ_math_delim"] = { link = "@conceal" },
-      ["@typ_math_font"] = { link = "@conceal" },
-      ["@typ_math_symbol"] = { link = "@conceal" },
-      ["@typ_phy_symbol"] = { link = "@conceal" },
-      ["@conceal"] = { link = "@conceal" },
-      ["@open1"] = { link = "@conceal" },
-      ["@open2"] = { link = "@conceal" },
-      ["@close1"] = { link = "@conceal" },
-      ["@close2"] = { link = "@conceal" },
-      ["@punctuation"] = { link = "@conceal" },
-      ["@left_paren"] = { link = "@conceal" },
-      ["@right_paren"] = { link = "@conceal" },
-    },
+
+--- @class MathConcealOptions
+--- @field conceal string[]? Conceal types to enable (e.g., "greek", "script", "math", "font", "delim", "phy")
+--- @field ft string[]? Filetypes to enable conceal
+--- @field ns_id integer? Namespace ID for highlights
+--- @field highlights table<string, table<string, string>>? Highlight group definitions
+
+--- @type MathConcealOptions
+local default_opts = {
+  conceal = { "greek", "script", "math", "font", "delim", "phy" },
+  ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+  ns_id = 0,
+  highlights = {
+    ["@_cmd"] = { link = "@conceal" },
+    ["@cmd"] = { link = "@conceal" },
+    ["@func"] = { link = "@conceal" },
+    ["@font_letter"] = { link = "@conceal" },
+    ["@sub"] = { link = "@conceal" },
+    ["@sub_ident"] = { link = "@conceal" },
+    ["@sub_letter"] = { link = "@conceal" },
+    ["@sub_number"] = { link = "@conceal" },
+    ["@sup"] = { link = "@conceal" },
+    ["@sup_ident"] = { link = "@conceal" },
+    ["@sup_letter"] = { link = "@conceal" },
+    ["@sup_number"] = { link = "@conceal" },
+    ["@symbol"] = { link = "@conceal" },
+    ["@typ_font_name"] = { link = "@conceal" },
+    ["@typ_greek_symbol"] = { link = "@conceal" },
+    ["@typ_inline_dollar"] = { link = "@conceal" },
+    ["@typ_math_delim"] = { link = "@conceal" },
+    ["@typ_math_font"] = { link = "@conceal" },
+    ["@typ_math_symbol"] = { link = "@conceal" },
+    ["@typ_phy_symbol"] = { link = "@conceal" },
+    ["@conceal"] = { link = "@conceal" },
+    ["@open1"] = { link = "@conceal" },
+    ["@open2"] = { link = "@conceal" },
+    ["@close1"] = { link = "@conceal" },
+    ["@close2"] = { link = "@conceal" },
+    ["@punctuation"] = { link = "@conceal" },
+    ["@left_paren"] = { link = "@conceal" },
+    ["@right_paren"] = { link = "@conceal" },
+    ["@tex_greek"] = { link = "@conceal" },
+    ["@tex_font_name"] = { link = "@conceal" },
   },
 }
 
---- TODO: add custum_function setup
+--- @type MathConcealOptions
+M.opts = vim.deepcopy(default_opts)
 
---- @class custum_function
---- @field custum_functions table<string, function>: A table of custom functions to be used for concealment.
+-- Track if we've done initial setup
+local initialized = false
 
---- @class MathConcealOptions
---- @field conceal string[]?: Enable or disable math symbol concealment. You can add your own custom conceal types here. Default is {"greek", "script", "math", "font", "delim"}.
---- @field ft string[]: A list of filetypes to enable conceal
---- @field depth integer
---- @field augroup_id integer?
---- @field ns_id integer
---- @field highlights table<string, table<string, string>>
+--- Ensure the plugin is initialized (lazy init on first use)
+local function ensure_initialized()
+  if initialized then
+    return
+  end
+  initialized = true
 
----set up
----@param opts MathConcealOptions?
-function M.setup(opts)
-  M.opts = vim.tbl_deep_extend("force", M.opts, opts or {})
+  -- Setup loader with current options
+  loader.setup({
+    conceal = M.opts.conceal,
+    ft = M.opts.ft,
+    ns_id = M.opts.ns_id,
+    highlights = M.opts.highlights,
+  })
 end
 
----check if `filetype` is in `M.opts.ft`.
----if true, call `set_hl`
----@param filetype string?
+--- Setup the math-conceal plugin
+--- @param opts MathConcealOptions?
+function M.setup(opts)
+  M.opts = vim.tbl_deep_extend("force", default_opts, opts or {})
+  initialized = false -- Reset so next ensure_initialized() uses new opts
+  ensure_initialized()
+end
+
+--- Enable conceal for current buffer
+--- Called from ftplugin files
+--- @param filetype string?
 function M.set(filetype)
   filetype = filetype or vim.bo.filetype
-  for _, ft in ipairs(M.opts.ft) do
-    if ft == filetype then
-      M.set_hl(filetype)
-    end
+
+  -- Lazy initialize on first use
+  ensure_initialized()
+
+  -- Check if this filetype is supported
+  if not loader.is_supported_filetype(filetype) then
+    return
   end
+
+  -- Attach conceal to current buffer
+  loader.attach(0, filetype)
 end
 
----do some prepare work, then call `set_highlights`
----@param filetype string
+--- Alias for backward compatibility
+--- @param filetype string
 function M.set_hl(filetype)
-  -- force set conceallevel and concealcursor for current buffer
-  vim.opt_local.conceallevel = 2
-  vim.opt_local.concealcursor = "nci"
-
-  -- set typst math conceal for typst
-  -- and set latex math conceal for all other filetypes.
-  ---@type "typst" | "latex"
-  local lang = filetype == "typst" and filetype or "latex"
-  --- first run
-  if #M.queries == 0 then
-    for name, val in pairs(M.opts.highlights) do
-      vim.api.nvim_set_hl(M.opts.ns_id, name, val)
-    end
-    queries.load_queries()
-    render.setup(M.opts, lang)
-  end
-
-  --- after editing preamble and save, reset highlights
-  if filetype == "tex" then
-    M.opts.augroup_id = M.opts.augroup_id or vim.api.nvim_create_augroup("math-conceal", {})
-    vim.api.nvim_create_autocmd("BufWritePost", {
-      group = M.opts.augroup_id,
-      buffer = 0,
-      callback = function()
-        M.set_highlights("latex", M.queries.latex, "tex")
-        vim.treesitter.start()
-      end,
-    })
-  end
-
-  ---always reset highlights for tex due to preamble
-  local should_set_hl = filetype == "tex"
-  -- if haven't set highlights, must set highlights
-  if M.queries[lang] == nil then
-    M.files[lang] = queries.get_conceal_queries(lang, M.opts.conceal)
-    M.queries[lang] = queries.read_query_files(M.files[lang])
-    should_set_hl = true
-  end
-  if should_set_hl then
-    M.set_highlights(lang, M.queries[lang], filetype)
-  end
-
-  -- Always try to attach render to current buffer
-  render.attach(vim.api.nvim_get_current_buf(), lang)
+  M.set(filetype)
 end
 
----set highlights for lang.
----if filetype == 'tex', update queries for preamble
----@param lang string
----@param code string?
----@param filetype string?
-function M.set_highlights(lang, code, filetype)
-  filetype = filetype or vim.bo.filetype
-  code = code or ""
+--- Refresh conceal for current buffer
+function M.refresh()
+  loader.refresh(0)
+end
 
-  if filetype == "tex" then
-    local conceal_map = queries.get_preamble_conceal_map()
-    code = code .. "\n" .. queries.update_latex_queries(conceal_map)
-  end
-  vim.treesitter.query.set(lang, "highlights", code)
+--- Disable conceal for current buffer
+function M.disable()
+  loader.detach(0)
+end
+
+--- Check if conceal is active for current buffer
+--- @return boolean
+function M.is_active()
+  return render.is_attached(0)
+end
+
+--- Get currently active languages for the buffer
+--- @return string[]
+function M.get_active_langs()
+  return render.get_registered_langs(0)
+end
+
+--- Manually register a custom query for a buffer
+--- Useful for extending conceal behavior
+--- @param buf integer Buffer number (0 for current)
+--- @param lang string Tree-sitter language
+--- @param query_string string SCM query string
+--- @return boolean success
+function M.register_custom_query(buf, lang, query_string)
+  return render.register_query(buf, lang, query_string)
+end
+
+--- Invalidate query cache (call when query files change)
+--- @param lang string? Language to invalidate (nil for all)
+function M.invalidate_cache(lang)
+  loader.invalidate_cache(lang)
 end
 
 return M
