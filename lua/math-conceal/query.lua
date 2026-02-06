@@ -2,33 +2,6 @@ local M = {}
 
 local conceal = require("math-conceal.conceal")
 
--- Cache for frequently used symbols to reduce FFI overhead
-local symbol_cache = {}
-local cache_size = 0
-local max_cache_size = 3000
-
--- Helper function to get from cache or lookup
-local function cached_lookup(text, pattern, mode)
-  -- local cache_key = text .. ":" .. pattern .. ":" .. (mode or "")
-  --
-  -- -- Check cache first
-  -- local cached_result = symbol_cache[cache_key]
-  -- if cached_result then
-  --   return cached_result
-  -- end
-  --
-  -- Perform lookup
-  local result = conceal.lookup_math_symbol(text, pattern, mode)
-  --
-  -- -- Cache the result if cache isn't full
-  -- if cache_size < max_cache_size then
-  --   symbol_cache[cache_key] = result
-  --   cache_size = cache_size + 1
-  -- end
-  --
-  return result
-end
-
 ---add predicate (optimized for performance)
 ---@param filenames string[] List of filenames to read
 ---@return string contents Concatenated contents of the files
