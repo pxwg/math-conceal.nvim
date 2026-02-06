@@ -1,7 +1,6 @@
 ---realization of fine grained math conceal rendering using neovim decoration provider API
 ---only expand conceal when the cursor is under the math node
 local M = {}
-local _uv = vim.uv
 local utils = require("math-conceal.utils")
 
 local latex = utils.init_queries_table("latex")
@@ -14,28 +13,24 @@ local queries = {
 
 local query_obj_cache = {}
 local buffer_cache = {}
+-- Viewport caching: store computed node lists per window
+local win_states = {}
+
 local ns_id = vim.api.nvim_create_namespace("math-conceal-render")
-local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = false })
+local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = true })
 
 local active_configs = {}
 
----Safe wrapper for internal redraw
----@param buf number
----@param line number
-local function safe_redraw_line(buf, line)
-  if line < 0 then
-    return
-  end
-  if not vim.api.nvim_buf_is_valid(buf) then
-    return
-  end
-  pcall(vim.api.nvim__redraw, {
-    buf = buf,
-    range = { line, line + 1 },
-    valid = false,
-    cursor = false,
-  })
-end
+-- Clean up window cache on window close
+vim.api.nvim_create_autocmd("WinClosed", {
+  group = augroup,
+  callback = function(args)
+    local win_id = tonumber(args.match)
+    if win_id then
+      win_states[win_id] = nil
+    end
+  end,
+})
 
 ---Get parsed query object from cache or parse a new one
 ---@param lang "latex" | "typst"
@@ -56,100 +51,113 @@ local function get_parsed_query(lang, query_string)
   end
 end
 
----Update buffer cache: parse tree and build row-based spatial index
----@param buf number
----@param lang string
----@param query table
-local function update_buffer_cache(buf, lang, query)
-  local cache = buffer_cache[buf]
-  if not cache then
-    return
-  end
-  local parser = cache.parser
-  parser:parse(true)
-  local trees = parser:trees()
-  local tree = trees and trees[1]
-  if not tree then
-    return
-  end
-  local root = tree:root()
-  local marks_by_row = {}
-  for id, node, metadata in query:iter_captures(root, buf, 0, -1) do
-    local capture_data = metadata[id]
-    local conceal_char = capture_data and capture_data.conceal or metadata.conceal
-    if conceal_char then
-      local r1, c1, r2, c2 = node:range()
-      if not marks_by_row[r1] then
-        marks_by_row[r1] = {}
-      end
-      local priority = (capture_data and capture_data.priority) or metadata.priority or 100
-      local hl_group = (capture_data and capture_data.highlight) or metadata.highlight or "Conceal"
-      table.insert(marks_by_row[r1], {
-        col_start = c1,
-        col_end = c2,
-        row_end = r2,
-        conceal = conceal_char,
-        hl_group = hl_group,
-        priority = tonumber(priority),
-      })
-    end
-  end
-  cache.marks_by_row = marks_by_row
-  cache.tree_version = vim.b[buf].changedtick
-end
-
 ---Setup decoration provider for conceal rendering (global, only once)
 local function setup_decoration_provider()
   vim.api.nvim_set_decoration_provider(ns_id, {
     on_win = function(_, win_id, buf_id, toprow, botrow)
       local cache = buffer_cache[buf_id]
-      if not cache or not cache.marks_by_row then
+      if not cache or not cache.parser or not cache.query then
         return false
       end
-      local cursor = vim.api.nvim_win_get_cursor(win_id)
-      local curr_row = cursor[1] - 1
-      local curr_col = cursor[2]
-      local set_extmark = vim.api.nvim_buf_set_extmark
-      local extmark_opts = {
-        conceal = "",
-        ephemeral = true,
-        hl_group = "",
-        priority = 100,
-        end_row = 0,
-        end_col = 0,
-      }
-      for row = toprow, botrow do
-        local marks = cache.marks_by_row[row]
-        if marks then
-          for _, m in ipairs(marks) do
-            local r1, c1, r2, c2 = row, m.col_start, m.row_end, m.col_end
-            local is_cursor_inside = false
-            if curr_row >= r1 and curr_row <= r2 then
-              if r1 == r2 then
-                if curr_col >= c1 and curr_col < c2 then
-                  is_cursor_inside = true
-                end
-              else
-                if curr_row == r1 and curr_col >= c1 then
-                  is_cursor_inside = true
-                elseif curr_row == r2 and curr_col < c2 then
-                  is_cursor_inside = true
-                elseif curr_row > r1 and curr_row < r2 then
-                  is_cursor_inside = true
-                end
+
+      -- Get current buffer version (changedtick)
+      local buf_tick = vim.b[buf_id].changedtick
+
+      -- Get or initialize window state
+      local state = win_states[win_id]
+      if not state then
+        state = { tick = -1, top = -1, bot = -1, marks = {} }
+        win_states[win_id] = state
+      end
+
+      -- Core optimization: cache hit check
+      -- Reuse marks if buffer unchanged AND viewport unchanged
+      local is_cache_valid = (state.tick == buf_tick) and (state.top == toprow) and (state.bot == botrow)
+
+      if not is_cache_valid then
+        -- Cache miss: requery Tree-sitter
+        state.marks = {}
+        state.tick = buf_tick
+        state.top = toprow
+        state.bot = botrow
+
+        -- Incremental parse (use true for full correctness)
+        cache.parser:parse(true)
+        local trees = cache.parser:trees()
+        local tree = trees and trees[1]
+
+        if tree then
+          local root = tree:root()
+          -- Query only visible range + small buffer (30 lines) for smooth scrolling
+          local query_top = math.max(0, toprow - 30)
+          local query_bot = botrow + 30
+
+          for id, node, metadata in cache.query:iter_captures(root, buf_id, query_top, query_bot) do
+            local capture_data = metadata[id]
+            local conceal_char = capture_data and capture_data.conceal or metadata.conceal
+
+            if conceal_char then
+              local r1, c1, r2, c2 = node:range()
+              -- Only cache marks within actual viewport
+              if r1 <= botrow and r2 >= toprow then
+                local priority = (capture_data and capture_data.priority) or metadata.priority or 100
+                local hl_group = (capture_data and capture_data.highlight) or metadata.highlight or "Conceal"
+
+                -- Store all rendering data in pure Lua table (array is faster than hash)
+                table.insert(state.marks, {
+                  r1,
+                  c1,
+                  r2,
+                  c2, -- [1-4] position
+                  conceal_char, -- [5]
+                  hl_group, -- [6]
+                  tonumber(priority) or 100, -- [7]
+                })
               end
-            end
-            if not is_cursor_inside then
-              extmark_opts.conceal = m.conceal
-              extmark_opts.hl_group = m.hl_group
-              extmark_opts.priority = m.priority
-              extmark_opts.end_row = r2
-              extmark_opts.end_col = c2
-              set_extmark(buf_id, ns_id, r1, c1, extmark_opts)
             end
           end
         end
       end
+
+      -- Render phase: ultra-fast iteration over cached Lua table
+      local cursor = vim.api.nvim_win_get_cursor(win_id)
+      local curr_row = cursor[1] - 1
+      local curr_col = cursor[2]
+      local set_extmark = vim.api.nvim_buf_set_extmark
+
+      for _, m in ipairs(state.marks) do
+        local r1, c1, r2, c2 = m[1], m[2], m[3], m[4]
+
+        -- Collision detection: check if cursor is inside node
+        local is_cursor_inside = false
+        if curr_row >= r1 and curr_row <= r2 then
+          if r1 == r2 then
+            if curr_col >= c1 and curr_col < c2 then
+              is_cursor_inside = true
+            end
+          else
+            if curr_row == r1 and curr_col >= c1 then
+              is_cursor_inside = true
+            elseif curr_row == r2 and curr_col < c2 then
+              is_cursor_inside = true
+            elseif curr_row > r1 and curr_row < r2 then
+              is_cursor_inside = true
+            end
+          end
+        end
+
+        if not is_cursor_inside then
+          set_extmark(buf_id, ns_id, r1, c1, {
+            conceal = m[5],
+            hl_group = m[6],
+            priority = m[7],
+            end_row = r2,
+            end_col = c2,
+            ephemeral = true,
+          })
+        end
+      end
+
       return false
     end,
   })
@@ -161,34 +169,34 @@ end
 ---@param query_string string
 local function attach_to_buffer(buf, lang, query_string)
   if buffer_cache[buf] then
-    -- If already attached, just update the cache once to be safe
-    -- local query = get_parsed_query(lang, query_string)
-    -- if query then update_buffer_cache(buf, lang, query) end
     return
   end
+
   local query = get_parsed_query(lang, query_string)
   if not query then
     return
   end
+
   local parser = vim.treesitter.get_parser(buf, lang)
   if not parser then
     return
   end
+
   buffer_cache[buf] = {
     parser = parser,
-    marks_by_row = {},
+    query = query,
   }
-  update_buffer_cache(buf, lang, query)
+
   parser:register_cbs({
     on_changedtree = function()
       vim.schedule(function()
         if vim.api.nvim_buf_is_valid(buf) then
-          update_buffer_cache(buf, lang, query)
           vim.api.nvim__redraw({ buf = buf, valid = false })
         end
       end)
     end,
   })
+
   vim.api.nvim_create_autocmd("BufDelete", {
     group = augroup,
     buffer = buf,
@@ -196,45 +204,23 @@ local function attach_to_buffer(buf, lang, query_string)
       buffer_cache[buf] = nil
     end,
   })
-  local last_cursor_row = -1
+
   vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     group = augroup,
     buffer = buf,
     callback = function()
-      local cursor = vim.api.nvim_win_get_cursor(0)
-      local curr_row = cursor[1] - 1
-
-      local function row_has_marks(r)
-        local cache = buffer_cache[buf]
-        return cache and cache.marks_by_row and cache.marks_by_row[r]
-      end
-
-      if curr_row ~= last_cursor_row then
-        if row_has_marks(last_cursor_row) then
-          safe_redraw_line(buf, last_cursor_row)
-        end
-        if row_has_marks(curr_row) then
-          safe_redraw_line(buf, curr_row)
-        end
-        last_cursor_row = curr_row
-      else
-        if row_has_marks(curr_row) then
-          safe_redraw_line(buf, curr_row)
-        end
-      end
+      vim.api.nvim__redraw({ buf = buf, valid = false })
     end,
   })
 end
 
 ---Get conceal query string for a given language and list of names
----Includes both project-internal queries and Neovim runtime queries
 ---@param language "latex" | "typst"
 ---@param names string[]
 ---@return string conceal_query
 local function get_conceal_query(language, names)
   local output = {}
 
-  -- First, add project-internal conceal queries
   for _, name in ipairs(names) do
     name = "conceal_" .. name
     local conceal_querys = queries[language][name]
@@ -243,12 +229,9 @@ local function get_conceal_query(language, names)
     end
   end
 
-  -- Then, add default Neovim runtime queries
-  -- Try to get the default conceal query from Neovim's runtime
   local default_query_files = vim.treesitter.query.get_files(language, "highlights")
   if default_query_files and #default_query_files > 0 then
     for _, file_path in ipairs(default_query_files) do
-      -- Skip files that are already in our project
       if not file_path:find("math%-conceal") then
         local file = io.open(file_path, "r")
         if file then
@@ -292,7 +275,6 @@ function M.setup(opts, lang)
   local parser_lang = utils.lang_to_lt(lang)
 
   local query_string = get_conceal_query(parser_lang, conceal)
-  -- HACK: remove `; extends` from query to avoid unexpected behavior of inheriting Neovim's default queries
   query_string = query_string:gsub("; extends [^\n]+", "")
   active_configs[lang] = {
     file_lang = file_lang,
