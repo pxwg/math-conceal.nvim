@@ -2,6 +2,12 @@ local M = {}
 
 local conceal = require("math-conceal.conceal")
 
+-- Wrapper function to call look up function
+local function cached_lookup(text, pattern, mode)
+  local result = conceal.lookup_math_symbol(text, pattern, mode)
+  return result
+end
+
 ---add predicate (optimized for performance)
 ---@param filenames string[] List of filenames to read
 ---@return string contents Concatenated contents of the files
