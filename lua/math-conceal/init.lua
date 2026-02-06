@@ -141,8 +141,10 @@ function M.set_hl(filetype)
         M.files[l] = queries.get_conceal_queries(l, M.opts.conceal)
         M.queries[l] = queries.read_query_files(M.files[l])
       else
-        -- For other languages, create an empty query string
-        -- (builtin queries will be loaded by render.lua)
+        -- For other languages, use empty string as placeholder.
+        -- The actual builtin runtime queries will be loaded by get_conceal_query()
+        -- in render.lua, which loads vim.treesitter.query.get_files(language, "highlights")
+        -- This ensures standard Tree-sitter highlighting for non-latex/typst languages.
         M.queries[l] = ""
       end
       render.setup(M.opts, l)

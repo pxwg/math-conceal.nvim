@@ -289,7 +289,7 @@ end
 function M.setup(opts, lang)
   opts = opts or {}
   local conceal = opts.conceal or {}
-  
+
   -- For latex/typst, use the utility functions
   -- For other languages, use the language name directly as parser language
   local file_lang, parser_lang
