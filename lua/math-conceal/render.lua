@@ -21,6 +21,53 @@ local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = tru
 
 local active_configs = {}
 
+local function buf_wins(buf)
+  local wins = {}
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+      table.insert(wins, win)
+    end
+  end
+  return wins
+end
+
+local function redraw_win(win_id, range)
+  if not vim.api.nvim_win_is_valid(win_id) then
+    return
+  end
+
+  local redraw = {
+    win = win_id,
+    valid = true,
+    cursor = true,
+    flush = false,
+  }
+
+  if range then
+    redraw.range = range
+  end
+
+  vim.api.nvim__redraw(redraw)
+end
+
+local function redraw_buf(buf, range)
+  if not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+
+  local redraw = {
+    buf = buf,
+    valid = true,
+    flush = false,
+  }
+
+  if range then
+    redraw.range = range
+  end
+
+  vim.api.nvim__redraw(redraw)
+end
+
 -- Clean up window cache on window close
 vim.api.nvim_create_autocmd("WinClosed", {
   group = augroup,
@@ -188,10 +235,26 @@ local function attach_to_buffer(buf, lang, query_string)
   }
 
   parser:register_cbs({
-    on_changedtree = function()
+    on_changedtree = function(changes)
       vim.schedule(function()
-        if vim.api.nvim_buf_is_valid(buf) then
-          vim.api.nvim__redraw({ buf = buf, valid = false })
+        if not vim.api.nvim_buf_is_valid(buf) then
+          return
+        end
+
+        if not changes or vim.tbl_isempty(changes) then
+          redraw_buf(buf)
+          return
+        end
+
+        for _, change in ipairs(changes) do
+          local start_row = change[1]
+          local end_row = change[4]
+
+          if end_row == 2 ^ 32 - 1 then
+            redraw_buf(buf)
+          else
+            redraw_buf(buf, { start_row, end_row + 1 })
+          end
         end
       end)
     end,
@@ -209,7 +272,20 @@ local function attach_to_buffer(buf, lang, query_string)
     group = augroup,
     buffer = buf,
     callback = function()
-      vim.api.nvim__redraw({ buf = buf, valid = false })
+      local win = vim.api.nvim_get_current_win()
+      if vim.api.nvim_win_get_buf(win) ~= buf then
+        return
+      end
+
+      local info = vim.fn.getwininfo(win)[1]
+      if not info then
+        redraw_win(win)
+        return
+      end
+
+      local top = info.topline - 1
+      local bot = info.botline
+      redraw_win(win, { top, bot })
     end,
   })
 end
@@ -262,7 +338,9 @@ function M.attach(buf, lang)
 
   attach_to_buffer(buf, config.parser_lang, config.query_string)
 
-  vim.api.nvim__redraw({ buf = buf, valid = false })
+  for _, win in ipairs(buf_wins(buf)) do
+    redraw_win(win)
+  end
 end
 
 ---Setup math conceal rendering for Typst/Latex files
