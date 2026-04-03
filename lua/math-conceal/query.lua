@@ -8,6 +8,34 @@ local function cached_lookup(text, pattern, mode)
   return result
 end
 
+---Normalize a query capture into a single TSNode.
+---Neovim 0.12 may pass captures as TSNode[] for repeated matches.
+---@param capture TSNode|TSNode[]|nil
+---@return TSNode|nil
+local function get_capture_node(capture)
+  if not capture then
+    return nil
+  end
+
+  if type(capture) == "table" and capture.range == nil then
+    return capture[1]
+  end
+
+  return capture
+end
+
+---@param capture TSNode|TSNode[]|nil
+---@param source string|integer
+---@return string|nil
+local function get_capture_text(capture, source)
+  local node = get_capture_node(capture)
+  if not node then
+    return nil
+  end
+
+  return vim.treesitter.get_node_text(node, source)
+end
+
 ---add predicate (optimized for performance)
 ---@param filenames string[] List of filenames to read
 ---@return string contents Concatenated contents of the files
@@ -37,7 +65,7 @@ end
 local function setpairs(match, _, source, predicate, metadata)
   -- (#set-pairs! @aa key list)
   local capture_id = predicate[2]
-  local node = match[capture_id]
+  local node = get_capture_node(match[capture_id])
   local key = predicate[3]
   if not node then
     return
@@ -59,8 +87,17 @@ local ancestor_cache = {}
 ---@param match table<integer, TSNode[]>
 ---@param predicate any[]
 local function hasgrandparent(match, _, _, predicate)
-  local nodes = match[predicate[2]]
-  if not nodes or #nodes == 0 then
+  local capture = match[predicate[2]]
+  if not capture then
+    return false
+  end
+
+  local nodes = capture
+  if nodes.range ~= nil then
+    nodes = { nodes }
+  end
+
+  if #nodes == 0 then
     return false
   end
 
@@ -120,8 +157,8 @@ local function register_conceal_type(name, pattern, directive_name)
       return
     end
 
-    local node = match[capture_id]
-    local node_text = vim.treesitter.get_node_text(node, source)
+    local node = get_capture_node(match[capture_id])
+    local node_text = get_capture_text(node, source)
     if not node_text then
       return
     end
@@ -147,10 +184,13 @@ local handler_dispatch = {
       return
     end
 
-    local node = match[capture_id]
-    local function_name_node = match[function_name_id]
+    local node = get_capture_node(match[capture_id])
+    local function_name_node = get_capture_node(match[function_name_id])
     local function_name_text = function_name_node and vim.treesitter.get_node_text(function_name_node, source) or "cal"
-    local node_text = vim.treesitter.get_node_text(node, source)
+    local node_text = get_capture_text(node, source)
+    if not node_text then
+      return
+    end
 
     -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, "font", function_name_text)
@@ -168,8 +208,8 @@ local handler_dispatch = {
       return
     end
 
-    local node = match[capture_id]
-    local node_text = vim.treesitter.get_node_text(node, source)
+    local node = get_capture_node(match[capture_id])
+    local node_text = get_capture_text(node, source)
     if not node_text then
       return
     end
@@ -190,8 +230,11 @@ local handler_dispatch = {
       return
     end
 
-    local node = match[capture_id]
-    local node_text = vim.treesitter.get_node_text(node, source)
+    local node = get_capture_node(match[capture_id])
+    local node_text = get_capture_text(node, source)
+    if not node_text then
+      return
+    end
 
     -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, "sub", value)
@@ -209,8 +252,11 @@ local handler_dispatch = {
       return
     end
 
-    local node = match[capture_id]
-    local node_text = vim.treesitter.get_node_text(node, source)
+    local node = get_capture_node(match[capture_id])
+    local node_text = get_capture_text(node, source)
+    if not node_text then
+      return
+    end
 
     -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, "sup", value)
@@ -228,8 +274,8 @@ local handler_dispatch = {
       return
     end
 
-    local node = match[capture_id]
-    local node_text = vim.treesitter.get_node_text(node, source)
+    local node = get_capture_node(match[capture_id])
+    local node_text = get_capture_text(node, source)
     if not node_text then
       return
     end
@@ -264,7 +310,7 @@ local function lua_func(match, _, source, predicate, metadata)
     return
   end
 
-  local node = match[capture_id]
+  local node = get_capture_node(match[capture_id])
   if type(metadata[capture_id]) ~= "table" then
     metadata[capture_id] = {}
   end
@@ -275,8 +321,10 @@ local function lua_func(match, _, source, predicate, metadata)
     handler(match, _, source, predicate, metadata)
   else
     -- Fallback for unknown keys
-    local node_text = vim.treesitter.get_node_text(node, source)
-    metadata[capture_id][key] = node_text
+    local node_text = get_capture_text(node, source)
+    if node_text then
+      metadata[capture_id][key] = node_text
+    end
   end
 end
 
