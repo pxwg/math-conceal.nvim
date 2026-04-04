@@ -147,5 +147,7 @@ return {
 
 - [Freed-Wu](https://github.com/Freed-Wu): Instrumental in publishing this plugin to [LuaRocks](https://luarocks.org/modules/pxwg/math-conceal.nvim) and refactoring the code structure to fit the best practices for Neovim plugins.
 - [Dirichy](https://github.com/dirichy): for helpful discussions about LaTeX conceal patterns and optimizations.
+- [PartyWumpus](https://github.com/PartyWumpus): for the awesome [typst-concealer](https://github.com/PartyWumpus/typst-concealer) plugin, which inspired me to support typst preview in this plugin.
 - [latex.nvim](https://github.com/robbielyman/latex.nvim) for the idea of using customized conceal patterns.
 - [latex_concealer.nvim](http://github.com/dirichy/latex_concealer.nvim) for the idea of fine grained conceal patterns.
+- [typst-concealer](https://github.com/PartyWumpus/typst-concealer) for the idea and example implementation of typst preview with kitty graphics protocol.
