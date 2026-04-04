@@ -39,7 +39,6 @@ local function redraw_win(win_id, range)
   local redraw = {
     win = win_id,
     valid = true,
-    cursor = true,
     flush = false,
   }
 
