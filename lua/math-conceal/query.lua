@@ -24,6 +24,22 @@ local function get_capture_node(capture)
   return capture
 end
 
+---@param node TSNode|nil
+---@param source string|integer
+---@return string|nil
+local function safe_get_node_text(node, source)
+  if not node then
+    return nil
+  end
+
+  local ok, text = pcall(vim.treesitter.get_node_text, node, source)
+  if not ok then
+    return nil
+  end
+
+  return text
+end
+
 ---@param capture TSNode|TSNode[]|nil
 ---@param source string|integer
 ---@return string|nil
@@ -33,7 +49,7 @@ local function get_capture_text(capture, source)
     return nil
   end
 
-  return vim.treesitter.get_node_text(node, source)
+  return safe_get_node_text(node, source)
 end
 
 ---add predicate (optimized for performance)
@@ -70,7 +86,10 @@ local function setpairs(match, _, source, predicate, metadata)
   if not node then
     return
   end
-  local node_text = vim.treesitter.get_node_text(node, source)
+  local node_text = safe_get_node_text(node, source)
+  if not node_text then
+    return
+  end
   for i = 4, #predicate, 2 do
     if node_text == predicate[i] then
       metadata[key] = predicate[i + 1]
@@ -186,7 +205,7 @@ local handler_dispatch = {
 
     local node = get_capture_node(match[capture_id])
     local function_name_node = get_capture_node(match[function_name_id])
-    local function_name_text = function_name_node and vim.treesitter.get_node_text(function_name_node, source) or "cal"
+    local function_name_text = safe_get_node_text(function_name_node, source) or "cal"
     local node_text = get_capture_text(node, source)
     if not node_text then
       return
@@ -425,8 +444,7 @@ local function get_preamble_conceal_map(bufnr)
   end
 
   local function get_node_text(node)
-    local start_row, start_col, end_row, end_col = node:range()
-    return vim.treesitter.get_node_text(node, bufnr)
+    return safe_get_node_text(node, bufnr)
   end
 
   local definitions = {}
@@ -446,6 +464,9 @@ local function get_preamble_conceal_map(bufnr)
     if def.cmd and def.impl then
       local cmd_text = get_node_text(def.cmd)
       local impl_text = get_node_text(def.impl)
+      if not cmd_text or not impl_text then
+        goto continue
+      end
 
       while impl_text:match("^%b{}$") do
         impl_text = impl_text:sub(2, -2)
@@ -453,6 +474,7 @@ local function get_preamble_conceal_map(bufnr)
 
       conceal_map["\\" .. cmd_text] = impl_text
     end
+    ::continue::
   end
 
   return conceal_map
