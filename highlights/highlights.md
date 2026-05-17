@@ -1,11 +1,13 @@
 # Highlight Groups by Language
 
-Total: 48 highlight groups across 2 languages
+Total: 51 highlight groups across 2 languages
 
 ## Latex
 
-Count: 25 highlight groups
+Count: 29 highlight groups
 
+- @_env
+- @_line
 - @close_paren
 - @cmd
 - @conceal
@@ -16,12 +18,14 @@ Count: 25 highlight groups
 - @left_2
 - @left_brace
 - @left_paren
+- @left_paren_cmd
 - @open_paren
 - @punctuation
 - @right_1
 - @right_2
 - @right_brace
 - @right_paren
+- @right_paren_cmd
 - @sub_letter
 - @sub_object
 - @sub_symbol
@@ -36,8 +40,8 @@ Count: 25 highlight groups
 
 Count: 37 highlight groups
 
-- @_comma
 - @_frac_name
+- @_func_name
 - @abs_name
 - @close_paren
 - @cmd
@@ -52,20 +56,20 @@ Count: 37 highlight groups
 - @left_content
 - @left_paren
 - @open_paren
+- @punctuation
 - @right_brace
 - @right_content
 - @right_paren
 - @second_letter
-- @sub_number
 - @sub_object
 - @sub_symbol
 - @sup_letter
-- @sup_number
 - @sup_object
 - @sup_symbol
 - @symbol
 - @typ_font_name
 - @typ_greek_symbol
+- @typ_inline_ampersand
 - @typ_inline_asterisk
 - @typ_inline_dollar
 - @typ_inline_quote

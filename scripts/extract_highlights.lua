@@ -1,5 +1,5 @@
 #!/usr/bin/env lua
----Simple Typst highlight groups extractor
+---Simple math-conceal highlight groups extractor
 ---Extract highlight groups (with @ prefix) from .scm files
 
 local cjson = require("cjson")
@@ -9,221 +9,268 @@ local HighlightExtractor = {}
 HighlightExtractor.__index = HighlightExtractor
 
 function HighlightExtractor.new(queries_dir)
-    local self = setmetatable({}, HighlightExtractor)
-    self.queries_dir = queries_dir or "queries_config"
-    self.all_groups = {}
-    self.language_groups = {}
-    return self
+  local self = setmetatable({}, HighlightExtractor)
+  self.queries_dir = queries_dir or "lua/math-conceal/symbols"
+  self.all_groups = {}
+  self.language_groups = {}
+  return self
 end
 
 function HighlightExtractor:extract_all_highlights()
-    -- Extract highlight groups from all languages
-    if not self:_directory_exists(self.queries_dir) then
-        print(string.format("Directory %s does not exist!", self.queries_dir))
-        return {}
+  -- Extract highlight groups from all languages
+  if not self:_directory_exists(self.queries_dir) then
+    print(string.format("Directory %s does not exist!", self.queries_dir))
+    return {}
+  end
+
+  local language_dirs = {}
+  for dir in lfs.dir(self.queries_dir) do
+    if dir ~= "." and dir ~= ".." then
+      local path = self.queries_dir .. "/" .. dir
+      local attr = lfs.attributes(path)
+      if attr and attr.mode == "directory" then
+        table.insert(language_dirs, { name = dir, path = path })
+      end
     end
+  end
 
-    local language_dirs = {}
-    for dir in lfs.dir(self.queries_dir) do
-        if dir ~= "." and dir ~= ".." then
-            local path = self.queries_dir .. "/" .. dir
-            local attr = lfs.attributes(path)
-            if attr and attr.mode == "directory" then
-                table.insert(language_dirs, { name = dir, path = path })
-            end
-        end
+  print(string.format("Found %d language directories", #language_dirs))
+
+  for _, lang_info in ipairs(language_dirs) do
+    local language = lang_info.name
+    self.language_groups[language] = {}
+
+    local scm_files = self:_get_scm_files(lang_info.path)
+    print(string.format("Processing %s: %d .scm files", language, #scm_files))
+
+    for _, scm_file in ipairs(scm_files) do
+      self:_extract_from_file(scm_file, language)
     end
+  end
 
-    print(string.format("Found %d language directories", #language_dirs))
+  -- Convert sets to sorted arrays
+  for language, groups in pairs(self.language_groups) do
+    self.language_groups[language] = self:_sort_table(groups)
+  end
 
-    for _, lang_info in ipairs(language_dirs) do
-        local language = lang_info.name
-        self.language_groups[language] = {}
-
-        local scm_files = self:_get_scm_files(lang_info.path)
-        print(string.format("Processing %s: %d .scm files", language, #scm_files))
-
-        for _, scm_file in ipairs(scm_files) do
-            self:_extract_from_file(scm_file, language)
-        end
-    end
-
-    -- Convert sets to sorted arrays
-    for language, groups in pairs(self.language_groups) do
-        self.language_groups[language] = self:_sort_table(groups)
-    end
-
-    return self.language_groups
+  return self.language_groups
 end
 
 function HighlightExtractor:_extract_from_file(file_path, language)
-    -- Extract highlight groups from a single file
-    local success, content = pcall(self._read_file, self, file_path)
-    if not success then
-        print(string.format("Error reading %s: %s", file_path, content))
-        return
-    end
+  -- Extract highlight groups from a single file
+  local success, content = pcall(self._read_file, self, file_path)
+  if not success then
+    print(string.format("Error reading %s: %s", file_path, content))
+    return
+  end
 
-    -- Find all @ prefixed highlight groups using Lua patterns
-    for match in content:gmatch("@([a-zA-Z_][a-zA-Z0-9_]*)") do
-        local group_name = "@" .. match
-        self.all_groups[group_name] = true
-        self.language_groups[language][group_name] = true
-    end
+  -- Find all @ prefixed highlight groups using Lua patterns
+  for match in content:gmatch("@([a-zA-Z_][a-zA-Z0-9_]*)") do
+    local group_name = "@" .. match
+    self.all_groups[group_name] = true
+    self.language_groups[language][group_name] = true
+  end
 end
 
 function HighlightExtractor:generate_markdown()
-    -- Generate markdown with highlight groups by language
-    local lines = {
-        "# Highlight Groups by Language",
-        "",
-        string.format("Total: %d highlight groups across %d languages",
-            self:_table_length(self.all_groups),
-            self:_table_length(self.language_groups)),
-        ""
-    }
+  -- Generate markdown with highlight groups by language
+  local lines = {
+    "# Highlight Groups by Language",
+    "",
+    string.format(
+      "Total: %d highlight groups across %d languages",
+      self:_table_length(self.all_groups),
+      self:_table_length(self.language_groups)
+    ),
+    "",
+  }
 
-    -- Get sorted list of languages
-    local languages = {}
-    for lang, _ in pairs(self.language_groups) do
-        table.insert(languages, lang)
+  -- Get sorted list of languages
+  local languages = {}
+  for lang, _ in pairs(self.language_groups) do
+    table.insert(languages, lang)
+  end
+  table.sort(languages)
+
+  -- Add language sections
+  for _, language in ipairs(languages) do
+    local groups = self.language_groups[language]
+    table.insert(lines, "## " .. self:_title_case(language))
+    table.insert(lines, "")
+    table.insert(lines, string.format("Count: %d highlight groups", #groups))
+    table.insert(lines, "")
+
+    for _, group in ipairs(groups) do
+      table.insert(lines, "- " .. group)
     end
-    table.sort(languages)
+    table.insert(lines, "")
+  end
 
-    -- Add language sections
-    for _, language in ipairs(languages) do
-        local groups = self.language_groups[language]
-        table.insert(lines, "## " .. self:_title_case(language))
-        table.insert(lines, "")
-        table.insert(lines, string.format("Count: %d highlight groups", #groups))
-        table.insert(lines, "")
-
-        for _, group in ipairs(groups) do
-            table.insert(lines, "- " .. group)
-        end
-        table.insert(lines, "")
-    end
-
-    return table.concat(lines, "\n")
+  return table.concat(lines, "\n")
 end
 
 function HighlightExtractor:generate_json()
-    -- Generate JSON data with highlight groups by language
-    local all_groups_list = {}
-    for group, _ in pairs(self.all_groups) do
-        table.insert(all_groups_list, group)
-    end
-    table.sort(all_groups_list)
+  -- Generate JSON data with highlight groups by language
+  local all_groups_list = {}
+  for group, _ in pairs(self.all_groups) do
+    table.insert(all_groups_list, group)
+  end
+  table.sort(all_groups_list)
 
-    -- Convert language groups from table to array
-    local lang_groups_formatted = {}
-    for lang, groups in pairs(self.language_groups) do
-        lang_groups_formatted[lang] = groups
-    end
+  -- Convert language groups from table to array
+  local lang_groups_formatted = {}
+  for lang, groups in pairs(self.language_groups) do
+    lang_groups_formatted[lang] = groups
+  end
 
-    return {
-        total_count = #all_groups_list,
-        languages = lang_groups_formatted,
-        all_highlight_groups = all_groups_list
-    }
+  return {
+    total_count = #all_groups_list,
+    languages = lang_groups_formatted,
+    all_highlight_groups = all_groups_list,
+  }
+end
+
+function HighlightExtractor:_format_json_array(values, indent)
+  local lines = { "[" }
+  local item_indent = indent .. "  "
+
+  for i, value in ipairs(values) do
+    local suffix = i == #values and "" or ","
+    table.insert(lines, item_indent .. cjson.encode(value) .. suffix)
+  end
+
+  table.insert(lines, indent .. "]")
+  return table.concat(lines, "\n")
+end
+
+function HighlightExtractor:generate_json_text()
+  local data = self:generate_json()
+  local lines = {
+    "{",
+    string.format('  "total_count": %d,', data.total_count),
+    '  "languages": {',
+  }
+
+  local languages = {}
+  for language, _ in pairs(data.languages) do
+    table.insert(languages, language)
+  end
+  table.sort(languages)
+
+  for i, language in ipairs(languages) do
+    local suffix = i == #languages and "" or ","
+    table.insert(
+      lines,
+      string.format("    %s: %s", cjson.encode(language), self:_format_json_array(data.languages[language], "    "))
+        .. suffix
+    )
+  end
+
+  table.insert(lines, "  },")
+  table.insert(lines, '  "all_highlight_groups": ' .. self:_format_json_array(data.all_highlight_groups, "  "))
+  table.insert(lines, "}")
+
+  return table.concat(lines, "\n")
 end
 
 function HighlightExtractor:save_results(output_dir)
-    -- Save results to highlight folder
-    output_dir = output_dir or "highlights"
+  -- Save results to highlight folder
+  output_dir = output_dir or "highlights"
 
-    if not self:_directory_exists(output_dir) then
-        lfs.mkdir(output_dir)
-    end
+  if not self:_directory_exists(output_dir) then
+    lfs.mkdir(output_dir)
+  end
 
-    -- Save markdown file
-    local markdown_content = self:generate_markdown()
-    self:_write_file(output_dir .. "/highlights.md", markdown_content)
+  -- Save markdown file
+  local markdown_content = self:generate_markdown()
+  self:_write_file(output_dir .. "/highlights.md", markdown_content)
 
-    -- Save JSON file
-    local json_data = self:generate_json()
-    local json_content = cjson.encode(json_data)
-    self:_write_file(output_dir .. "/highlights.json", json_content)
+  -- Save JSON file
+  self:_write_file(output_dir .. "/highlights.json", self:generate_json_text())
 
-    print(string.format("Results saved to %s/", output_dir))
-    print("- highlights.md: Highlight groups by language")
-    print("- highlights.json: JSON data")
+  print(string.format("Results saved to %s/", output_dir))
+  print("- highlights.md: Highlight groups by language")
+  print("- highlights.json: JSON data")
 end
 
 -- Helper methods
 function HighlightExtractor:_directory_exists(path)
-    local attr = lfs.attributes(path)
-    return attr and attr.mode == "directory"
+  local attr = lfs.attributes(path)
+  return attr and attr.mode == "directory"
 end
 
 function HighlightExtractor:_get_scm_files(dir_path)
-    local files = {}
-    for file in lfs.dir(dir_path) do
-        if file:match("%.scm$") then
-            table.insert(files, dir_path .. "/" .. file)
-        end
+  local files = {}
+  for file in lfs.dir(dir_path) do
+    if file:match("%.scm$") then
+      table.insert(files, dir_path .. "/" .. file)
     end
-    return files
+  end
+  return files
 end
 
 function HighlightExtractor:_read_file(file_path)
-    local file, err = io.open(file_path, "r")
-    if not file then
-        error(err)
-    end
-    local content = file:read("*a")
-    file:close()
-    return content
+  local file, err = io.open(file_path, "r")
+  if not file then
+    error(err)
+  end
+  local content = file:read("*a")
+  file:close()
+  return content
 end
 
 function HighlightExtractor:_write_file(file_path, content)
-    local file, err = io.open(file_path, "w")
-    if not file then
-        error(err)
-    end
-    file:write(content)
-    file:close()
+  local file, err = io.open(file_path, "w")
+  if not file then
+    error(err)
+  end
+  file:write(content)
+  file:close()
 end
 
 function HighlightExtractor:_sort_table(table_as_set)
-    local array = {}
-    for key, _ in pairs(table_as_set) do
-        table.insert(array, key)
-    end
-    table.sort(array)
-    return array
+  local array = {}
+  for key, _ in pairs(table_as_set) do
+    table.insert(array, key)
+  end
+  table.sort(array)
+  return array
 end
 
 function HighlightExtractor:_table_length(t)
-    local count = 0
-    for _ in pairs(t) do
-        count = count + 1
-    end
-    return count
+  local count = 0
+  for _ in pairs(t) do
+    count = count + 1
+  end
+  return count
 end
 
 function HighlightExtractor:_title_case(str)
-    return str:gsub("^%l", string.upper)
+  return str:gsub("^%l", string.upper)
 end
 
 -- Main function
-print("Typst Highlight Groups Extractor")
+print("Math-Conceal Highlight Groups Extractor")
 print(string.rep("=", 40))
 
-local extractor = HighlightExtractor.new()
+local extractor = HighlightExtractor.new(arg and arg[1])
 local highlights = extractor:extract_all_highlights()
 
 if extractor:_table_length(highlights) == 0 then
-    print("No highlight groups found!")
-    return
+  print("No highlight groups found!")
+  return
 end
 
-print(string.format("\nFound %d highlight groups across %d languages:",
+print(
+  string.format(
+    "\nFound %d highlight groups across %d languages:",
     extractor:_table_length(extractor.all_groups),
-    extractor:_table_length(highlights)))
+    extractor:_table_length(highlights)
+  )
+)
 
 for language, groups in pairs(highlights) do
-    print(string.format("  %s: %d groups", language, #groups))
+  print(string.format("  %s: %d groups", language, #groups))
 end
 
 -- Save results
