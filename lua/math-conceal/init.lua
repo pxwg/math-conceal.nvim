@@ -81,10 +81,21 @@ function M.set(filetype)
   end
 end
 
+local function restart_treesitter(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+    return
+  end
+
+  pcall(vim.treesitter.stop, bufnr)
+  pcall(vim.treesitter.start, bufnr)
+end
+
 ---do some prepare work, then call `set_highlights`
 ---@param filetype string
 function M.set_hl(filetype)
   vim.opt_local.conceallevel = 2
+  vim.opt_local.concealcursor = "nci"
 
   -- set typst math conceal for typst
   -- and set latex math conceal for all other filetypes.
@@ -105,9 +116,10 @@ function M.set_hl(filetype)
     vim.api.nvim_create_autocmd("BufWritePost", {
       group = M.opts.augroup_id,
       buffer = 0,
-      callback = function()
+      callback = function(args)
         M.set_highlights("latex", M.queries.latex, "tex")
-        vim.treesitter.start()
+        restart_treesitter(args.buf)
+        render.attach(args.buf, "latex")
       end,
     })
   end
@@ -134,6 +146,8 @@ function M.set_hl(filetype)
       M.set_highlights(markdown_lang, M.queries[key], filetype)
     end
   end
+
+  restart_treesitter(vim.api.nvim_get_current_buf())
 
   -- Always try to attach render to current buffer
   render.attach(vim.api.nvim_get_current_buf(), lang)
