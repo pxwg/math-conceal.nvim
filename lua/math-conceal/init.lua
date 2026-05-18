@@ -84,7 +84,6 @@ end
 ---do some prepare work, then call `set_highlights`
 ---@param filetype string
 function M.set_hl(filetype)
-  -- Enable conceal rendering while leaving cursor behavior to user config.
   vim.opt_local.conceallevel = 2
 
   -- set typst math conceal for typst
@@ -125,6 +124,17 @@ function M.set_hl(filetype)
     M.set_highlights(lang, M.queries[lang], filetype)
   end
 
+  if filetype == "markdown" then
+    for _, markdown_lang in ipairs({ "markdown", "markdown_inline" }) do
+      local key = "runtime:" .. markdown_lang
+      if M.queries[key] == nil then
+        M.files[key] = vim.treesitter.query.get_files(markdown_lang, "highlights")
+        M.queries[key] = queries.read_query_files(M.files[key])
+      end
+      M.set_highlights(markdown_lang, M.queries[key], filetype)
+    end
+  end
+
   -- Always try to attach render to current buffer
   render.attach(vim.api.nvim_get_current_buf(), lang)
 end
@@ -137,12 +147,16 @@ end
 function M.set_highlights(lang, code, filetype)
   filetype = filetype or vim.bo.filetype
   code = code or ""
+  local extra_code = ""
 
   if filetype == "tex" then
     local conceal_map = queries.get_preamble_conceal_map()
-    code = code .. "\n" .. queries.update_latex_queries(conceal_map)
+    extra_code = queries.update_latex_queries(conceal_map)
+    code = code .. "\n" .. extra_code
+    render.update_extra_query(lang, extra_code)
   end
-  vim.treesitter.query.set(lang, "highlights", code)
+
+  vim.treesitter.query.set(lang, "highlights", queries.strip_conceal_directives(code))
 end
 
 return M
