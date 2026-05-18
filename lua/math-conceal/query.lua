@@ -71,6 +71,90 @@ local function read_query_files(filenames)
   return table.concat(contents_table, "\n")
 end
 
+local conceal_directives = {
+  ["set-conceal!"] = true,
+  ["set-font!"] = true,
+  ["set-sub!"] = true,
+  ["set-sup!"] = true,
+  ["set-escape!"] = true,
+}
+
+local function find_directive_end(code, start)
+  local depth = 0
+  local in_string = false
+  local escaped = false
+
+  for i = start, #code do
+    local char = code:sub(i, i)
+
+    if in_string then
+      if escaped then
+        escaped = false
+      elseif char == "\\" then
+        escaped = true
+      elseif char == '"' then
+        in_string = false
+      end
+    elseif char == '"' then
+      in_string = true
+    elseif char == "(" then
+      depth = depth + 1
+    elseif char == ")" then
+      depth = depth - 1
+      if depth == 0 then
+        return i
+      end
+    end
+  end
+end
+
+local function is_conceal_directive(expr)
+  local directive = expr:match("^%(%#([%w%-%?!]+)")
+  if not directive then
+    return false
+  end
+
+  if conceal_directives[directive] then
+    return true
+  end
+
+  if directive == "set!" or directive == "set-pairs!" or directive == "lua_func!" then
+    return expr:find("conceal", 1, true) ~= nil
+  end
+
+  return false
+end
+
+local function strip_conceal_directives(code)
+  local output = {}
+  local i = 1
+
+  while i <= #code do
+    local directive_start = code:find("%(%#", i)
+    if not directive_start then
+      table.insert(output, code:sub(i))
+      break
+    end
+
+    table.insert(output, code:sub(i, directive_start - 1))
+
+    local directive_end = find_directive_end(code, directive_start)
+    if not directive_end then
+      table.insert(output, code:sub(directive_start))
+      break
+    end
+
+    local expr = code:sub(directive_start, directive_end)
+    if not is_conceal_directive(expr) then
+      table.insert(output, expr)
+    end
+
+    i = directive_end + 1
+  end
+
+  return table.concat(output)
+end
+
 ---set pairs in treesitter
 ---inspired from [latex.nvim](https://github.com/robbielyman/latex.nvim)
 ---@param match table<integer, TSNode[]>
@@ -486,5 +570,6 @@ M.update_latex_queries = update_latex_queries
 M.get_preamble_conceal_map = get_preamble_conceal_map
 M.get_conceal_queries = get_conceal_queries
 M.read_query_files = read_query_files
+M.strip_conceal_directives = strip_conceal_directives
 
 return M

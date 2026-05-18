@@ -97,12 +97,147 @@ local function get_parsed_query(lang, query_string)
   end
 end
 
+local function strip_extends(query_string)
+  return query_string:gsub("; extends [^\n]+", "")
+end
+
+local function read_query_files(filenames)
+  local output = {}
+
+  for _, file_path in ipairs(filenames) do
+    if not file_path:find("math%-conceal") then
+      local file = io.open(file_path, "r")
+      if file then
+        local content = file:read("*a")
+        file:close()
+        if content and content ~= "" then
+          table.insert(output, content)
+        end
+      end
+    end
+  end
+
+  return table.concat(output, "\n")
+end
+
+local function get_runtime_highlights_query(language)
+  local files = vim.treesitter.query.get_files(language, "highlights")
+  if not files or #files == 0 then
+    return ""
+  end
+
+  return read_query_files(files)
+end
+
+local function make_spec(target_lang, query_string)
+  query_string = strip_extends(query_string or "")
+  if query_string == "" then
+    return
+  end
+
+  local query = get_parsed_query(target_lang, query_string)
+  if not query then
+    return
+  end
+
+  return {
+    target_lang = target_lang,
+    query = query,
+  }
+end
+
+local function collect_target_parsers(parser, parser_lang, target_lang, parsers)
+  if parser_lang == target_lang then
+    table.insert(parsers, parser)
+  end
+
+  local ok, children = pcall(function()
+    return parser:children()
+  end)
+
+  if not ok or not children then
+    return
+  end
+
+  for child_lang, child in pairs(children) do
+    collect_target_parsers(child, child_lang, target_lang, parsers)
+  end
+end
+
+local function get_query_trees(cache, spec)
+  local ok = pcall(function()
+    cache.parser:parse(true)
+  end)
+
+  if not ok then
+    return {}
+  end
+
+  local parsers = {}
+  collect_target_parsers(cache.parser, cache.root_lang, spec.target_lang, parsers)
+
+  local trees = {}
+  for _, parser in ipairs(parsers) do
+    local parsed = pcall(function()
+      parser:parse(true)
+    end)
+
+    if parsed then
+      for _, tree in ipairs(parser:trees() or {}) do
+        table.insert(trees, tree)
+      end
+    end
+  end
+
+  return trees
+end
+
+local function get_root_parser_lang(buf, parser_lang)
+  if parser_lang == "latex" and vim.bo[buf].filetype == "markdown" then
+    return "markdown"
+  end
+
+  return parser_lang
+end
+
+local function get_buffer_specs(buf, config)
+  if config.parser_lang == "latex" and vim.bo[buf].filetype == "markdown" then
+    local specs = {}
+
+    local markdown_query = get_runtime_highlights_query("markdown")
+    local markdown_spec = make_spec("markdown", markdown_query)
+    if markdown_spec then
+      table.insert(specs, markdown_spec)
+    end
+
+    local markdown_inline_query = get_runtime_highlights_query("markdown_inline")
+    local markdown_inline_spec = make_spec("markdown_inline", markdown_inline_query)
+    if markdown_inline_spec then
+      table.insert(specs, markdown_inline_spec)
+    end
+
+    local latex_spec = make_spec("latex", config.query_string)
+    if latex_spec then
+      table.insert(specs, latex_spec)
+    end
+
+    return specs
+  end
+
+  local spec = make_spec(config.parser_lang, config.query_string)
+  if not spec then
+    return {}
+  end
+
+  return { spec }
+end
+
 ---Setup decoration provider for conceal rendering (global, only once)
 local function setup_decoration_provider()
   vim.api.nvim_set_decoration_provider(ns_id, {
     on_win = function(_, win_id, buf_id, toprow, botrow)
       local cache = buffer_cache[buf_id]
-      if not cache or not cache.parser or not cache.query then
+      if not cache or not cache.parser or not cache.specs or #cache.specs == 0 then
         return false
       end
 
@@ -118,7 +253,10 @@ local function setup_decoration_provider()
 
       -- Core optimization: cache hit check
       -- Reuse marks if buffer unchanged AND viewport unchanged
-      local is_cache_valid = (state.tick == buf_tick) and (state.top == toprow) and (state.bot == botrow)
+      local is_cache_valid = (state.tick == buf_tick)
+        and (state.top == toprow)
+        and (state.bot == botrow)
+        and (state.version == cache.version)
 
       if not is_cache_valid then
         -- Cache miss: requery Tree-sitter
@@ -126,39 +264,39 @@ local function setup_decoration_provider()
         state.tick = buf_tick
         state.top = toprow
         state.bot = botrow
+        state.version = cache.version
 
         -- Incremental parse (use true for full correctness)
-        cache.parser:parse(true)
-        local trees = cache.parser:trees()
-        local tree = trees and trees[1]
+        for _, spec in ipairs(cache.specs) do
+          local trees = get_query_trees(cache, spec)
+          for _, tree in ipairs(trees) do
+            local root = tree:root()
+            -- Query only visible range + small buffer (30 lines) for smooth scrolling
+            local query_top = math.max(0, toprow - 30)
+            local query_bot = botrow + 30
 
-        if tree then
-          local root = tree:root()
-          -- Query only visible range + small buffer (30 lines) for smooth scrolling
-          local query_top = math.max(0, toprow - 30)
-          local query_bot = botrow + 30
+            for id, node, metadata in spec.query:iter_captures(root, buf_id, query_top, query_bot) do
+              local capture_data = metadata[id]
+              local conceal_char = capture_data and capture_data.conceal or metadata.conceal
 
-          for id, node, metadata in cache.query:iter_captures(root, buf_id, query_top, query_bot) do
-            local capture_data = metadata[id]
-            local conceal_char = capture_data and capture_data.conceal or metadata.conceal
+              if conceal_char then
+                local r1, c1, r2, c2 = node:range()
+                -- Only cache marks within actual viewport
+                if r1 <= botrow and r2 >= toprow then
+                  local priority = (capture_data and capture_data.priority) or metadata.priority or 100
+                  local hl_group = (capture_data and capture_data.highlight) or metadata.highlight or "Conceal"
 
-            if conceal_char then
-              local r1, c1, r2, c2 = node:range()
-              -- Only cache marks within actual viewport
-              if r1 <= botrow and r2 >= toprow then
-                local priority = (capture_data and capture_data.priority) or metadata.priority or 100
-                local hl_group = (capture_data and capture_data.highlight) or metadata.highlight or "Conceal"
-
-                -- Store all rendering data in pure Lua table (array is faster than hash)
-                table.insert(state.marks, {
-                  r1,
-                  c1,
-                  r2,
-                  c2, -- [1-4] position
-                  conceal_char, -- [5]
-                  hl_group, -- [6]
-                  tonumber(priority) or 100, -- [7]
-                })
+                  -- Store all rendering data in pure Lua table (array is faster than hash)
+                  table.insert(state.marks, {
+                    r1,
+                    c1,
+                    r2,
+                    c2, -- [1-4] position
+                    conceal_char, -- [5]
+                    hl_group, -- [6]
+                    tonumber(priority) or 100, -- [7]
+                  })
+                end
               end
             end
           end
@@ -211,26 +349,32 @@ end
 
 ---Attach conceal logic to buffer
 ---@param buf number
----@param lang string
----@param query_string string
-local function attach_to_buffer(buf, lang, query_string)
-  if buffer_cache[buf] then
+---@param config table
+local function attach_to_buffer(buf, config)
+  local root_lang = get_root_parser_lang(buf, config.parser_lang)
+  local specs = get_buffer_specs(buf, config)
+  if #specs == 0 then
     return
   end
 
-  local query = get_parsed_query(lang, query_string)
-  if not query then
-    return
-  end
-
-  local parser = vim.treesitter.get_parser(buf, lang)
+  local parser = vim.treesitter.get_parser(buf, root_lang)
   if not parser then
+    return
+  end
+
+  if buffer_cache[buf] then
+    buffer_cache[buf].parser = parser
+    buffer_cache[buf].root_lang = root_lang
+    buffer_cache[buf].specs = specs
+    buffer_cache[buf].version = buffer_cache[buf].version + 1
     return
   end
 
   buffer_cache[buf] = {
     parser = parser,
-    query = query,
+    root_lang = root_lang,
+    specs = specs,
+    version = 1,
   }
 
   parser:register_cbs({
@@ -335,7 +479,7 @@ function M.attach(buf, lang)
     return
   end
 
-  attach_to_buffer(buf, config.parser_lang, config.query_string)
+  attach_to_buffer(buf, config)
 
   for _, win in ipairs(buf_wins(buf)) do
     redraw_win(win)
@@ -352,10 +496,12 @@ function M.setup(opts, lang)
   local parser_lang = utils.lang_to_lt(lang)
 
   local query_string = get_conceal_query(parser_lang, conceal)
-  query_string = query_string:gsub("; extends [^\n]+", "")
+  query_string = strip_extends(query_string)
   active_configs[lang] = {
     file_lang = file_lang,
     parser_lang = parser_lang,
+    base_query_string = query_string,
+    extra_query_string = "",
     query_string = query_string,
   }
 
@@ -364,6 +510,26 @@ function M.setup(opts, lang)
   if vim.bo.filetype == file_lang then
     M.attach(vim.api.nvim_get_current_buf(), lang)
   end
+end
+
+function M.update_query(lang, query_string)
+  local config = active_configs[lang]
+  if not config then
+    return
+  end
+
+  config.base_query_string = strip_extends(query_string or "")
+  config.query_string = config.base_query_string .. "\n" .. (config.extra_query_string or "")
+end
+
+function M.update_extra_query(lang, query_string)
+  local config = active_configs[lang]
+  if not config then
+    return
+  end
+
+  config.extra_query_string = strip_extends(query_string or "")
+  config.query_string = config.base_query_string .. "\n" .. config.extra_query_string
 end
 
 return M
