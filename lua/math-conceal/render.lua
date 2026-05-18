@@ -21,6 +21,16 @@ local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = tru
 
 local active_configs = {}
 
+local markdown_expand_nodes = {
+  code_span = true,
+  collapsed_reference_link = true,
+  fenced_code_block = true,
+  full_reference_link = true,
+  image = true,
+  inline_link = true,
+  shortcut_link = true,
+}
+
 local function buf_wins(buf)
   local wins = {}
   for _, win in ipairs(vim.api.nvim_list_wins()) do
@@ -232,6 +242,22 @@ local function get_buffer_specs(buf, config)
   return { spec }
 end
 
+local function get_expand_range(spec, node)
+  if spec.target_lang ~= "markdown" and spec.target_lang ~= "markdown_inline" then
+    return node:range()
+  end
+
+  local parent = node:parent()
+  while parent do
+    if markdown_expand_nodes[parent:type()] then
+      return parent:range()
+    end
+    parent = parent:parent()
+  end
+
+  return node:range()
+end
+
 ---Setup decoration provider for conceal rendering (global, only once)
 local function setup_decoration_provider()
   vim.api.nvim_set_decoration_provider(ns_id, {
@@ -281,6 +307,7 @@ local function setup_decoration_provider()
 
               if conceal_char then
                 local r1, c1, r2, c2 = node:range()
+                local er1, ec1, er2, ec2 = get_expand_range(spec, node)
                 -- Only cache marks within actual viewport
                 if r1 <= botrow and r2 >= toprow then
                   local priority = (capture_data and capture_data.priority) or metadata.priority or 100
@@ -295,6 +322,10 @@ local function setup_decoration_provider()
                     conceal_char, -- [5]
                     hl_group, -- [6]
                     tonumber(priority) or 100, -- [7]
+                    er1, -- [8]
+                    ec1, -- [9]
+                    er2, -- [10]
+                    ec2, -- [11]
                   })
                 end
               end
@@ -310,7 +341,7 @@ local function setup_decoration_provider()
       local set_extmark = vim.api.nvim_buf_set_extmark
 
       for _, m in ipairs(state.marks) do
-        local r1, c1, r2, c2 = m[1], m[2], m[3], m[4]
+        local r1, c1, r2, c2 = m[8], m[9], m[10], m[11]
 
         -- Collision detection: check if cursor is inside node
         local is_cursor_inside = false
@@ -331,12 +362,12 @@ local function setup_decoration_provider()
         end
 
         if not is_cursor_inside then
-          set_extmark(buf_id, ns_id, r1, c1, {
+          set_extmark(buf_id, ns_id, m[1], m[2], {
             conceal = m[5],
             hl_group = m[6],
             priority = m[7],
-            end_row = r2,
-            end_col = c2,
+            end_row = m[3],
+            end_col = m[4],
             ephemeral = true,
           })
         end
