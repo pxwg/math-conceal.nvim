@@ -97,6 +97,60 @@ local function get_parsed_query(lang, query_string)
   end
 end
 
+local function collect_target_parsers(parser, parser_lang, target_lang, parsers)
+  if parser_lang == target_lang then
+    table.insert(parsers, parser)
+  end
+
+  local ok, children = pcall(function()
+    return parser:children()
+  end)
+
+  if not ok or not children then
+    return
+  end
+
+  for child_lang, child in pairs(children) do
+    collect_target_parsers(child, child_lang, target_lang, parsers)
+  end
+end
+
+local function get_query_trees(cache)
+  local ok = pcall(function()
+    cache.parser:parse(true)
+  end)
+
+  if not ok then
+    return {}
+  end
+
+  local parsers = {}
+  collect_target_parsers(cache.parser, cache.root_lang, cache.target_lang, parsers)
+
+  local trees = {}
+  for _, parser in ipairs(parsers) do
+    local parsed = pcall(function()
+      parser:parse(true)
+    end)
+
+    if parsed then
+      for _, tree in ipairs(parser:trees() or {}) do
+        table.insert(trees, tree)
+      end
+    end
+  end
+
+  return trees
+end
+
+local function get_root_parser_lang(buf, lang)
+  if lang == "latex" and vim.bo[buf].filetype == "markdown" then
+    return "markdown"
+  end
+
+  return lang
+end
+
 ---Setup decoration provider for conceal rendering (global, only once)
 local function setup_decoration_provider()
   vim.api.nvim_set_decoration_provider(ns_id, {
@@ -128,11 +182,8 @@ local function setup_decoration_provider()
         state.bot = botrow
 
         -- Incremental parse (use true for full correctness)
-        cache.parser:parse(true)
-        local trees = cache.parser:trees()
-        local tree = trees and trees[1]
-
-        if tree then
+        local trees = get_query_trees(cache)
+        for _, tree in ipairs(trees) do
           local root = tree:root()
           -- Query only visible range + small buffer (30 lines) for smooth scrolling
           local query_top = math.max(0, toprow - 30)
@@ -223,7 +274,8 @@ local function attach_to_buffer(buf, lang, query_string)
     return
   end
 
-  local parser = vim.treesitter.get_parser(buf, lang)
+  local root_lang = get_root_parser_lang(buf, lang)
+  local parser = vim.treesitter.get_parser(buf, root_lang)
   if not parser then
     return
   end
@@ -231,6 +283,8 @@ local function attach_to_buffer(buf, lang, query_string)
   buffer_cache[buf] = {
     parser = parser,
     query = query,
+    root_lang = root_lang,
+    target_lang = lang,
   }
 
   parser:register_cbs({
