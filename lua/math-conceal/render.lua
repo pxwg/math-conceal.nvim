@@ -17,6 +17,7 @@ local buffer_cache = {}
 local win_states = {}
 
 local ns_id = vim.api.nvim_create_namespace("math-conceal-render")
+local line_ns_id = vim.api.nvim_create_namespace("math-conceal-render-lines")
 local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = true })
 
 local active_configs = {}
@@ -258,6 +259,50 @@ local function get_expand_range(spec, node)
   return node:range()
 end
 
+local function get_conceal_line_range(node)
+  local r1, _, r2, c2 = node:range()
+  if r1 == r2 then
+    return r1, 0, r1, math.max(c2, 1)
+  end
+
+  return r1, 0, r2, math.max(c2, 1)
+end
+
+local function position_inside_range(row, col, r1, c1, r2, c2)
+  if row < r1 or row > r2 then
+    return false
+  end
+
+  if r1 == r2 then
+    return col >= c1 and col < c2
+  end
+
+  return (row == r1 and col >= c1) or (row == r2 and col < c2) or (row > r1 and row < r2)
+end
+
+local function sync_line_conceal_marks(buf_id, state, curr_row, curr_col)
+  vim.api.nvim_buf_clear_namespace(buf_id, line_ns_id, 0, -1)
+
+  local seen = {}
+  local set_extmark = vim.api.nvim_buf_set_extmark
+
+  for _, m in ipairs(state.marks) do
+    if m[12] == "line" and not position_inside_range(curr_row, curr_col, m[8], m[9], m[10], m[11]) then
+      local key = table.concat({ m[1], m[2], m[3], m[4] }, ":")
+      if not seen[key] then
+        seen[key] = true
+        set_extmark(buf_id, line_ns_id, m[1], m[2], {
+          conceal_lines = m[5],
+          priority = m[7],
+          end_row = m[3],
+          end_col = m[4],
+          strict = false,
+        })
+      end
+    end
+  end
+end
+
 ---Setup decoration provider for conceal rendering (global, only once)
 local function setup_decoration_provider()
   vim.api.nvim_set_decoration_provider(ns_id, {
@@ -304,8 +349,30 @@ local function setup_decoration_provider()
             for id, node, metadata in spec.query:iter_captures(root, buf_id, query_top, query_bot) do
               local capture_data = metadata[id]
               local conceal_char = capture_data and capture_data.conceal or metadata.conceal
+              local conceal_lines = capture_data and capture_data.conceal_lines or metadata.conceal_lines
 
-              if conceal_char then
+              if conceal_lines ~= nil then
+                local r1, c1, r2, c2 = get_conceal_line_range(node)
+                if r1 <= botrow and r2 >= toprow then
+                  local priority = (capture_data and capture_data.priority) or metadata.priority or 100
+                  local line = vim.api.nvim_buf_get_lines(buf_id, r1, r1 + 1, false)[1] or ""
+
+                  table.insert(state.marks, {
+                    r1,
+                    c1,
+                    r2,
+                    c2, -- [1-4] position
+                    conceal_lines, -- [5]
+                    nil, -- [6] hl_group
+                    tonumber(priority) or 100, -- [7]
+                    r1, -- [8]
+                    c1, -- [9]
+                    r1, -- [10]
+                    #line, -- [11]
+                    "line", -- [12]
+                  })
+                end
+              elseif conceal_char then
                 local r1, c1, r2, c2 = node:range()
                 local er1, ec1, er2, ec2 = get_expand_range(spec, node)
                 -- Only cache marks within actual viewport
@@ -339,27 +406,17 @@ local function setup_decoration_provider()
       local curr_row = cursor[1] - 1
       local curr_col = cursor[2]
       local set_extmark = vim.api.nvim_buf_set_extmark
+      sync_line_conceal_marks(buf_id, state, curr_row, curr_col)
 
       for _, m in ipairs(state.marks) do
+        if m[12] == "line" then
+          goto continue
+        end
+
         local r1, c1, r2, c2 = m[8], m[9], m[10], m[11]
 
         -- Collision detection: check if cursor is inside node
-        local is_cursor_inside = false
-        if curr_row >= r1 and curr_row <= r2 then
-          if r1 == r2 then
-            if curr_col >= c1 and curr_col < c2 then
-              is_cursor_inside = true
-            end
-          else
-            if curr_row == r1 and curr_col >= c1 then
-              is_cursor_inside = true
-            elseif curr_row == r2 and curr_col < c2 then
-              is_cursor_inside = true
-            elseif curr_row > r1 and curr_row < r2 then
-              is_cursor_inside = true
-            end
-          end
-        end
+        local is_cursor_inside = position_inside_range(curr_row, curr_col, r1, c1, r2, c2)
 
         if not is_cursor_inside then
           set_extmark(buf_id, ns_id, m[1], m[2], {
@@ -371,6 +428,8 @@ local function setup_decoration_provider()
             ephemeral = true,
           })
         end
+
+        ::continue::
       end
 
       return false
@@ -439,6 +498,9 @@ local function attach_to_buffer(buf, config)
     buffer = buf,
     callback = function()
       buffer_cache[buf] = nil
+      if vim.api.nvim_buf_is_valid(buf) then
+        vim.api.nvim_buf_clear_namespace(buf, line_ns_id, 0, -1)
+      end
     end,
   })
 
