@@ -2,7 +2,13 @@
 
 为 [Neovim](https://github.com/neovim/neovim) 提供更快、更精确的 [LaTeX](https://www.latex-project.org/) 和 [typst](https://github.com/typst/typst) 隐藏功能。
 
-https://github.com/user-attachments/assets/65826ae2-2cd5-48a4-aa37-bfd3d9748b31
+### Markdown 流式输出图片隐藏
+
+https://github.com/user-attachments/assets/d78175a5-7462-40b6-be63-087fd100b97a
+
+### Typst 图片隐藏
+
+https://github.com/user-attachments/assets/359fb62f-2031-4b5c-8d0b-0fe835fccd80
 
 <table style="width: 80%; margin: auto; text-align: center;">
   <tr>
