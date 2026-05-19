@@ -2,11 +2,11 @@
 
 为 [Neovim](https://github.com/neovim/neovim) 提供更快、更精确的 [LaTeX](https://www.latex-project.org/) 和 [typst](https://github.com/typst/typst) 隐藏功能。
 
-### Markdown 流式输出图片隐藏
+### Typst 数学公式 Conceal
 
 https://github.com/user-attachments/assets/d78175a5-7462-40b6-be63-087fd100b97a
 
-### Typst 图片隐藏
+### Markdown 数学公式 Conceal（兼容流式输出）
 
 https://github.com/user-attachments/assets/359fb62f-2031-4b5c-8d0b-0fe835fccd80
 
@@ -81,7 +81,7 @@ return {
   "pxwg/math-conceal.nvim",
   event = "VeryLazy",
   main = "math-conceal",
-  build = "cargo build --release --manifest-path service/Cargo.toml", -- 图片隐藏需要
+  build = "cargo build --release --manifest-path service/Cargo.toml", -- 图形化公式渲染需要
   --- @type LaTeXConcealOptions
   opts = {
     conceal = {
@@ -94,18 +94,18 @@ return {
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
     image = {
-      enabled = false, -- 改为 true 以启用图片隐藏
+      enabled = false, -- 改为 true 以启用图形化公式 conceal
       filetypes = { "typst", "markdown" },
     },
   },
 }
 ```
 
-## 图片隐藏
+## 数学公式 Conceal
 
-本插件可以通过从 [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer) 迁移进来的渲染管线，将数学内容渲染为终端内联图片。该 fork 基于 [PartyWumpus/typst-concealer](https://github.com/PartyWumpus/typst-concealer)。该功能依赖 kitty graphics protocol，适用于 kitty、Ghostty 等兼容终端。
+本插件可以通过从 [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer) 迁移进来的渲染管线，将数学公式渲染为终端图形。该 fork 基于 [PartyWumpus/typst-concealer](https://github.com/PartyWumpus/typst-concealer)。该功能依赖 kitty graphics protocol，适用于 kitty、Ghostty 等兼容终端。
 
-图片隐藏支持 Typst、通过 [MiTeX](https://github.com/mitex-rs/mitex) 渲染数学公式的 Markdown，以及实验性的 LaTeX 渲染。
+图形化公式 conceal 支持 Typst、通过 [MiTeX](https://github.com/mitex-rs/mitex) 渲染数学公式的 Markdown，以及实验性的 LaTeX 渲染。
 
 统一配置入口如下：
 
@@ -132,7 +132,7 @@ require("math-conceal").setup({
 cargo build --release --manifest-path service/Cargo.toml
 ```
 
-`styling_type`、`live_preview_enabled`、`render_paths`、`get_root`、`get_inputs`、`get_preamble_file` 等高级选项会透传给图片渲染管线。
+`styling_type`、`live_preview_enabled`、`render_paths`、`get_root`、`get_inputs`、`get_preamble_file` 等高级渲染选项会透传给迁移后的管线。
 
 ## 待办事项
 
@@ -157,4 +157,4 @@ cargo build --release --manifest-path service/Cargo.toml
 - [PartyWumpus](https://github.com/PartyWumpus)：感谢原始 [typst-concealer](https://github.com/PartyWumpus/typst-concealer) 插件，它启发了 Typst 预览支持。
 - [latex.nvim](https://github.com/robbielyman/latex.nvim)：为使用自定义隐藏模式（conceal patterns）的想法提供了灵感。
 - [latex_concealer.nvim](http://github.com/dirichy/latex_concealer.nvim)：为细粒度隐藏模式的想法提供了灵感。
-- [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer)：本插件迁移图片渲染源码所基于的 fork。
+- [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer)：本插件迁移图形化公式渲染源码所基于的 fork。

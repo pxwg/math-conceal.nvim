@@ -1,4 +1,4 @@
-*math-conceal.nvim*                 Math symbol and image conceal for Neovim
+*math-conceal.nvim*                 Math symbol and graphical equation conceal for Neovim
 
 ==============================================================================
 CONTENTS                                             *math-conceal-contents*
@@ -6,10 +6,10 @@ CONTENTS                                             *math-conceal-contents*
 1. Introduction                                      |math-conceal-intro|
 2. Setup                                             |math-conceal-setup|
 3. ASCII conceal                                     |math-conceal-ascii|
-4. Image conceal                                     |math-conceal-image|
-5. Image conceal examples                            |math-conceal-image-examples|
-6. Image conceal options                             |math-conceal-image-options|
-7. Image conceal API                                 |math-conceal-image-api|
+4. Equation conceal                                  |math-conceal-image|
+5. Equation conceal examples                         |math-conceal-image-examples|
+6. Equation conceal options                          |math-conceal-image-options|
+7. Equation conceal API                              |math-conceal-image-api|
 8. Troubleshooting                                   |math-conceal-troubleshooting|
 
 ==============================================================================
@@ -22,18 +22,19 @@ There are two rendering paths:
 
 - ASCII/Unicode conceal: fast tree-sitter based symbol replacement using
   Neovim extmark conceal.
-- Image conceal: inline image rendering for richer math previews, migrated from
-  https://github.com/pxwg/typst-concealer, a fork of the original
+- Graphical equation conceal: terminal-graphics rendering for richer math
+  previews, migrated from https://github.com/pxwg/typst-concealer, a fork of
+  the original
   https://github.com/PartyWumpus/typst-concealer.
 
-Image conceal supports:
+Graphical equation conceal supports:
 
 - Typst math and code blocks.
 - Markdown math through https://github.com/mitex-rs/mitex.
 - Experimental LaTeX rendering when the LaTeX backend is explicitly enabled.
 
-Image conceal uses the kitty graphics protocol. Use a compatible terminal such
-as kitty or Ghostty.
+Graphical equation conceal uses the kitty graphics protocol. Use a compatible
+terminal such as kitty or Ghostty.
 
 ==============================================================================
 2. Setup                                                *math-conceal-setup*
@@ -46,7 +47,7 @@ Minimal setup:
   })
 <
 
-lazy.nvim setup with image conceal:
+lazy.nvim setup with graphical equation conceal:
 >
   return {
     "pxwg/math-conceal.nvim",
@@ -63,8 +64,8 @@ lazy.nvim setup with image conceal:
   }
 <
 
-The Rust service is required only when image conceal is enabled. If you do not
-use a plugin manager build hook, build it manually:
+The Rust service is required only when graphical equation rendering is enabled.
+If you do not use a plugin manager build hook, build it manually:
 >
   cargo build --release --manifest-path service/Cargo.toml
 <
@@ -107,9 +108,9 @@ Options:
         Highlight definitions for conceal capture groups.
 
 ==============================================================================
-4. Image conceal                                      *math-conceal-image*
+4. Equation conceal                                      *math-conceal-image*
 
-Image conceal is configured under the top-level `image` table:
+Graphical equation conceal is configured under the top-level `image` table:
 >
   require("math-conceal").setup({
     image = {
@@ -123,8 +124,8 @@ The `image` table is passed to the migrated renderer after removing the
 top-level control key `enabled`. This means advanced renderer options can be
 placed directly under `image`.
 
-Image conceal and ASCII conceal can be enabled together. ASCII conceal still
-uses `ft`; image conceal uses `image.filetypes`.
+Graphical equation conceal and ASCII conceal can be enabled together. ASCII
+conceal still uses `ft`; graphical equation rendering uses `image.filetypes`.
 
 Supported source kinds:
 
@@ -133,7 +134,7 @@ Supported source kinds:
 - `latex`: experimental LaTeX backend, off by default.
 
 ==============================================================================
-5. Image conceal examples                    *math-conceal-image-examples*
+5. Equation conceal examples                    *math-conceal-image-examples*
 
 Typst only:
 >
@@ -167,7 +168,7 @@ Typst and plugin-owned Markdown-like buffers:
   })
 <
 
-Experimental LaTeX image rendering:
+Experimental LaTeX equation rendering:
 >
   require("math-conceal").setup({
     image = {
@@ -223,16 +224,16 @@ Restrict rendering by path:
 <
 
 ==============================================================================
-6. Image conceal options                      *math-conceal-image-options*
+6. Equation conceal options                      *math-conceal-image-options*
 
                                                          *math-conceal-image.enabled*
 `image.enabled`~
-        Boolean. Enables the image conceal subsystem. Default: false.
+        Boolean. Enables graphical equation conceal. Default: false.
 
                                                        *math-conceal-image.filetypes*
 `image.filetypes`~
-        List of source kinds/filetypes managed by image conceal. Common values:
-        `typst`, `markdown`, `latex`.
+        List of source kinds/filetypes managed by graphical equation rendering.
+        Common values: `typst`, `markdown`, `latex`.
 
         Default at the top-level math-conceal integration: `{ "typst" }`.
         The migrated renderer itself defaults to Typst and Markdown when used
@@ -248,8 +249,8 @@ Restrict rendering by path:
 
                                               *math-conceal-image.enabled_by_default*
 `image.enabled_by_default`~
-        Boolean. Enables image conceal automatically for supported buffers.
-        Default: true inside the image renderer.
+        Boolean. Enables graphical equation conceal automatically for supported
+        buffers. Default: true inside the renderer.
 
                                                    *math-conceal-image.styling_type*
 `image.styling_type`~
@@ -371,9 +372,9 @@ Restrict rendering by path:
         show rules needed by snippets.
 
 ==============================================================================
-7. Image conceal API                              *math-conceal-image-api*
+7. Equation conceal API                              *math-conceal-image-api*
 
-The public image renderer module is:
+The public renderer module is:
 >
   local image = require("math-conceal.image")
 <
@@ -390,7 +391,7 @@ These are useful for keymaps:
 >
   vim.keymap.set("n", "<leader>mi", function()
     require("math-conceal.image").toggle_buf(0)
-  end, { desc = "Toggle math image conceal" })
+  end, { desc = "Toggle graphical equation conceal" })
 <
 
 Query helpers:
@@ -410,16 +411,16 @@ Advanced integrations can use the runtime directly:
 ==============================================================================
 8. Troubleshooting                            *math-conceal-troubleshooting*
 
-No images appear~
-        Check terminal support first. Image conceal requires kitty graphics
-        protocol support.
+No rendered equations appear~
+        Check terminal support first. Graphical equation conceal requires kitty
+        graphics protocol support.
 
         Confirm the service is built:
 >
         test -x service/target/release/typst-concealer-service
 <
 
-        Confirm image conceal is enabled:
+        Confirm graphical equation conceal is enabled:
 >
         :lua print(vim.inspect(require("math-conceal").opts.image))
 <
@@ -433,7 +434,7 @@ Service cannot be spawned~
 <
 
 Markdown math does not render~
-        Ensure Markdown is enabled for image conceal:
+        Ensure Markdown is enabled for graphical equation conceal:
 >
         image = {
           enabled = true,
