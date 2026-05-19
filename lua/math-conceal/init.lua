@@ -154,7 +154,7 @@ local function set_image(filetype)
   setup_image()
   local image = require("math-conceal.image")
   local bufnr = vim.api.nvim_get_current_buf()
-  if image.is_supported_bufnr(bufnr) and image.is_render_allowed(bufnr) then
+  if image.config.enabled_by_default and image.is_supported_bufnr(bufnr) and image.is_render_allowed(bufnr) then
     image.enable_buf(bufnr)
   end
 end
