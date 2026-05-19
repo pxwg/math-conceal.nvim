@@ -4,7 +4,13 @@
 
 Faster and More Precise [LaTeX](https://www.latex-project.org/) and [typst](https://github.com/typst/typst) conceal for [Neovim](https://github.com/neovim/neovim).
 
-https://github.com/user-attachments/assets/65826ae2-2cd5-48a4-aa37-bfd3d9748b31
+### Markdown Stream Image Conceal
+
+https://github.com/user-attachments/assets/d78175a5-7462-40b6-be63-087fd100b97a
+
+### Typst Image Conceal
+
+https://github.com/user-attachments/assets/359fb62f-2031-4b5c-8d0b-0fe835fccd80
 
 ## Preview Channel
 
@@ -60,7 +66,7 @@ snippet, and any `:messages` output.
 
 In neovim `0.11.0`, the treesitter query has been changed to allow the asynchronous query, which allows us to use the treesitter query to conceal latex file. However, it's still slow while fully use `#set! conceal` directive since the expansive cost of query over the whole AST while conceal a single node.
 
-The basic solution of the problem above comes from [latex.nvim](https://github.com/robbielyman/latex.nvim), who uses customized `set-pairs` directive to conceal the latex file. ~However, it still has some performance problem. The way to resolve the performance issue is considering a hash map to accelerate pattern matching, instead of matching conceal pattern inside AST query file.~
+The basic solution of the problem above comes from [latex.nvim](https://github.com/robbielyman/latex.nvim), who uses customized `set-pairs` directive to conceal the latex file.
 Using a proper-designed lua module to handle the conceal patterns and only use treesitter to locate the position of the patterns can significantly improve the performance of conceal.
 
 ## Features
