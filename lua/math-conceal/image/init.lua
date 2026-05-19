@@ -124,6 +124,7 @@ end
 --- @field header?                string    Custom Typst code prepended to every rendered document.
 --- @field mitex_package?         string    Typst package spec used for Markdown LaTeX math. Default "@preview/mitex:0.2.7".
 --- @field markdown_filetypes?    string[]  Filetypes treated as Markdown math sources. Default { "markdown" }.
+--- @field filetypes?             string[]  Filetypes/path-kinds managed by image conceal. Default { "typst", "markdown" }.
 --- @field backends?              { latex?: latexbackendconfig }
 --- @field block_padding_cols?    integer   Terminal columns reserved as outer padding for code blocks.
 --- @field block_preview_margin_pt? number  Extra Typst-side inner margin for code block previews.
@@ -209,6 +210,19 @@ local function filetype_in(list, ft)
   return false
 end
 
+local function source_kind_enabled(kind)
+  if M.config == nil or M.config.filetypes == nil then
+    return kind == "typst" or kind == "markdown"
+  end
+
+  for _, ft in ipairs(M.config.filetypes) do
+    if ft == kind or (kind == "latex" and vim.list_contains({ "tex", "plaintex", "latex" }, ft)) then
+      return true
+    end
+  end
+  return false
+end
+
 local function parser_available(lang, probe_query)
   if vim.treesitter.language and type(vim.treesitter.language.inspect) == "function" then
     return pcall(vim.treesitter.language.inspect, lang)
@@ -224,14 +238,18 @@ function M.source_kind_for_bufnr(bufnr)
 
   local ft = vim.bo[bufnr].filetype
   if ft == "typst" then
-    return "typst"
+    return source_kind_enabled("typst") and "typst" or nil
   elseif latex_enabled() and vim.list_contains({ "tex", "plaintex", "latex" }, ft) then
-    return "latex"
+    return source_kind_enabled("latex") and "latex" or nil
   elseif filetype_in(markdown_filetypes(), ft) then
-    return "markdown"
+    return source_kind_enabled("markdown") and "markdown" or nil
   end
 
-  return source_kind_from_path(vim.api.nvim_buf_get_name(bufnr))
+  local kind = source_kind_from_path(vim.api.nvim_buf_get_name(bufnr))
+  if kind ~= nil and source_kind_enabled(kind) then
+    return kind
+  end
+  return nil
 end
 
 function M.is_supported_bufnr(bufnr)
@@ -470,6 +488,7 @@ function M.setup(cfg)
     compiler_args = default(cfg.compiler_args, {}),
     header = default(cfg.header, ""),
     mitex_package = default(cfg.mitex_package, "@preview/mitex:0.2.7"),
+    filetypes = default(cfg.filetypes, { "typst", "markdown" }),
     markdown_filetypes = default(cfg.markdown_filetypes, { "markdown" }),
     block_padding_cols = default(cfg.block_padding_cols, 15),
     block_preview_margin_pt = default(cfg.block_preview_margin_pt, 6),
@@ -531,6 +550,14 @@ function M.setup(cfg)
 
   if type(M.config.markdown_filetypes) ~= "table" then
     error("typst markdown_filetypes must be a list of filetype strings")
+  end
+  if type(M.config.filetypes) ~= "table" then
+    error("typst filetypes must be a list of filetype strings")
+  end
+  for _, ft in ipairs(M.config.filetypes) do
+    if type(ft) ~= "string" then
+      error("typst filetypes must be a list of filetype strings")
+    end
   end
   for _, ft in ipairs(M.config.markdown_filetypes) do
     if type(ft) ~= "string" then
@@ -679,12 +706,25 @@ function M.setup(cfg)
 
   -- ── Autocmds ──────────────────────────────────────────────────────────────
 
-  local managed_patterns = { "*.typ", "*.md", "*.markdown" }
+  local managed_patterns = {}
+  if source_kind_enabled("typst") then
+    managed_patterns[#managed_patterns + 1] = "*.typ"
+  end
+  if source_kind_enabled("markdown") then
+    managed_patterns[#managed_patterns + 1] = "*.md"
+    managed_patterns[#managed_patterns + 1] = "*.markdown"
+  end
   if latex_backend_cfg.enabled == true then
     managed_patterns[#managed_patterns + 1] = "*.tex"
   end
 
-  local managed_filetypes = vim.list_extend({ "typst" }, vim.deepcopy(M.config.markdown_filetypes))
+  local managed_filetypes = {}
+  if source_kind_enabled("typst") then
+    managed_filetypes[#managed_filetypes + 1] = "typst"
+  end
+  if source_kind_enabled("markdown") then
+    vim.list_extend(managed_filetypes, vim.deepcopy(M.config.markdown_filetypes))
+  end
   if latex_backend_cfg.enabled == true then
     managed_filetypes[#managed_filetypes + 1] = "tex"
     managed_filetypes[#managed_filetypes + 1] = "plaintex"
