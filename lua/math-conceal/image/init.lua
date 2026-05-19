@@ -209,6 +209,13 @@ local function filetype_in(list, ft)
   return false
 end
 
+local function parser_available(lang, probe_query)
+  if vim.treesitter.language and type(vim.treesitter.language.inspect) == "function" then
+    return pcall(vim.treesitter.language.inspect, lang)
+  end
+  return pcall(vim.treesitter.query.parse, lang, probe_query)
+end
+
 function M.source_kind_for_bufnr(bufnr)
   bufnr = bufnr or vim.fn.bufnr()
   if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -535,18 +542,13 @@ function M.setup(cfg)
   refresh_cell_px_size()
   last_resize_columns = vim.o.columns
 
-  local typst_parser_installed = pcall(vim.treesitter.get_parser, 0, "typst")
+  local typst_parser_installed = parser_available("typst", "(math) @math")
   if typst_parser_installed == false then
     error("Typst treesitter parser not found, math-conceal.image will not work")
   end
 
   if latex_backend_cfg.enabled == true then
-    local latex_parser_ok = false
-    if vim.treesitter.language and type(vim.treesitter.language.inspect) == "function" then
-      latex_parser_ok = pcall(vim.treesitter.language.inspect, "latex")
-    else
-      latex_parser_ok = pcall(vim.treesitter.query.parse, "latex", "(inline_formula) @math")
-    end
+    local latex_parser_ok = parser_available("latex", "(inline_formula) @math")
     if not latex_parser_ok then
       vim.notify(
         "[math-conceal.image] LaTeX backend enabled but 'latex' tree-sitter parser is unavailable",
@@ -555,7 +557,9 @@ function M.setup(cfg)
     end
     if vim.fn.executable(latex_backend_cfg.compiler) ~= 1 then
       vim.notify(
-        ("[math-conceal.image] LaTeX backend enabled but compiler '%s' is unavailable"):format(latex_backend_cfg.compiler),
+        ("[math-conceal.image] LaTeX backend enabled but compiler '%s' is unavailable"):format(
+          latex_backend_cfg.compiler
+        ),
         vim.log.levels.WARN
       )
     end
