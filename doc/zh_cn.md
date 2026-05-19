@@ -94,16 +94,18 @@ return {
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
     image = {
-      enabled = false, -- 改为 true 以启用 Typst 图片隐藏
-      filetypes = { "typst" },
+      enabled = false, -- 改为 true 以启用图片隐藏
+      filetypes = { "typst", "markdown" },
     },
   },
 }
 ```
 
-## Typst 图片隐藏
+## 图片隐藏
 
-本插件可以通过迁移进来的 `typst-concealer` 渲染管线，将 Typst 数学公式/代码块渲染为终端内联图片。该功能依赖 kitty graphics protocol，适用于 kitty、Ghostty 等兼容终端。
+本插件可以通过从 [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer) 迁移进来的渲染管线，将数学内容渲染为终端内联图片。该 fork 基于 [PartyWumpus/typst-concealer](https://github.com/PartyWumpus/typst-concealer)。该功能依赖 kitty graphics protocol，适用于 kitty、Ghostty 等兼容终端。
+
+图片隐藏支持 Typst、通过 [MiTeX](https://github.com/mitex-rs/mitex) 渲染数学公式的 Markdown，以及实验性的 LaTeX 渲染。
 
 统一配置入口如下：
 
@@ -111,10 +113,15 @@ return {
 require("math-conceal").setup({
   image = {
     enabled = true,
-    filetypes = { "typst" },
+    filetypes = { "typst", "markdown" },
     -- 可选；未设置时会优先查找当前插件内的 release 二进制：
     -- service/target/release/typst-concealer-service
     service_binary = "typst-concealer-service",
+    backends = {
+      latex = {
+        enabled = false, -- 实验性支持
+      },
+    },
   },
 })
 ```
@@ -147,5 +154,7 @@ cargo build --release --manifest-path service/Cargo.toml
 
 - [Freed-Wu](https://github.com/Freed-Wu)：在将本插件发布到 [LuaRocks](https://luarocks.org/modules/pxwg/math-conceal.nvim) 以及重构代码结构以符合 Neovim 插件最佳实践方面起到了关键作用。
 - [Dirichy](https://github.com/dirichy)：就 LaTeX 隐藏模式和优化进行了有益的讨论。
+- [PartyWumpus](https://github.com/PartyWumpus)：感谢原始 [typst-concealer](https://github.com/PartyWumpus/typst-concealer) 插件，它启发了 Typst 预览支持。
 - [latex.nvim](https://github.com/robbielyman/latex.nvim)：为使用自定义隐藏模式（conceal patterns）的想法提供了灵感。
 - [latex_concealer.nvim](http://github.com/dirichy/latex_concealer.nvim)：为细粒度隐藏模式的想法提供了灵感。
+- [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer)：本插件迁移图片渲染源码所基于的 fork。

@@ -131,18 +131,23 @@ return {
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
     image = {
-      enabled = false, -- set true to enable Typst image conceal
-      filetypes = { "typst" },
+      enabled = false, -- set true to enable image conceal
+      filetypes = { "typst", "markdown" },
     },
   },
 }
 ```
 
-## Typst Image Conceal
+## Image Conceal
 
-`math-conceal.nvim` can also render Typst math/code as inline images using the
-migrated `typst-concealer` pipeline. This path uses kitty graphics protocol and
-works in terminals that support it, such as kitty and Ghostty.
+`math-conceal.nvim` can also render math as inline images using the renderer
+migrated from [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer),
+which is a fork of [PartyWumpus/typst-concealer](https://github.com/PartyWumpus/typst-concealer).
+This path uses kitty graphics protocol and works in terminals that support it,
+such as kitty and Ghostty.
+
+Image conceal supports Typst, Markdown math through
+[MiTeX](https://github.com/mitex-rs/mitex), and experimental LaTeX rendering.
 
 Enable it from the same setup table:
 
@@ -150,10 +155,15 @@ Enable it from the same setup table:
 require("math-conceal").setup({
   image = {
     enabled = true,
-    filetypes = { "typst" },
+    filetypes = { "typst", "markdown" },
     -- Optional. When omitted, math-conceal first tries the bundled release binary:
     -- service/target/release/typst-concealer-service
     service_binary = "typst-concealer-service",
+    backends = {
+      latex = {
+        enabled = false, -- experimental
+      },
+    },
   },
 })
 ```
@@ -188,7 +198,7 @@ and `get_preamble_file`.
 
 - [Freed-Wu](https://github.com/Freed-Wu): Instrumental in publishing this plugin to [LuaRocks](https://luarocks.org/modules/pxwg/math-conceal.nvim) and refactoring the code structure to fit the best practices for Neovim plugins.
 - [Dirichy](https://github.com/dirichy): for helpful discussions about LaTeX conceal patterns and optimizations.
-- [PartyWumpus](https://github.com/PartyWumpus): for the awesome [typst-concealer](https://github.com/PartyWumpus/typst-concealer) plugin, which inspired me to support typst preview in this plugin.
+- [PartyWumpus](https://github.com/PartyWumpus): for the original [typst-concealer](https://github.com/PartyWumpus/typst-concealer) plugin, which inspired Typst preview support.
 - [latex.nvim](https://github.com/robbielyman/latex.nvim) for the idea of using customized conceal patterns.
 - [latex_concealer.nvim](http://github.com/dirichy/latex_concealer.nvim) for the idea of fine grained conceal patterns.
-- [typst-concealer](https://github.com/PartyWumpus/typst-concealer) for the idea and example implementation of typst preview with kitty graphics protocol.
+- [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer) as the fork whose renderer source was migrated into this plugin.
