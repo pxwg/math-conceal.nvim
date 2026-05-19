@@ -165,7 +165,7 @@ local function conceal_in_normal_mode(mode)
   if mode == nil or mode:find("n", 1, true) == nil then
     return false
   end
-  local ok, main = pcall(require, "typst-concealer")
+  local ok, main = pcall(require, "math-conceal.image")
   return ok and main.config and main.config.conceal_in_normal == true
 end
 

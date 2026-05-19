@@ -1,4 +1,4 @@
---- Render backend session management for typst-concealer.
+--- Render backend session management for math-conceal.image.
 --- Manages Rust compiler-service processes and JSON-lines request/response
 --- boundaries. Machine-owned full pages are emitted as overlay_page_ready
 --- events.
@@ -10,7 +10,7 @@
 ---   M.ensure_compiler_service(bufnr)                start/reuse the Rust compiler service
 ---   M.stop_compiler_service(bufnr)                  kill and clean up compiler service
 
-local state = require("typst-concealer.state")
+local state = require("math-conceal.image.state")
 local M = {}
 
 --- Generate quickfix title for all render diagnostics belonging to a buffer.
@@ -21,7 +21,7 @@ local function qf_title(bufnr)
   if name == nil or name == "" then
     name = ("buf:%d"):format(bufnr)
   end
-  return ("typst-concealer: %s"):format(name)
+  return ("math-conceal.image: %s"):format(name)
 end
 
 --- Rebuild the global quickfix list for a buffer from active render diagnostics.
@@ -215,7 +215,7 @@ local function resolve_typst_source_path(session, file)
   end
 
   if file:sub(1, 1) == "/" then
-    local path_rewrite = require("typst-concealer.path-rewrite")
+    local path_rewrite = require("math-conceal.image.path-rewrite")
     return path_rewrite.resolve_to_absolute(file, session.buf_dir, session.source_root) or file
   end
 
@@ -361,7 +361,7 @@ end
 --- @param kind "full"
 --- @return string
 local function resolve_preamble_include_line(bufnr, effective_root, kind)
-  local main = require("typst-concealer")
+  local main = require("math-conceal.image")
   local config = main.config
   if type(config.get_preamble_file) ~= "function" then
     return ""
@@ -374,7 +374,7 @@ local function resolve_preamble_include_line(bufnr, effective_root, kind)
     return ""
   end
 
-  local path_rewrite = require("typst-concealer.path-rewrite")
+  local path_rewrite = require("math-conceal.image.path-rewrite")
   local abs = vim.fs.normalize(vim.fn.fnamemodify(pf, ":p")):gsub("/$", "")
   local typst_path = path_rewrite.encode_root_relative(abs, effective_root)
   return '#include "' .. typst_path .. '"\n'
@@ -414,9 +414,9 @@ local function get_cache_dir(bufnr, source_root)
   end
   local base_dir
   if source_root ~= nil and source_root ~= "" then
-    base_dir = source_root .. "/.typst-concealer"
+    base_dir = source_root .. "/.math-conceal.image"
   else
-    base_dir = vim.fn.stdpath("cache") .. "/typst-concealer"
+    base_dir = vim.fn.stdpath("cache") .. "/math-conceal.image"
   end
   local dir = base_dir .. "/" .. safe_name .. "-" .. string.format("%04x", h)
   vim.fn.mkdir(dir, "p")
@@ -622,8 +622,8 @@ end
 --- @param page_stamp     string
 --- @return table|nil
 local function build_page_update(bufnr, page_path, item, original_range, page_stamp)
-  local pngData = require("typst-concealer.png-lua")
-  local kitty_codes = require("typst-concealer.kitty-codes")
+  local pngData = require("math-conceal.image.png-lua")
+  local kitty_codes = require("math-conceal.image.kitty-codes")
 
   if item == nil then
     return
@@ -713,7 +713,7 @@ local function compute_natural_cols(width_px, height_px, job)
     natural_cols = math.ceil((width_px / height_px) * 2) * source_rows
   end
 
-  local kitty_codes = require("typst-concealer.kitty-codes")
+  local kitty_codes = require("math-conceal.image.kitty-codes")
   if natural_cols >= #kitty_codes.diacritics then
     natural_cols = #kitty_codes.diacritics - 1
   end
@@ -830,7 +830,7 @@ end
 --- @param prelude_chunks string[]
 --- @return string
 local function build_preview_service_sidecar_source(item, project_scope, prelude_chunks)
-  local text = require("typst-concealer.wrapper").build_slot_document(
+  local text = require("math-conceal.image.wrapper").build_slot_document(
     item,
     project_scope.buf_dir,
     project_scope.source_root,
@@ -859,7 +859,7 @@ local function make_preview_sidecar_prepare(service, sidecar_path, sidecar_text)
 end
 
 local function root_relative(path, effective_root)
-  return require("typst-concealer.path-rewrite").encode_root_relative(path, effective_root)
+  return require("math-conceal.image.path-rewrite").encode_root_relative(path, effective_root)
 end
 
 local function virtual_path_id(value)
@@ -896,7 +896,7 @@ local function build_full_main_document(request, project_scope, workspace, conte
     if idx > 1 then
       parts[#parts + 1] = "#pagebreak()\n"
     end
-    local slot_path = require("typst-concealer.workspace").slot_path(workspace, job.slot_id or idx)
+    local slot_path = require("math-conceal.image.workspace").slot_path(workspace, job.slot_id or idx)
     parts[#parts + 1] = '#include "' .. root_relative(slot_path, project_scope.effective_root) .. '"\n'
   end
   return table.concat(parts)
@@ -934,8 +934,8 @@ end
 --- @param config table
 --- @return table
 local function build_full_service_spec(request, project_scope, prelude_chunks, preamble_include_line, config)
-  local wrapper = require("typst-concealer.wrapper")
-  local workspace_mod = require("typst-concealer.workspace")
+  local wrapper = require("math-conceal.image.wrapper")
+  local workspace_mod = require("math-conceal.image.workspace")
   local workspace = workspace_mod.for_buffer(request.bufnr, project_scope.source_root)
   local context_text = wrapper.build_context_document(
     request.bufnr,
@@ -998,8 +998,8 @@ end
 --- @param config table
 --- @return table
 local function build_formula_service_spec(request, project_scope, prelude_chunks, preamble_include_line, config)
-  local wrapper = require("typst-concealer.wrapper")
-  local workspace_mod = require("typst-concealer.workspace")
+  local wrapper = require("math-conceal.image.wrapper")
+  local workspace_mod = require("math-conceal.image.workspace")
   local workspace = workspace_mod.for_buffer(request.bufnr, project_scope.source_root)
   local context_source = wrapper.build_context_document(
     request.bufnr,
@@ -1077,8 +1077,8 @@ end
 --- @param config table
 --- @return table
 local function build_latex_formula_service_spec(request, project_scope, config)
-  local wrapper = require("typst-concealer.latex-wrapper")
-  local workspace_mod = require("typst-concealer.workspace")
+  local wrapper = require("math-conceal.image.latex-wrapper")
+  local workspace_mod = require("math-conceal.image.workspace")
   local workspace = workspace_mod.for_buffer(request.bufnr, project_scope.source_root)
   local latex_config = (config.backends and config.backends.latex) or {}
   local context_source = wrapper.build_context_document(project_scope, latex_config)
@@ -1159,7 +1159,7 @@ local function build_latex_mitex_item(item, mitex_prelude)
   local source = latex_job_source(item)
   local backend_node_type = latex_job_backend_node_type(item)
   local render_text =
-    require("typst-concealer.latex-wrapper").build_mitex_render_text(source, backend_node_type, mitex_prelude)
+    require("math-conceal.image.latex-wrapper").build_mitex_render_text(source, backend_node_type, mitex_prelude)
   next_item.source_str = source
   next_item.source_text = render_text
   next_item.str = render_text
@@ -1179,7 +1179,7 @@ end
 
 local function latex_mitex_prelude(project_scope, config)
   local latex_config = (config.backends and config.backends.latex) or {}
-  return require("typst-concealer.latex-wrapper").build_mitex_prelude(project_scope, latex_config)
+  return require("math-conceal.image.latex-wrapper").build_mitex_prelude(project_scope, latex_config)
 end
 
 local function build_latex_mitex_request(request, project_scope, config)
@@ -1209,8 +1209,8 @@ end
 --- @param config table
 --- @return table
 local function build_latex_preview_service_spec(bufnr, item, project_scope, config)
-  local wrapper = require("typst-concealer.latex-wrapper")
-  local workspace_mod = require("typst-concealer.workspace")
+  local wrapper = require("math-conceal.image.latex-wrapper")
+  local workspace_mod = require("math-conceal.image.workspace")
   local workspace = workspace_mod.for_buffer(bufnr, project_scope.source_root)
   local latex_config = (config.backends and config.backends.latex) or {}
   local context_source = wrapper.build_context_document(project_scope, latex_config)
@@ -1422,7 +1422,7 @@ local function dispatch_request_cleanup(bufnr, meta, reason, event_type)
   if meta == nil or meta.request_id == nil then
     return
   end
-  require("typst-concealer.machine.runtime").dispatch({
+  require("math-conceal.image.machine.runtime").dispatch({
     type = event_type,
     bufnr = bufnr,
     request_id = meta and meta.request_id or nil,
@@ -1476,7 +1476,7 @@ local function fail_formula_batch(bufnr, meta, reason)
   remove_formula_batch_meta(bufnr, meta.request_id, meta)
   for _, job in pairs(meta.node_to_job or {}) do
     if job.overlay_id ~= nil then
-      require("typst-concealer.formula.manager").render_failed(bufnr, {
+      require("math-conceal.image.formula.manager").render_failed(bufnr, {
         request_id = meta.request_id,
         overlay_id = job.overlay_id,
         node_rev = job.node_rev,
@@ -1494,7 +1494,7 @@ M._validate_service_pages = validate_service_pages
 --- @param meta table|nil
 --- @param diagnostics table[]|nil
 local function handle_compile_diagnostics(bufnr, meta, diagnostics)
-  local config = require("typst-concealer").config
+  local config = require("math-conceal.image").config
   if not config.do_diagnostics then
     return
   end
@@ -1590,7 +1590,7 @@ end
 --- @param resp table
 --- @param job RenderJob
 local function handle_formula_diagnostics(bufnr, meta, resp, job)
-  local config = require("typst-concealer").config
+  local config = require("math-conceal.image").config
   if not config.do_diagnostics then
     return
   end
@@ -1747,7 +1747,7 @@ local function queue_latex_formula_fallback(bufnr, service_kind, meta, resp)
     root = meta.effective_root,
     inputs = vim.empty_dict(),
     output_dir = spec.output_dir,
-    ppi = meta.render_ppi or state._render_ppi or (require("typst-concealer").config or {}).ppi,
+    ppi = meta.render_ppi or state._render_ppi or (require("math-conceal.image").config or {}).ppi,
     worker_count = 1,
     compiler = latex_config.compiler,
     converter = latex_config.converter,
@@ -1780,7 +1780,7 @@ local function queue_latex_formula_fallback(bufnr, service_kind, meta, resp)
 end
 
 local function reconcile_formula_diagnostics_for_request(bufnr)
-  local ok_main, main = pcall(require, "typst-concealer")
+  local ok_main, main = pcall(require, "math-conceal.image")
   if not ok_main or not main.config or not main.config.do_diagnostics then
     return
   end
@@ -1902,7 +1902,7 @@ local function schedule_formula_convergence(bufnr, meta)
   if meta == nil or meta.needs_formula_convergence ~= true then
     return
   end
-  require("typst-concealer.formula.manager").ensure_pending_nodes_rendering(bufnr, {
+  require("math-conceal.image.formula.manager").ensure_pending_nodes_rendering(bufnr, {
     node_ids = formula_convergence_node_ids(meta),
   })
 end
@@ -1913,7 +1913,7 @@ local function complete_formula_request_if_done(bufnr, service_kind, meta, reque
   end
   local service_done = note_formula_service_response(bufnr, service_kind, request_id)
   if meta ~= nil and (meta.pending_formula_count or 0) == 0 then
-    require("typst-concealer.machine.runtime").dispatch({
+    require("math-conceal.image.machine.runtime").dispatch({
       type = "render_request_completed",
       bufnr = bufnr,
       request_id = request_id,
@@ -2003,7 +2003,7 @@ local function try_handle_latex_preview_formula_response(bufnr, service_kind, re
   end
 
   update.preview_request_id = item.preview_request_id
-  local accepted = require("typst-concealer.machine.runtime").accept_preview_page_update(update)
+  local accepted = require("math-conceal.image.machine.runtime").accept_preview_page_update(update)
   if not accepted then
     safe_unlink_service_artifact(resp.path)
   end
@@ -2050,7 +2050,7 @@ local function try_handle_formula_service_response(bufnr, service_kind, resp)
     meta.formula_failed = (meta.formula_failed or 0) + 1
     note_formula_convergence(meta, stale_reason, job)
     if job ~= nil and job.overlay_id ~= nil then
-      require("typst-concealer.formula.manager").render_failed(bufnr, {
+      require("math-conceal.image.formula.manager").render_failed(bufnr, {
         request_id = resp.request_id,
         overlay_id = job.overlay_id,
         node_rev = job.node_rev,
@@ -2072,12 +2072,12 @@ local function try_handle_formula_service_response(bufnr, service_kind, resp)
         return true
       end
       vim.schedule(function()
-        vim.notify("[typst-concealer] LaTeX MiTeX fallback was not queued: " .. tostring(reason), vim.log.levels.WARN)
+        vim.notify("[math-conceal.image] LaTeX MiTeX fallback was not queued: " .. tostring(reason), vim.log.levels.WARN)
       end)
     end
     handle_formula_diagnostics(bufnr, meta, resp, job)
     meta.formula_failed = (meta.formula_failed or 0) + 1
-    require("typst-concealer.formula.manager").render_failed(bufnr, {
+    require("math-conceal.image.formula.manager").render_failed(bufnr, {
       request_id = resp.request_id,
       overlay_id = job.overlay_id,
       node_rev = tonumber(resp.node_rev),
@@ -2096,7 +2096,7 @@ local function try_handle_formula_service_response(bufnr, service_kind, resp)
   if resp.cached then
     meta.formula_cached = (meta.formula_cached or 0) + 1
   end
-  require("typst-concealer.formula.manager").rendered(bufnr, {
+  require("math-conceal.image.formula.manager").rendered(bufnr, {
     request_id = resp.request_id,
     request_page_index = job.request_page_index,
     overlay_id = job.overlay_id,
@@ -2203,7 +2203,7 @@ local function try_handle_preview_service_response(bufnr, service_kind, resp)
   end
 
   update.preview_request_id = item.preview_request_id
-  local accepted = require("typst-concealer.machine.runtime").accept_preview_page_update(update)
+  local accepted = require("math-conceal.image.machine.runtime").accept_preview_page_update(update)
   cleanup_service_pages(leading_pages)
   if not accepted then
     safe_unlink_service_artifact(page.path)
@@ -2305,7 +2305,7 @@ on_service_response = function(bufnr, service_kind, resp)
     fail_full_service_request(bufnr, meta, pages_or_err)
     vim.schedule(function()
       vim.notify(
-        "[typst-concealer] compiler service page contract failed: " .. tostring(pages_or_err),
+        "[math-conceal.image] compiler service page contract failed: " .. tostring(pages_or_err),
         vim.log.levels.ERROR
       )
     end)
@@ -2333,7 +2333,7 @@ on_service_response = function(bufnr, service_kind, resp)
   local dispatched = 0
   local skipped_cached = 0
 
-  local runtime = require("typst-concealer.machine.runtime")
+  local runtime = require("math-conceal.image.machine.runtime")
   local pages_by_request_index = pages_or_err
   local batch_entries = {}
   for page_index = 1, meta.page_count or 0 do
@@ -2463,7 +2463,7 @@ function M.ensure_compiler_service(bufnr, kind)
     return existing
   end
 
-  local main = require("typst-concealer")
+  local main = require("math-conceal.image")
   local service_path = main.config.service_binary or "typst-concealer-service"
   local stdin = vim.uv.new_pipe()
   local stdout = vim.uv.new_pipe()
@@ -2510,7 +2510,7 @@ function M.ensure_compiler_service(bufnr, kind)
     close_pipe(stdout)
     close_pipe(stderr)
     vim.schedule(function()
-      vim.notify("[typst-concealer] failed to spawn compiler service: " .. service_path, vim.log.levels.ERROR)
+      vim.notify("[math-conceal.image] failed to spawn compiler service: " .. service_path, vim.log.levels.ERROR)
     end)
     return nil
   end
@@ -2610,9 +2610,9 @@ end
 --- @param preamble_include_line string
 --- @return table|nil
 local function build_preview_service_spec(bufnr, service, item, project_scope, prelude_chunks, preamble_include_line)
-  local main = require("typst-concealer")
+  local main = require("math-conceal.image")
   local config = main.config
-  local wrapper = require("typst-concealer.wrapper")
+  local wrapper = require("math-conceal.image.wrapper")
 
   local prelude_count = math.max(0, math.min(item.prelude_count or 0, #prelude_chunks))
   local probe_item = vim.deepcopy(item)
@@ -2644,9 +2644,9 @@ local function build_preview_service_spec(bufnr, service, item, project_scope, p
   local context_hash = stable_hash(context_text)
 
   local cache_dir = get_cache_dir(bufnr, project_scope.source_root)
-  local sidecar_path = cache_dir .. "/.typst-concealer-preview-" .. context_hash .. ".typ"
+  local sidecar_path = cache_dir .. "/.math-conceal.image-preview-" .. context_hash .. ".typ"
   local sidecar_root_relative_path =
-    require("typst-concealer.path-rewrite").encode_root_relative(sidecar_path, project_scope.effective_root)
+    require("math-conceal.image.path-rewrite").encode_root_relative(sidecar_path, project_scope.effective_root)
 
   local include_item = vim.deepcopy(probe_item)
   include_item.str = '#include "' .. sidecar_root_relative_path .. '"\n'
@@ -2879,7 +2879,7 @@ local function write_service_payload(service, payload)
         payload.on_prepare_failed(err)
       end
       vim.schedule(function()
-        vim.notify("[typst-concealer] failed to prepare compiler request: " .. tostring(err), vim.log.levels.ERROR)
+        vim.notify("[math-conceal.image] failed to prepare compiler request: " .. tostring(err), vim.log.levels.ERROR)
       end)
       return false
     end
@@ -2904,7 +2904,7 @@ local function write_service_payload(service, payload)
       end
       vim.schedule(function()
         mark_service_payload_failed(service.bufnr, payload, "stdin write failed")
-        vim.notify("[typst-concealer] failed to write compiler request: " .. tostring(err), vim.log.levels.ERROR)
+        vim.notify("[math-conceal.image] failed to write compiler request: " .. tostring(err), vim.log.levels.ERROR)
         if send_next_service_payload ~= nil then
           send_next_service_payload(service)
         end
@@ -3075,7 +3075,7 @@ local function prewarm_preview_service(
         else
           vim.schedule(function()
             vim.notify(
-              "[typst-concealer] failed to encode preview prewarm request: " .. tostring(msg),
+              "[math-conceal.image] failed to encode preview prewarm request: " .. tostring(msg),
               vim.log.levels.ERROR
             )
           end)
@@ -3177,8 +3177,8 @@ function M.render_formula_batch_via_service(bufnr, request)
     return
   end
 
-  local project_scope = require("typst-concealer.project-scope").resolve(bufnr, "full")
-  local main = require("typst-concealer")
+  local project_scope = require("math-conceal.image.project-scope").resolve(bufnr, "full")
+  local main = require("math-conceal.image")
   local config = main.config
   reconcile_formula_diagnostics_for_request(bufnr)
   local prelude_chunks = snapshot_full_context_preludes(bufnr)
@@ -3279,7 +3279,7 @@ function M.render_formula_batch_via_service(bufnr, request)
   if not ok then
     fail_formula_batch(bufnr, meta, "failed to encode formula request")
     vim.schedule(function()
-      vim.notify("[typst-concealer] failed to encode formula request: " .. tostring(msg), vim.log.levels.ERROR)
+      vim.notify("[math-conceal.image] failed to encode formula request: " .. tostring(msg), vim.log.levels.ERROR)
     end)
     return
   end
@@ -3321,8 +3321,8 @@ function M.render_request_via_service(bufnr, request)
   end
   local preview_service = nil
 
-  local project_scope = require("typst-concealer.project-scope").resolve(bufnr, "full")
-  local main = require("typst-concealer")
+  local project_scope = require("math-conceal.image.project-scope").resolve(bufnr, "full")
+  local main = require("math-conceal.image")
   local config = main.config
   local prelude_chunks = snapshot_full_context_preludes(bufnr)
   local preamble_include_line = resolve_preamble_include_line(bufnr, project_scope.effective_root, "full")
@@ -3404,7 +3404,7 @@ function M.render_request_via_service(bufnr, request)
   end
 
   if use_formula_service and #(spec.nodes or {}) == 0 then
-    require("typst-concealer.machine.runtime").dispatch({
+    require("math-conceal.image.machine.runtime").dispatch({
       type = "render_request_completed",
       bufnr = bufnr,
       request_id = request.request_id,
@@ -3467,7 +3467,7 @@ function M.render_request_via_service(bufnr, request)
   if not ok then
     fail_full_service_request(bufnr, current_request, "failed to encode compiler request")
     vim.schedule(function()
-      vim.notify("[typst-concealer] failed to encode compiler request: " .. tostring(msg), vim.log.levels.ERROR)
+      vim.notify("[math-conceal.image] failed to encode compiler request: " .. tostring(msg), vim.log.levels.ERROR)
     end)
     return
   end
@@ -3510,9 +3510,9 @@ function M.render_preview_tail_via_service(bufnr, item)
     return
   end
 
-  local project_scope = require("typst-concealer.project-scope").resolve(bufnr, "full")
+  local project_scope = require("math-conceal.image.project-scope").resolve(bufnr, "full")
   if project_scope.backend_id == "latex" then
-    local main = require("typst-concealer")
+    local main = require("math-conceal.image")
     local config = main.config
     local request_id = item.preview_request_id
     if request_id == nil then
@@ -3559,7 +3559,7 @@ function M.render_preview_tail_via_service(bufnr, item)
       if not fallback_ok then
         vim.schedule(function()
           vim.notify(
-            "[typst-concealer] failed to encode LaTeX preview fallback request: " .. tostring(fallback_msg),
+            "[math-conceal.image] failed to encode LaTeX preview fallback request: " .. tostring(fallback_msg),
             vim.log.levels.ERROR
           )
         end)
@@ -3608,7 +3608,7 @@ function M.render_preview_tail_via_service(bufnr, item)
     end
     if not ok then
       vim.schedule(function()
-        vim.notify("[typst-concealer] failed to encode LaTeX preview request: " .. tostring(msg), vim.log.levels.ERROR)
+        vim.notify("[math-conceal.image] failed to encode LaTeX preview request: " .. tostring(msg), vim.log.levels.ERROR)
       end)
       return
     end
@@ -3642,7 +3642,7 @@ function M.render_preview_tail_via_service(bufnr, item)
     end
     return
   end
-  local main = require("typst-concealer")
+  local main = require("math-conceal.image")
   local config = main.config
   local prelude_chunks = snapshot_full_context_preludes(bufnr)
   local preamble_include_line = resolve_preamble_include_line(bufnr, project_scope.effective_root, "full")
@@ -3682,7 +3682,7 @@ function M.render_preview_tail_via_service(bufnr, item)
   })
   if not ok then
     vim.schedule(function()
-      vim.notify("[typst-concealer] failed to encode preview request: " .. tostring(msg), vim.log.levels.ERROR)
+      vim.notify("[math-conceal.image] failed to encode preview request: " .. tostring(msg), vim.log.levels.ERROR)
     end)
     return
   end

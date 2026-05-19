@@ -1,13 +1,13 @@
---- Neovim extmark management and kitty graphics protocol for typst-concealer.
+--- Neovim extmark management and kitty graphics protocol for math-conceal.image.
 --- This is the Neovim display layer: extmark placement, image upload, concealing.
 --- All display decisions come from semantics.display_kind.
 --- block_padding_cols = 终端显示留白（Neovim display 层，与 Typst page width 正交）
 
-local state = require("typst-concealer.state")
-local cursor_visibility = require("typst-concealer.cursor-visibility")
-local display = require("typst-concealer.display")
-local kitty_codes = require("typst-concealer.kitty-codes")
-local line_run = require("typst-concealer.line-run")
+local state = require("math-conceal.image.state")
+local cursor_visibility = require("math-conceal.image.cursor-visibility")
+local display = require("math-conceal.image.display")
+local kitty_codes = require("math-conceal.image.kitty-codes")
+local line_run = require("math-conceal.image.line-run")
 local M = {}
 
 local is_tmux = vim.env.TMUX ~= nil
@@ -234,7 +234,7 @@ function M.clear_inline_line_marks(bufnr, start_row, end_row)
 end
 
 local function image_hl_group(image_id)
-  local hl_group = "typst-concealer-image-id-" .. tostring(image_id)
+  local hl_group = "math-conceal.image-image-id-" .. tostring(image_id)
   vim.api.nvim_set_hl(0, hl_group, { fg = string.format("#%06X", image_id), nocombine = true })
   return hl_group
 end
@@ -873,10 +873,10 @@ conceal_extmark_with_image = function(
     item.display_rows = display_rows
   end
 
-  local hl_group = "typst-concealer-image-id-" .. tostring(render_image_id)
+  local hl_group = "math-conceal.image-image-id-" .. tostring(render_image_id)
   vim.api.nvim_set_hl(0, hl_group, { fg = string.format("#%06X", render_image_id), nocombine = true })
 
-  local config = require("typst-concealer").config
+  local config = require("math-conceal.image").config
   local pad = 0
   if item and item.render_target == "float" then
     pad = 0
@@ -936,7 +936,7 @@ conceal_extmark_with_image = function(
         bufnr,
         source_range[1],
         {
-          source = "typst-concealer-block-image",
+          source = "math-conceal.image-block-image",
           start_col = source_range[2],
           end_col = source_range[4],
           priority = 10000,
@@ -1078,7 +1078,7 @@ function M.show_virtual_image(bufnr, extmark_id, anchor_row, render_image_id, na
   opts = opts or {}
   local left_pad_cols = math.max(0, opts.left_pad_cols or 0)
   local pad_str = left_pad_cols > 0 and string.rep(" ", left_pad_cols) or nil
-  local hl_group = "typst-concealer-image-id-" .. tostring(render_image_id)
+  local hl_group = "math-conceal.image-image-id-" .. tostring(render_image_id)
   vim.api.nvim_set_hl(0, hl_group, { fg = string.format("#%06X", render_image_id), nocombine = true })
 
   local lines = {}

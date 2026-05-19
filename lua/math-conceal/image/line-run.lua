@@ -4,8 +4,8 @@
 --- runs.  Atomic extmark resources live in extmark.lua; cursor transitions
 --- update those resources first and then reconcile line runs here.
 
-local state = require("typst-concealer.state")
-local display = require("typst-concealer.display")
+local state = require("math-conceal.image.state")
+local display = require("math-conceal.image.display")
 
 local M = {}
 local adapter = {}
@@ -210,7 +210,7 @@ function M.clear_inline_line_marks(bufnr, start_row, end_row)
 end
 
 local function image_hl_group(image_id)
-  local hl_group = "typst-concealer-image-id-" .. tostring(image_id)
+  local hl_group = "math-conceal.image-image-id-" .. tostring(image_id)
   vim.api.nvim_set_hl(0, hl_group, { fg = string.format("#%06X", image_id), nocombine = true })
   return hl_group
 end
@@ -315,7 +315,7 @@ local function build_inline_line_replacements(bufnr, row, items)
     item.display_cols = display_cols
     item.display_rows = display_rows
     replacements[#replacements + 1] = {
-      source = "typst-concealer-image",
+      source = "math-conceal.image-image",
       start_col = item.range[2],
       end_col = item.range[4],
       priority = 10000,

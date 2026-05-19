@@ -262,7 +262,7 @@ function M.collect(bufnr, opts)
 end
 
 function M.render_viewport()
-  local ok, main = pcall(require, "typst-concealer")
+  local ok, main = pcall(require, "math-conceal.image")
   local latex_config = ok and main.config and main.config.backends and main.config.backends.latex or {}
   return {
     kind = "visible",
@@ -271,7 +271,7 @@ function M.render_viewport()
 end
 
 function M.render_policy()
-  local ok, main = pcall(require, "typst-concealer")
+  local ok, main = pcall(require, "math-conceal.image")
   local latex_config = ok and main.config and main.config.backends and main.config.backends.latex or {}
   return {
     kind = "progressive",

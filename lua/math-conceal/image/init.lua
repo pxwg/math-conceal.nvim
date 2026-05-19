@@ -1,4 +1,4 @@
---- typst-concealer public API
+--- math-conceal.image public API
 --- This file is intentionally thin: setup, enable/disable, and autocmd wiring.
 --- All rendering logic lives in the sub-modules (semantics, wrapper, extmark, session, render).
 
@@ -20,7 +20,7 @@ local TIOCGWINSZ = vim.fn.has("mac") == 1 and 0x40087468 or 0x5413
 --- Refresh the terminal cell pixel dimensions stored in state.
 --- Called at setup time and on VimResized.
 local function refresh_cell_px_size()
-  local state = require("typst-concealer.state")
+  local state = require("math-conceal.image.state")
   local old_cell_w = state._cell_px_w
   local old_cell_h = state._cell_px_h
   local old_ppi = state._render_ppi
@@ -42,7 +42,7 @@ local function handle_vim_resized()
   local columns_changed = previous_columns ~= vim.o.columns
   last_resize_columns = vim.o.columns
 
-  local runtime = require("typst-concealer.machine.runtime")
+  local runtime = require("math-conceal.image.machine.runtime")
   for bufnr in pairs(M._enabled_buffers) do
     if M.is_supported_bufnr(bufnr) and M.is_render_allowed(bufnr) then
       if render_inputs_changed or columns_changed then
@@ -163,7 +163,7 @@ local function default(val, default_val)
   return val
 end
 
-local augroup = vim.api.nvim_create_augroup("typst-concealer", { clear = true })
+local augroup = vim.api.nvim_create_augroup("math-conceal.image", { clear = true })
 
 local function normalize_path(path)
   if path == nil or path == "" then
@@ -274,7 +274,7 @@ local function maybe_stop_hidden_compiler_service(bufnr)
   if buf_has_visible_window(bufnr) then
     return
   end
-  require("typst-concealer.session").stop_compiler_service(bufnr)
+  require("math-conceal.image.session").stop_compiler_service(bufnr)
 end
 
 local function maybe_resume_visible_compiler_service(bufnr)
@@ -288,11 +288,11 @@ local function maybe_resume_visible_compiler_service(bufnr)
     return
   end
 
-  local session = require("typst-concealer.session")
+  local session = require("math-conceal.image.session")
   if session.has_compiler_service(bufnr) then
     return
   end
-  require("typst-concealer.machine.runtime").render_buf(bufnr)
+  require("math-conceal.image.machine.runtime").render_buf(bufnr)
 end
 
 local function schedule_render_if_viewport_changed(bufnr)
@@ -305,9 +305,9 @@ local function schedule_render_if_viewport_changed(bufnr)
     return
   end
 
-  local changed = require("typst-concealer.viewport").changed_since_last_render(bufnr)
+  local changed = require("math-conceal.image.viewport").changed_since_last_render(bufnr)
   if changed then
-    require("typst-concealer.machine.runtime").schedule_full_render(bufnr)
+    require("math-conceal.image.machine.runtime").schedule_full_render(bufnr)
   end
 end
 
@@ -319,7 +319,7 @@ local function attach_buffer_local_autocmds(bufnr)
     return
   end
 
-  local bs = require("typst-concealer.state").get_buf_state(bufnr)
+  local bs = require("math-conceal.image.state").get_buf_state(bufnr)
   if bs.buffer_local_autocmds_attached then
     return
   end
@@ -330,7 +330,7 @@ local function attach_buffer_local_autocmds(bufnr)
     buffer = bufnr,
     desc = "unconceal on line hover",
     callback = function(ev)
-      require("typst-concealer.machine.runtime").sync_cursor_ui(ev.buf)
+      require("math-conceal.image.machine.runtime").sync_cursor_ui(ev.buf)
     end,
   })
 
@@ -339,7 +339,7 @@ local function attach_buffer_local_autocmds(bufnr)
     buffer = bufnr,
     desc = "keep float preview synced while moving in insert mode",
     callback = function(ev)
-      require("typst-concealer.machine.runtime").schedule_live_preview_sync(ev.buf, { immediate = true })
+      require("math-conceal.image.machine.runtime").schedule_live_preview_sync(ev.buf, { immediate = true })
     end,
   })
 
@@ -348,7 +348,7 @@ local function attach_buffer_local_autocmds(bufnr)
     buffer = bufnr,
     desc = "render live preview float when insert-mode text changes",
     callback = function(ev)
-      require("typst-concealer.machine.runtime").schedule_live_preview_sync(ev.buf, { refresh_full = true })
+      require("math-conceal.image.machine.runtime").schedule_live_preview_sync(ev.buf, { refresh_full = true })
     end,
   })
 
@@ -360,7 +360,7 @@ local function attach_buffer_local_autocmds(bufnr)
       vim.schedule(function()
         maybe_resume_visible_compiler_service(ev.buf)
         schedule_render_if_viewport_changed(ev.buf)
-        local runtime = require("typst-concealer.machine.runtime")
+        local runtime = require("math-conceal.image.machine.runtime")
         runtime.render_live_preview(ev.buf)
         runtime.sync_hover(ev.buf)
       end)
@@ -372,7 +372,7 @@ local function attach_buffer_local_autocmds(bufnr)
     buffer = bufnr,
     desc = "clear live preview when leaving a supported buffer",
     callback = function(ev)
-      require("typst-concealer.machine.runtime").clear_live_preview(ev.buf)
+      require("math-conceal.image.machine.runtime").clear_live_preview(ev.buf)
       vim.schedule(function()
         maybe_stop_hidden_compiler_service(ev.buf)
       end)
@@ -402,21 +402,21 @@ M.enable_buf = function(bufnr)
   bufnr = bufnr or vim.fn.bufnr()
   if not M.is_render_allowed(bufnr) then
     M._enabled_buffers[bufnr] = nil
-    require("typst-concealer.plan").hard_reset_buf(bufnr)
+    require("math-conceal.image.plan").hard_reset_buf(bufnr)
     return
   end
   M._enabled_buffers[bufnr] = true
-  require("typst-concealer.machine.runtime").render_buf(bufnr)
+  require("math-conceal.image.machine.runtime").render_buf(bufnr)
 end
 
 M.disable_buf = function(bufnr)
   bufnr = bufnr or vim.fn.bufnr()
   M._enabled_buffers[bufnr] = nil
-  require("typst-concealer.state").clear_hover_timer(bufnr)
-  local session = require("typst-concealer.session")
+  require("math-conceal.image.state").clear_hover_timer(bufnr)
+  local session = require("math-conceal.image.session")
   session.stop_compiler_service(bufnr)
-  require("typst-concealer.machine.runtime").clear_live_preview(bufnr)
-  require("typst-concealer.plan").hard_reset_buf(bufnr)
+  require("math-conceal.image.machine.runtime").clear_live_preview(bufnr)
+  require("math-conceal.image.plan").hard_reset_buf(bufnr)
 end
 
 M.toggle_buf = function(bufnr)
@@ -430,7 +430,7 @@ end
 
 M.rerender_buf = function(bufnr)
   bufnr = bufnr or vim.fn.bufnr()
-  require("typst-concealer.machine.runtime").render_buf(bufnr)
+  require("math-conceal.image.machine.runtime").render_buf(bufnr)
 end
 
 -- ── Setup ─────────────────────────────────────────────────────────────────────
@@ -442,7 +442,7 @@ function M.setup(cfg)
   end
 
   if M._setup_ran ~= nil then
-    error("typst-concealer's setup function may only be run once")
+    error("math-conceal.image's setup function may only be run once")
   end
   M._setup_ran = true
   cfg = cfg or {}
@@ -537,7 +537,7 @@ function M.setup(cfg)
 
   local typst_parser_installed = pcall(vim.treesitter.get_parser, 0, "typst")
   if typst_parser_installed == false then
-    error("Typst treesitter parser not found, typst-concealer will not work")
+    error("Typst treesitter parser not found, math-conceal.image will not work")
   end
 
   if latex_backend_cfg.enabled == true then
@@ -549,19 +549,19 @@ function M.setup(cfg)
     end
     if not latex_parser_ok then
       vim.notify(
-        "[typst-concealer] LaTeX backend enabled but 'latex' tree-sitter parser is unavailable",
+        "[math-conceal.image] LaTeX backend enabled but 'latex' tree-sitter parser is unavailable",
         vim.log.levels.WARN
       )
     end
     if vim.fn.executable(latex_backend_cfg.compiler) ~= 1 then
       vim.notify(
-        ("[typst-concealer] LaTeX backend enabled but compiler '%s' is unavailable"):format(latex_backend_cfg.compiler),
+        ("[math-conceal.image] LaTeX backend enabled but compiler '%s' is unavailable"):format(latex_backend_cfg.compiler),
         vim.log.levels.WARN
       )
     end
     if vim.fn.executable(latex_backend_cfg.converter) ~= 1 then
       vim.notify(
-        ("[typst-concealer] LaTeX backend enabled but converter '%s' is unavailable"):format(
+        ("[math-conceal.image] LaTeX backend enabled but converter '%s' is unavailable"):format(
           latex_backend_cfg.converter
         ),
         vim.log.levels.WARN
@@ -587,16 +587,16 @@ function M.setup(cfg)
     vim.opt_local.conceallevel = 2
     vim.opt_local.concealcursor = "nci"
     attach_buffer_local_autocmds(bufnr)
-    local bs = require("typst-concealer.state").get_buf_state(bufnr)
+    local bs = require("math-conceal.image.state").get_buf_state(bufnr)
     if not bs.change_tracker_attached then
       vim.api.nvim_buf_attach(bufnr, false, {
         on_lines = function(_, buf, _, firstline, lastline, new_lastline)
-          local state_mod = require("typst-concealer.state")
+          local state_mod = require("math-conceal.image.state")
           local tracked = state_mod.get_buf_state(buf)
           local old_end_row = math.max(firstline, lastline) - 1
           local new_end_row = math.max(firstline, new_lastline) - 1
           local line_delta = new_lastline - lastline
-          local ok_extmark, extmark = pcall(require, "typst-concealer.extmark")
+          local ok_extmark, extmark = pcall(require, "math-conceal.image.extmark")
           if ok_extmark and type(extmark.clear_inline_line_marks) == "function" then
             if line_delta == 0 then
               extmark.clear_inline_line_marks(buf, firstline, math.max(old_end_row, new_end_row))
@@ -613,7 +613,7 @@ function M.setup(cfg)
               line_delta = line_delta,
               requires_full = line_delta ~= 0,
             }
-            require("typst-concealer.machine.runtime").schedule_full_render(buf)
+            require("math-conceal.image.machine.runtime").schedule_full_render(buf)
             return
           end
           pending.start_row = math.min(pending.start_row, firstline)
@@ -621,7 +621,7 @@ function M.setup(cfg)
           pending.new_end_row = math.max(pending.new_end_row, new_end_row)
           pending.line_delta = pending.line_delta + line_delta
           pending.requires_full = pending.requires_full or line_delta ~= 0
-          require("typst-concealer.machine.runtime").schedule_full_render(buf)
+          require("math-conceal.image.machine.runtime").schedule_full_render(buf)
         end,
         on_bytes = function(
           _event,
@@ -637,7 +637,7 @@ function M.setup(cfg)
           new_end_col,
           _new_byte_len
         )
-          local state_mod = require("typst-concealer.state")
+          local state_mod = require("math-conceal.image.state")
           local tracked = state_mod.get_buf_state(buf)
           local end_row = start_row + new_end_row
           local end_col = new_end_row == 0 and (start_col + new_end_col) or new_end_col
@@ -650,7 +650,7 @@ function M.setup(cfg)
           }
         end,
         on_detach = function(_, buf)
-          local state_mod = require("typst-concealer.state")
+          local state_mod = require("math-conceal.image.state")
           local tracked = state_mod.get_buf_state(buf)
           tracked.change_tracker_attached = false
           tracked.pending_change = nil
@@ -693,7 +693,7 @@ function M.setup(cfg)
     desc = "render file on enter",
     callback = function(ev)
       vim.schedule(function()
-        require("typst-concealer.machine.runtime").render_buf(ev.buf)
+        require("math-conceal.image.machine.runtime").render_buf(ev.buf)
       end)
     end,
   })
@@ -713,7 +713,7 @@ function M.setup(cfg)
     desc = "render file on write",
     callback = function(ev)
       vim.schedule(function()
-        require("typst-concealer.machine.runtime").render_buf(ev.buf)
+        require("math-conceal.image.machine.runtime").render_buf(ev.buf)
       end)
     end,
   })
@@ -724,7 +724,7 @@ function M.setup(cfg)
     desc = "re-render on normal-mode text changes so block anchors stay correct",
     callback = function(ev)
       vim.schedule(function()
-        local runtime = require("typst-concealer.machine.runtime")
+        local runtime = require("math-conceal.image.machine.runtime")
         runtime.schedule_full_render(ev.buf, { immediate = true })
         runtime.render_live_preview(ev.buf)
       end)
@@ -736,7 +736,7 @@ function M.setup(cfg)
     group = augroup,
     desc = "unconceal on line hover",
     callback = function(ev)
-      require("typst-concealer.machine.runtime").sync_cursor_ui(ev.buf)
+      require("math-conceal.image.machine.runtime").sync_cursor_ui(ev.buf)
     end,
   })
 
@@ -746,7 +746,7 @@ function M.setup(cfg)
     desc = "unconceal when exiting visual mode (no CursorMoved event fires)",
     callback = function(ev)
       if M.is_supported_bufnr(ev.buf) then
-        require("typst-concealer.machine.runtime").sync_hover(ev.buf)
+        require("math-conceal.image.machine.runtime").sync_hover(ev.buf)
       end
     end,
   })
@@ -756,7 +756,7 @@ function M.setup(cfg)
     pattern = managed_patterns,
     desc = "keep float preview synced while moving in insert mode",
     callback = function(ev)
-      require("typst-concealer.machine.runtime").schedule_live_preview_sync(ev.buf, { immediate = true })
+      require("math-conceal.image.machine.runtime").schedule_live_preview_sync(ev.buf, { immediate = true })
     end,
   })
 
@@ -768,7 +768,7 @@ function M.setup(cfg)
       vim.schedule(function()
         maybe_resume_visible_compiler_service(ev.buf)
         schedule_render_if_viewport_changed(ev.buf)
-        local runtime = require("typst-concealer.machine.runtime")
+        local runtime = require("math-conceal.image.machine.runtime")
         runtime.render_live_preview(ev.buf)
         runtime.sync_hover(ev.buf)
       end)
@@ -811,7 +811,7 @@ function M.setup(cfg)
     group = augroup,
     desc = "render live preview float when insert-mode text changes",
     callback = function(ev)
-      require("typst-concealer.machine.runtime").schedule_live_preview_sync(ev.buf, { refresh_full = true })
+      require("math-conceal.image.machine.runtime").schedule_live_preview_sync(ev.buf, { refresh_full = true })
     end,
   })
 
@@ -821,7 +821,7 @@ function M.setup(cfg)
       desc = "update colour scheme",
       callback = function()
         setup_prelude()
-        local runtime = require("typst-concealer.machine.runtime")
+        local runtime = require("math-conceal.image.machine.runtime")
         for bufnr in pairs(M._enabled_buffers) do
           runtime.render_buf(bufnr)
         end
@@ -834,7 +834,7 @@ function M.setup(cfg)
     callback = function(ev)
       init_buf(ev.buf)
       if M._enabled_buffers[ev.buf] == true and M.is_render_allowed(ev.buf) then
-        require("typst-concealer.machine.runtime").render_buf(ev.buf)
+        require("math-conceal.image.machine.runtime").render_buf(ev.buf)
       end
     end,
   })
@@ -850,7 +850,7 @@ function M.setup(cfg)
     group = augroup,
     desc = "clear live preview when leaving a typst buffer",
     callback = function(ev)
-      require("typst-concealer.machine.runtime").clear_live_preview(ev.buf)
+      require("math-conceal.image.machine.runtime").clear_live_preview(ev.buf)
       vim.schedule(function()
         maybe_stop_hidden_compiler_service(ev.buf)
       end)
@@ -874,10 +874,10 @@ function M.setup(cfg)
     pattern = managed_patterns,
     desc = "stop compiler service for dead buffers",
     callback = function(ev)
-      local session = require("typst-concealer.session")
+      local session = require("math-conceal.image.session")
       session.stop_compiler_service(ev.buf)
-      require("typst-concealer.state").clear_preview_timer(ev.buf)
-      require("typst-concealer.plan").hard_reset_buf(ev.buf)
+      require("math-conceal.image.state").clear_preview_timer(ev.buf)
+      require("math-conceal.image.plan").hard_reset_buf(ev.buf)
     end,
   })
 end

@@ -40,9 +40,9 @@ end
 function M.for_buffer(bufnr, source_root)
   local base_dir
   if source_root ~= nil and source_root ~= "" then
-    base_dir = source_root .. "/.typst-concealer"
+    base_dir = source_root .. "/.math-conceal.image"
   else
-    base_dir = vim.fn.stdpath("cache") .. "/typst-concealer"
+    base_dir = vim.fn.stdpath("cache") .. "/math-conceal.image"
   end
 
   local root = base_dir .. "/" .. buffer_slug(bufnr)

@@ -5,10 +5,10 @@
 --- render response routing.  The reducer remains the logical source of truth;
 --- this object mirrors enough state to keep UI effects local to one node.
 
-local FormulaImage = require("typst-concealer.formula.image")
-local cursor_visibility = require("typst-concealer.cursor-visibility")
-local resources = require("typst-concealer.machine.resources")
-local state = require("typst-concealer.state")
+local FormulaImage = require("math-conceal.image.formula.image")
+local cursor_visibility = require("math-conceal.image.cursor-visibility")
+local resources = require("math-conceal.image.machine.resources")
+local state = require("math-conceal.image.state")
 
 local M = {}
 M.__index = M
@@ -185,7 +185,7 @@ end
 
 function M:concealing_for_cursor(node)
   if
-    require("typst-concealer.cursor-visibility").should_preserve_source_at_cursor(
+    require("math-conceal.image.cursor-visibility").should_preserve_source_at_cursor(
       node.bufnr,
       cursor_item_from_node(node)
     )
@@ -203,7 +203,7 @@ function M:should_unconceal_for_row(row, cursor_row, cursor_col, mode)
     node_type = "math",
     semantics = self.semantics,
   }
-  return require("typst-concealer.cursor-visibility").should_unconceal_item_for_row(
+  return require("math-conceal.image.cursor-visibility").should_unconceal_item_for_row(
     item,
     row,
     cursor_row,
@@ -241,7 +241,7 @@ function M:expand_preview(cursor_row, cursor_col, mode)
   end
 
   local ok, preview_item, render_key =
-    require("typst-concealer.plan").render_live_typst_preview_for_item(self.bufnr, item, cursor_row, cursor_col, mode)
+    require("math-conceal.image.plan").render_live_typst_preview_for_item(self.bufnr, item, cursor_row, cursor_col, mode)
   if ok then
     self.preview_item = preview_item
     self.preview_render_key = render_key
@@ -253,7 +253,7 @@ function M:clear_preview(opts)
   local bs = state.get_buf_state(self.bufnr)
   local preview_item = bs.preview_item or bs.preview_last_rendered_item
   if self.preview_item ~= nil or (preview_item ~= nil and preview_item.node_id == self.node_id) then
-    require("typst-concealer.plan").clear_live_typst_preview(self.bufnr, opts)
+    require("math-conceal.image.plan").clear_live_typst_preview(self.bufnr, opts)
   end
   self.preview_item = nil
   self.preview_render_key = nil
@@ -288,7 +288,7 @@ function M:ensure_resources(overlay_id, opts)
       binding_buffer_version = overlay.buffer_version
       binding_layout_version = overlay.layout_version
     end
-    require("typst-concealer.machine.runtime").dispatch({
+    require("math-conceal.image.machine.runtime").dispatch({
       type = "overlay_resources_allocated",
       overlay_id = overlay.overlay_id,
       image_id = image_id,
@@ -366,7 +366,7 @@ function M:rendering_status()
     return "unscheduled"
   end
 
-  local rendering = require("typst-concealer.session").formula_candidate_is_rendering(self.bufnr, {
+  local rendering = require("math-conceal.image.session").formula_candidate_is_rendering(self.bufnr, {
     request_id = candidate.request_id,
     overlay_id = candidate.overlay_id,
     node_id = node.node_id,
@@ -387,7 +387,7 @@ function M:ensure_rendering()
   if status == "orphan_candidate" then
     local _, _, candidate = self:resolve(self.candidate_overlay_id)
     if candidate ~= nil then
-      require("typst-concealer.machine.runtime").dispatch({
+      require("math-conceal.image.machine.runtime").dispatch({
         type = "overlay_render_failed",
         request_id = candidate.request_id,
         overlay_id = candidate.overlay_id,
@@ -422,7 +422,7 @@ function M:update_presentation(opts)
     return false, false
   end
 
-  local extmark = require("typst-concealer.extmark")
+  local extmark = require("math-conceal.image.extmark")
   local extmark_id = overlay.extmark_id
   local concealing = self:concealing_for_cursor(node)
   if extmark_id ~= nil then
@@ -440,7 +440,7 @@ function M:update_presentation(opts)
   end
 
   if extmark_id ~= overlay.extmark_id then
-    require("typst-concealer.machine.runtime").dispatch({
+    require("math-conceal.image.machine.runtime").dispatch({
       type = "overlay_resources_allocated",
       overlay_id = overlay.overlay_id,
       image_id = overlay.image_id,
@@ -530,7 +530,7 @@ function M:commit_render(effect, batch_mode)
     return { overlay_id = effect.overlay_id, node_id = effect.node_id, bufnr = effect.bufnr }
   end
 
-  require("typst-concealer.machine.runtime").dispatch({
+  require("math-conceal.image.machine.runtime").dispatch({
     type = "overlay_commit_succeeded",
     overlay_id = effect.overlay_id,
     node_id = effect.node_id,
@@ -583,14 +583,14 @@ function M:bind(effect)
 end
 
 function M:on_rendered(entry)
-  require("typst-concealer.machine.runtime").dispatch({
+  require("math-conceal.image.machine.runtime").dispatch({
     type = "overlay_pages_batch_ready",
     entries = { entry },
   })
 end
 
 function M:on_render_failed(ev)
-  require("typst-concealer.machine.runtime").dispatch(vim.tbl_extend("force", {
+  require("math-conceal.image.machine.runtime").dispatch(vim.tbl_extend("force", {
     type = "overlay_render_failed",
   }, ev))
 end
@@ -601,7 +601,7 @@ function M:hide(opts)
   if overlay == nil or overlay.extmark_id == nil then
     return false
   end
-  local ok = require("typst-concealer.extmark").unconceal_extmark(self.bufnr, overlay.extmark_id, {
+  local ok = require("math-conceal.image.extmark").unconceal_extmark(self.bufnr, overlay.extmark_id, {
     defer_line_run_reconcile = opts.defer_line_run_reconcile == true,
   }) ~= nil
   if ok then

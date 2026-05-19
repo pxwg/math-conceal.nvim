@@ -1,10 +1,10 @@
---- Resource lifecycle layer for typst-concealer.
+--- Resource lifecycle layer for math-conceal.image.
 --- Owns image_id / extmark_id allocation, reuse, release, and index maintenance.
 --- Receives PlannedItem[] from render.lua (the planner) and produces AppliedItem[].
 
-local state = require("typst-concealer.state")
-local resources = require("typst-concealer.machine.resources")
-local cursor_visibility = require("typst-concealer.cursor-visibility")
+local state = require("math-conceal.image.state")
+local resources = require("math-conceal.image.machine.resources")
+local cursor_visibility = require("math-conceal.image.cursor-visibility")
 local M = {}
 
 --- @class PlannedItem
@@ -148,7 +148,7 @@ local function reattach_item_image(image_id, opts)
     return
   end
 
-  local ok_manager, manager = pcall(require, "typst-concealer.formula.manager")
+  local ok_manager, manager = pcall(require, "math-conceal.image.formula.manager")
   if ok_manager and manager.reattach_image(image_id, opts) then
     return
   end
@@ -169,7 +169,7 @@ local function reattach_item_image(image_id, opts)
     return
   end
 
-  local extmark_mod = require("typst-concealer.extmark")
+  local extmark_mod = require("math-conceal.image.extmark")
   extmark_mod.create_image(item.page_path, image_id, item.natural_cols, item.natural_rows)
   item.terminal_upload_epoch = state.terminal_upload_epoch
   extmark_mod.conceal_for_image_id(
@@ -209,7 +209,7 @@ local function cleanup_preview_image(bufnr, opts)
     bs.preview_last_rendered_item = nil
     bs.preview_last_render_key = nil
     bs.preview_render_key = nil
-    require("typst-concealer.machine.runtime").reset_preview_state(bufnr)
+    require("math-conceal.image.machine.runtime").reset_preview_state(bufnr)
     bs.preview_source_image_id = nil
     bs.preview_source_page_stamp = nil
     bs.preview_source_range = nil
@@ -241,7 +241,7 @@ local function cleanup_preview_image(bufnr, opts)
   bs.preview_last_rendered_item = nil
   bs.preview_last_render_key = nil
   bs.preview_render_key = nil
-  require("typst-concealer.machine.runtime").reset_preview_state(bufnr)
+  require("math-conceal.image.machine.runtime").reset_preview_state(bufnr)
   bs.preview_source_image_id = nil
   bs.preview_source_page_stamp = nil
   bs.preview_source_range = nil
@@ -373,7 +373,7 @@ end
 --- @param planned_items PlannedItem[]
 --- @return table[]
 function M.commit_plan(bufnr, planned_items)
-  local extmark_mod = require("typst-concealer.extmark")
+  local extmark_mod = require("math-conceal.image.extmark")
 
   local prev_state = state.buffer_render_state[bufnr] or {}
   local prev_items = {}
@@ -477,7 +477,7 @@ end
 --- @param item   table    AppliedItem with natural_cols/rows
 --- @param layout table    { vertical: string, anchor_row: integer, left_pad_cols: integer, effective_range: table }
 function M.show_preview_item(bufnr, item, layout)
-  local extmark_mod = require("typst-concealer.extmark")
+  local extmark_mod = require("math-conceal.image.extmark")
   local bs = state.get_buf_state(bufnr)
 
   local prev_visible_image_id = bs.preview_image and bs.preview_image.image_id or nil
@@ -512,7 +512,7 @@ end
 --- @param item   table
 --- @param layout table   { vertical: string, anchor_row: integer, left_pad_cols: integer, effective_range: table }
 function M.show_rendered_preview_item(bufnr, item, layout)
-  local extmark_mod = require("typst-concealer.extmark")
+  local extmark_mod = require("math-conceal.image.extmark")
   local bs = state.get_buf_state(bufnr)
 
   local prev_visible_image_id = bs.preview_image and bs.preview_image.image_id or nil
@@ -542,7 +542,7 @@ function M.show_rendered_preview_item(bufnr, item, layout)
   bs.preview_item = item
   bs.preview_last_rendered_item = item
   bs.preview_last_render_key = bs.preview_render_key
-  require("typst-concealer.machine.runtime").mark_preview_rendered(bufnr)
+  require("math-conceal.image.machine.runtime").mark_preview_rendered(bufnr)
   bs.preview_source_image_id = item.source_image_id or item.image_id
   bs.preview_source_page_stamp = item.page_stamp
   bs.preview_source_range = vim.deepcopy(layout.effective_range)
@@ -582,14 +582,14 @@ function M.allocate_preview_item(bufnr, source_item, preview_str, source_str, re
   local bs = state.get_buf_state(bufnr)
   bs.preview_item = preview_item
   bs.preview_render_key = render_key
-  require("typst-concealer.machine.runtime").set_preview_render_key(bufnr, render_key)
+  require("math-conceal.image.machine.runtime").set_preview_render_key(bufnr, render_key)
   return preview_item
 end
 
 --- Apply a rendered page update to the display layer.
 --- @param update PageUpdate
 function M.accept_page_update(update)
-  local extmark_mod = require("typst-concealer.extmark")
+  local extmark_mod = require("math-conceal.image.extmark")
   local bufnr = update.bufnr
   local image_id = update.image_id
   local extmark_id = update.extmark_id
@@ -661,7 +661,7 @@ function M.accept_page_update(update)
     return
   end
   extmark_mod.conceal_for_image_id(target_bufnr, image_id, natural_cols, natural_rows, source_rows)
-  require("typst-concealer.machine.runtime").invalidate_hover(bufnr)
+  require("math-conceal.image.machine.runtime").invalidate_hover(bufnr)
   if state.hooks.on_page_committed then
     state.hooks.on_page_committed(bufnr)
   end

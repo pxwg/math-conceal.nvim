@@ -5,9 +5,9 @@
 --- placement indexes and answers cursor/source lookup questions; placement
 --- objects perform the extmark/image mutations.
 
-local Placement = require("typst-concealer.formula.placement")
-local cursor_visibility = require("typst-concealer.cursor-visibility")
-local state = require("typst-concealer.state")
+local Placement = require("math-conceal.image.formula.placement")
+local cursor_visibility = require("math-conceal.image.cursor-visibility")
+local state = require("math-conceal.image.state")
 
 local M = {}
 local Manager = {}
@@ -96,7 +96,7 @@ function M.drop(bufnr)
 end
 
 function Manager:invalidate_hover()
-  require("typst-concealer.machine.runtime").invalidate_hover(self.bufnr)
+  require("math-conceal.image.machine.runtime").invalidate_hover(self.bufnr)
 end
 
 function Manager:reset_indexes()
@@ -447,7 +447,7 @@ function Manager:ensure_pending_nodes_rendering(opts)
   end
 
   if #missing > 0 then
-    require("typst-concealer.machine.runtime").schedule_formula_renders(self.bufnr, {
+    require("math-conceal.image.machine.runtime").schedule_formula_renders(self.bufnr, {
       node_ids = missing,
     })
     self:sync_from_machine({ read_model = false })
@@ -504,7 +504,7 @@ function Manager:on_rendered(entry)
   if placement ~= nil then
     placement:on_rendered(entry)
   else
-    require("typst-concealer.machine.runtime").dispatch({
+    require("math-conceal.image.machine.runtime").dispatch({
       type = "overlay_pages_batch_ready",
       entries = { entry },
     })
@@ -517,7 +517,7 @@ function Manager:on_render_failed(ev)
   if placement ~= nil then
     placement:on_render_failed(ev)
   else
-    require("typst-concealer.machine.runtime").dispatch(vim.tbl_extend("force", {
+    require("math-conceal.image.machine.runtime").dispatch(vim.tbl_extend("force", {
       type = "overlay_render_failed",
     }, ev))
   end
@@ -547,9 +547,9 @@ end
 function Manager:sync_cursor_conceal(opts)
   opts = opts or {}
   self:sync_from_machine({ read_model = false })
-  local ok_main, main = pcall(require, "typst-concealer")
+  local ok_main, main = pcall(require, "math-conceal.image")
   local bs = state.get_buf_state(self.bufnr)
-  local hover = require("typst-concealer.machine.runtime").get_ui_buffer(self.bufnr).hover
+  local hover = require("math-conceal.image.machine.runtime").get_ui_buffer(self.bufnr).hover
 
   if
     not ok_main
@@ -636,7 +636,7 @@ function Manager:sync_cursor_conceal(opts)
 
   bs.currently_hidden_extmark_ids = new_hidden
   if opts.defer_line_run_reconcile ~= true then
-    require("typst-concealer.extmark").reconcile_cursor_line_runs(self.bufnr, lo, hi)
+    require("math-conceal.image.extmark").reconcile_cursor_line_runs(self.bufnr, lo, hi)
   end
   hover.last_cursor_row = cursor_row
   hover.last_cursor_col = cursor_col
@@ -650,7 +650,7 @@ end
 function Manager:sync_cursor_preview(opts)
   opts = opts or {}
   self:sync_from_machine({ read_model = false })
-  local ok_main, main = pcall(require, "typst-concealer")
+  local ok_main, main = pcall(require, "math-conceal.image")
   if
     not ok_main
     or main._enabled_buffers[self.bufnr] ~= true
@@ -661,7 +661,7 @@ function Manager:sync_cursor_preview(opts)
     if self.preview_placement_id ~= nil and self.placements[self.preview_placement_id] ~= nil then
       self.placements[self.preview_placement_id]:clear_preview(opts)
     else
-      require("typst-concealer.plan").clear_live_typst_preview(self.bufnr, opts)
+      require("math-conceal.image.plan").clear_live_typst_preview(self.bufnr, opts)
     end
     self.preview_placement_id = nil
     return false
@@ -672,7 +672,7 @@ function Manager:sync_cursor_preview(opts)
     if self.preview_placement_id ~= nil and self.placements[self.preview_placement_id] ~= nil then
       self.placements[self.preview_placement_id]:clear_preview(opts)
     else
-      require("typst-concealer.plan").clear_live_typst_preview(self.bufnr, opts)
+      require("math-conceal.image.plan").clear_live_typst_preview(self.bufnr, opts)
     end
     self.preview_placement_id = nil
     return false
@@ -688,7 +688,7 @@ function Manager:sync_cursor_preview(opts)
     if self.preview_placement_id ~= nil and self.placements[self.preview_placement_id] ~= nil then
       self.placements[self.preview_placement_id]:clear_preview(opts)
     else
-      require("typst-concealer.plan").clear_live_typst_preview(self.bufnr, opts)
+      require("math-conceal.image.plan").clear_live_typst_preview(self.bufnr, opts)
     end
     self.preview_placement_id = nil
     return false
@@ -704,7 +704,7 @@ function Manager:update_presentation_all(opts)
     return 0
   end
 
-  local ok_main, main = pcall(require, "typst-concealer")
+  local ok_main, main = pcall(require, "math-conceal.image")
   if not ok_main or main._enabled_buffers[self.bufnr] ~= true or not main.is_render_allowed(self.bufnr) then
     return 0
   end
@@ -725,7 +725,7 @@ function Manager:update_presentation_all(opts)
   end
 
   if uploaded then
-    require("typst-concealer.extmark").flush_terminal_data()
+    require("math-conceal.image.extmark").flush_terminal_data()
   end
   return refreshed
 end
@@ -733,7 +733,7 @@ end
 --- Reconcile the whole-buffer formula scan and schedule dirty placements.
 --- @param scan_event table
 function M.update_from_scan(scan_event)
-  local runtime = require("typst-concealer.machine.runtime")
+  local runtime = require("math-conceal.image.machine.runtime")
   local manager = M.get(scan_event.bufnr)
   runtime.dispatch(scan_event)
   manager:sync_from_machine()
@@ -791,7 +791,7 @@ function M.reattach_image(image_id, opts)
     local placement = manager:placement_for_image(image_id)
     if placement ~= nil then
       placement:reattach_image(opts)
-      require("typst-concealer.extmark").flush_terminal_data()
+      require("math-conceal.image.extmark").flush_terminal_data()
       return true
     end
   end

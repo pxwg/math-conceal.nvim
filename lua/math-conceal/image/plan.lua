@@ -1,11 +1,11 @@
---- Render dispatch layer for typst-concealer.
+--- Render dispatch layer for math-conceal.image.
 --- Handles adapter-viewport re-rendering (render_buf) and live insert-mode preview
 --- (render_live_typst_preview).  Both paths share semantics.classify() and the
 --- same extmark/session infrastructure.
 
-local semantics_mod = require("typst-concealer.semantics")
-local cursor_visibility = require("typst-concealer.cursor-visibility")
-local state = require("typst-concealer.state")
+local semantics_mod = require("math-conceal.image.semantics")
+local cursor_visibility = require("math-conceal.image.cursor-visibility")
+local state = require("math-conceal.image.state")
 local M = {}
 
 local diagnostics = {}
@@ -190,7 +190,7 @@ local function units_overlap_rows(unit, start_row, end_row)
 end
 
 local function buffer_source_kind(bufnr)
-  local ok, main = pcall(require, "typst-concealer")
+  local ok, main = pcall(require, "math-conceal.image")
   if ok and type(main.source_kind_for_bufnr) == "function" then
     return main.source_kind_for_bufnr(bufnr)
   end
@@ -238,7 +238,7 @@ local function notify_parser_unavailable(bufnr, lang, bs, reason)
     if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
       return
     end
-    local ok_main, main = pcall(require, "typst-concealer")
+    local ok_main, main = pcall(require, "math-conceal.image")
     if not ok_main or main._enabled_buffers[bufnr] ~= true then
       return
     end
@@ -248,7 +248,7 @@ local function notify_parser_unavailable(bufnr, lang, bs, reason)
       if bs.parser_retry_counts then
         bs.parser_retry_counts[lang] = nil
       end
-      require("typst-concealer.machine.runtime").render_buf(bufnr)
+      require("math-conceal.image.machine.runtime").render_buf(bufnr)
       return
     end
 
@@ -256,7 +256,7 @@ local function notify_parser_unavailable(bufnr, lang, bs, reason)
       bs.parser_retry_counts[lang] = nil
     end
     vim.notify(
-      ("[typst-concealer] %s tree-sitter parser unavailable: %s"):format(lang, tostring(latest_reason or reason)),
+      ("[math-conceal.image] %s tree-sitter parser unavailable: %s"):format(lang, tostring(latest_reason or reason)),
       vim.log.levels.WARN
     )
   end)
@@ -273,14 +273,14 @@ local function schedule_parser_retry(bufnr, lang, bs, reason)
   bs.parser_retry_counts[lang] = retries + 1
   local delay = math.min(parser_retry_max_delay_ms, parser_retry_base_delay_ms * (retries + 1))
   vim.defer_fn(function()
-    local ok_main, main = pcall(require, "typst-concealer")
+    local ok_main, main = pcall(require, "math-conceal.image")
     if
       ok_main
       and vim.api.nvim_buf_is_valid(bufnr)
       and vim.api.nvim_buf_is_loaded(bufnr)
       and main._enabled_buffers[bufnr] == true
     then
-      require("typst-concealer.machine.runtime").render_buf(bufnr)
+      require("math-conceal.image.machine.runtime").render_buf(bufnr)
     end
   end, delay)
 end
@@ -404,15 +404,15 @@ local function item_has_stable_render(item)
 end
 
 local function cleanup_item(bufnr, item)
-  return require("typst-concealer.apply").cleanup_item(bufnr, item)
+  return require("math-conceal.image.apply").cleanup_item(bufnr, item)
 end
 
 local function cleanup_preview_image(bufnr, opts)
-  return require("typst-concealer.apply").cleanup_preview_image(bufnr, opts)
+  return require("math-conceal.image.apply").cleanup_preview_image(bufnr, opts)
 end
 
 local function cleanup_preview_item_request(bufnr, item, opts)
-  return require("typst-concealer.apply").cleanup_preview_item_request(bufnr, item, opts)
+  return require("math-conceal.image.apply").cleanup_preview_item_request(bufnr, item, opts)
 end
 
 local function get_text_slice(bufnr, start_row, start_col, end_row, end_col)
@@ -528,7 +528,7 @@ local function preview_item_context_key(item)
   local prelude_chunks = bstate.runtime_preludes or state.runtime_preludes or {}
   local prelude_count = math.max(0, math.min(item.prelude_count or 0, #prelude_chunks))
   local semantics = item.semantics or {}
-  local ok_main, main = pcall(require, "typst-concealer")
+  local ok_main, main = pcall(require, "math-conceal.image")
   local config = ok_main and main.config or {}
   local parts = {
     "preview-context-v2",
@@ -754,8 +754,8 @@ function M.hard_reset_buf(bufnr)
   state.clear_hover_timer(bufnr)
   state.clear_visible_refresh_timer(bufnr)
   state.clear_preview_timer(bufnr)
-  require("typst-concealer.apply").hard_reset(bufnr)
-  require("typst-concealer.machine.runtime").reset_buffer(bufnr)
+  require("math-conceal.image.apply").hard_reset(bufnr)
+  require("math-conceal.image.machine.runtime").reset_buffer(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, state.ns_id, 0, -1)
   vim.api.nvim_buf_clear_namespace(bufnr, state.ns_id2, 0, -1)
   state.buffers[bufnr] = nil
@@ -765,17 +765,17 @@ end
 --- Re-render all Typst nodes in bufnr.
 --- @param bufnr integer|nil  defaults to current buffer
 function M.render_buf(bufnr)
-  local main = require("typst-concealer")
+  local main = require("math-conceal.image")
   bufnr = bufnr or vim.fn.bufnr()
   if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
     return
   end
   clear_diagnostics(bufnr)
-  require("typst-concealer.machine.runtime").reconcile_visible_overlay_bindings(bufnr)
+  require("math-conceal.image.machine.runtime").reconcile_visible_overlay_bindings(bufnr)
 
   if main._enabled_buffers[bufnr] ~= true or not main.is_render_allowed(bufnr) then
     M.hard_reset_buf(bufnr)
-    require("typst-concealer.session").stop_compiler_service(bufnr)
+    require("math-conceal.image.session").stop_compiler_service(bufnr)
     return
   end
 
@@ -799,8 +799,8 @@ function M.render_buf(bufnr)
   state.buffer_render_state[bufnr].render_coverage_state = scan.render_coverage_state
   state.buffer_render_state[bufnr].render_coverage_complete = scan.render_coverage_complete
 
-  local runtime = require("typst-concealer.machine.runtime")
-  local project_scope = require("typst-concealer.project-scope").resolve(bufnr, "full")
+  local runtime = require("math-conceal.image.machine.runtime")
+  local project_scope = require("math-conceal.image.project-scope").resolve(bufnr, "full")
   local scan_event = {
     type = "nodes_scanned",
     bufnr = bufnr,
@@ -816,7 +816,7 @@ function M.render_buf(bufnr)
     render_coverage_key = scan.render_coverage_key,
   }
   if uses_formula_manager(bufnr, main, project_scope) then
-    require("typst-concealer.formula.manager").update_from_scan(scan_event)
+    require("math-conceal.image.formula.manager").update_from_scan(scan_event)
   else
     runtime.dispatch(scan_event)
     runtime.dispatch({
@@ -841,7 +841,7 @@ end
 --- @param extmark_id integer
 --- @param opts table|nil
 local function hide_one_extmark(bufnr, _bs, extmark_id, opts)
-  return require("typst-concealer.extmark").unconceal_extmark(bufnr, extmark_id, opts)
+  return require("math-conceal.image.extmark").unconceal_extmark(bufnr, extmark_id, opts)
 end
 
 --- Restore a previously hidden extmark from the current rendered item state.
@@ -863,7 +863,7 @@ local function restore_one_extmark(bufnr, extmark_id, opts)
     return
   end
   bs.currently_hidden_extmark_ids[extmark_id] = nil
-  local extmark = require("typst-concealer.extmark")
+  local extmark = require("math-conceal.image.extmark")
   extmark.conceal_for_image_id(
     bufnr,
     item.image_id,
@@ -882,14 +882,14 @@ end
 --- Called on CursorMoved and ModeChanged.
 --- @param bufnr integer
 function M.hide_extmarks_at_cursor(bufnr)
-  local main = require("typst-concealer")
+  local main = require("math-conceal.image")
   if uses_formula_manager(bufnr, main) then
-    require("typst-concealer.formula.manager").sync_cursor_conceal(bufnr)
+    require("math-conceal.image.formula.manager").sync_cursor_conceal(bufnr)
     return
   end
 
   local bs = state.get_buf_state(bufnr)
-  local hover = require("typst-concealer.machine.runtime").get_ui_buffer(bufnr).hover
+  local hover = require("math-conceal.image.machine.runtime").get_ui_buffer(bufnr).hover
 
   if main._enabled_buffers[bufnr] ~= true or not main.is_render_allowed(bufnr) then
     for id in pairs(bs.currently_hidden_extmark_ids) do
@@ -984,7 +984,7 @@ function M.hide_extmarks_at_cursor(bufnr)
   end
 
   bs.currently_hidden_extmark_ids = new_hidden
-  require("typst-concealer.extmark").reconcile_cursor_line_runs(bufnr, lo, hi)
+  require("math-conceal.image.extmark").reconcile_cursor_line_runs(bufnr, lo, hi)
   hover.last_cursor_row = cursor_row
   hover.last_cursor_col = cursor_col
   hover.last_mode = mode
@@ -1137,7 +1137,7 @@ scan_formula_matches = function(bufnr, main)
   if source_kind ~= "typst" and source_kind ~= "markdown" and source_kind ~= "latex" then
     return nil, "unsupported"
   end
-  local viewport_mod = require("typst-concealer.viewport")
+  local viewport_mod = require("math-conceal.image.viewport")
   local render_plan = viewport_mod.resolve_render_plan(bufnr, { source_kind = source_kind })
 
   local units
@@ -1160,7 +1160,7 @@ scan_formula_matches = function(bufnr, main)
     end
     sorted_entries = build_render_entries_from_units(bufnr, units)
   elseif source_kind == "markdown" then
-    units = require("typst-concealer.source-adapters.markdown").collect(bufnr)
+    units = require("math-conceal.image.source-adapters.markdown").collect(bufnr)
     sorted_entries = units
   else
     local parser, parser_err = get_buffer_parser(bufnr, "latex")
@@ -1171,7 +1171,7 @@ scan_formula_matches = function(bufnr, main)
     if bs.parser_retry_counts then
       bs.parser_retry_counts.latex = nil
     end
-    sorted_entries, units = require("typst-concealer.source-adapters.latex").collect(bufnr, {
+    sorted_entries, units = require("math-conceal.image.source-adapters.latex").collect(bufnr, {
       parser = parser,
       prev_units = prev_state.full_units,
       pending_change = bs.pending_change,
@@ -1239,7 +1239,7 @@ scan_formula_matches = function(bufnr, main)
 end
 
 function M.scan_formula_matches(bufnr)
-  return scan_formula_matches(bufnr, require("typst-concealer"))
+  return scan_formula_matches(bufnr, require("math-conceal.image"))
 end
 
 local function candidate_penalty(rect, obstacles, editor_h, editor_w)
@@ -1457,7 +1457,7 @@ function M.render_live_typst_preview_for_item(bufnr, item, cursor_row, cursor_co
     return false
   end
   local bs = state.get_buf_state(bufnr)
-  local preview = require("typst-concealer.machine.runtime").get_ui_buffer(bufnr).preview
+  local preview = require("math-conceal.image.machine.runtime").get_ui_buffer(bufnr).preview
   if bs.preview_item ~= nil and preview.render_key == render_key and item_has_stable_render(bs.preview_item) then
     M.present_rendered_preview_item(bufnr, bs.preview_item)
     return true, bs.preview_item, render_key
@@ -1493,7 +1493,7 @@ function M.render_live_typst_preview_for_item(bufnr, item, cursor_row, cursor_co
     cleanup_preview_item_request(bufnr, previous_preview_item, { keep_extmark = shared_extmark_id ~= nil })
   end
 
-  local preview_item = require("typst-concealer.apply").allocate_preview_item(
+  local preview_item = require("math-conceal.image.apply").allocate_preview_item(
     bufnr,
     item,
     preview_str,
@@ -1501,7 +1501,7 @@ function M.render_live_typst_preview_for_item(bufnr, item, cursor_row, cursor_co
     render_key,
     shared_extmark_id
   )
-  require("typst-concealer.machine.runtime").render_preview_tail(bufnr, preview_item)
+  require("math-conceal.image.machine.runtime").render_preview_tail(bufnr, preview_item)
   return true, preview_item, render_key
 end
 
@@ -1533,7 +1533,7 @@ present_preview_item = function(bufnr, item, cursor_row, cursor_col)
   end
 
   local vertical = choose_preview_vertical(bufnr, effective_range, item.natural_cols, item.natural_rows)
-  require("typst-concealer.apply").show_preview_item(bufnr, item, {
+  require("math-conceal.image.apply").show_preview_item(bufnr, item, {
     vertical = vertical,
     anchor_row = vertical == "above" and effective_range[1] or effective_range[3],
     left_pad_cols = preview_left_pad_cols(bufnr, effective_range),
@@ -1557,7 +1557,7 @@ function M.present_rendered_preview_item(bufnr, item)
   end
 
   local vertical = choose_preview_vertical(bufnr, effective_range, item.natural_cols, item.natural_rows)
-  require("typst-concealer.apply").show_rendered_preview_item(bufnr, item, {
+  require("math-conceal.image.apply").show_rendered_preview_item(bufnr, item, {
     vertical = vertical,
     anchor_row = vertical == "above" and effective_range[1] or effective_range[3],
     left_pad_cols = preview_left_pad_cols(bufnr, effective_range),
@@ -1569,7 +1569,7 @@ end
 --- @param bufnr integer
 --- @param opts table|nil
 function M.clear_live_typst_preview(bufnr, opts)
-  require("typst-concealer.machine.runtime").clear_preview_request(bufnr)
+  require("math-conceal.image.machine.runtime").clear_preview_request(bufnr)
   cleanup_preview_image(bufnr, opts)
 end
 
@@ -1607,9 +1607,9 @@ function M.schedule_live_preview_sync(bufnr, opts)
   end
 
   opts = opts or {}
-  local main = require("typst-concealer")
+  local main = require("math-conceal.image")
   local bs = state.get_buf_state(bufnr)
-  local preview = require("typst-concealer.machine.runtime").get_ui_buffer(bufnr).preview
+  local preview = require("math-conceal.image.machine.runtime").get_ui_buffer(bufnr).preview
   local tick = vim.api.nvim_buf_get_changedtick(bufnr)
   preview.sync_tick = tick
 
@@ -1631,7 +1631,7 @@ function M.schedule_live_preview_sync(bufnr, opts)
     delay,
     0,
     vim.schedule_wrap(function()
-      local current_preview = require("typst-concealer.machine.runtime").get_ui_buffer(bufnr).preview
+      local current_preview = require("math-conceal.image.machine.runtime").get_ui_buffer(bufnr).preview
 
       if not vim.api.nvim_buf_is_valid(bufnr) then
         return
@@ -1644,7 +1644,7 @@ function M.schedule_live_preview_sync(bufnr, opts)
       if scheduled_tick ~= nil and scheduled_tick ~= vim.api.nvim_buf_get_changedtick(bufnr) then
         M.render_buf(bufnr)
       end
-      require("typst-concealer.machine.runtime").render_live_preview(bufnr)
+      require("math-conceal.image.machine.runtime").render_live_preview(bufnr)
       M.hide_extmarks_at_cursor(bufnr)
     end)
   )
@@ -1653,7 +1653,7 @@ end
 --- Render a live preview image in virtual lines around the math node under the cursor.
 --- @param bufnr integer
 function M.render_live_typst_preview(bufnr)
-  local main = require("typst-concealer")
+  local main = require("math-conceal.image")
   if
     main._enabled_buffers[bufnr] ~= true
     or not main.is_render_allowed(bufnr)
@@ -1691,9 +1691,9 @@ function M.render_live_typst_preview(bufnr)
 end
 
 -- Register post-render UI reaction hooks so apply.lua can trigger them
--- without a direct reverse require("typst-concealer.plan") dependency.
+-- without a direct reverse require("math-conceal.image.plan") dependency.
 state.hooks.on_page_committed = function(bufnr)
-  local runtime = require("typst-concealer.machine.runtime")
+  local runtime = require("math-conceal.image.machine.runtime")
   runtime.sync_hover(bufnr)
   runtime.render_live_preview(bufnr)
 end

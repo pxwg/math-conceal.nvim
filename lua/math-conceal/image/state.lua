@@ -1,14 +1,14 @@
---- Shared mutable state for typst-concealer.
+--- Shared mutable state for math-conceal.image.
 --- Lua module caching guarantees a single instance.
 --- Write access is intentionally concentrated: apply.lua owns resource indices,
 --- plan.lua owns per-buffer render state; session.lua owns render backends.
 local M = {}
-local machine_types = require("typst-concealer.machine.types")
+local machine_types = require("math-conceal.image.machine.types")
 
 --- Neovim extmark namespaces
-M.ns_id = vim.api.nvim_create_namespace("typst-concealer")
+M.ns_id = vim.api.nvim_create_namespace("math-conceal.image")
 -- used for each line of a multiline image
-M.ns_id2 = vim.api.nvim_create_namespace("typst-concealer-2")
+M.ns_id2 = vim.api.nvim_create_namespace("math-conceal.image-2")
 
 --- @type { [integer]: integer }
 --- Maps image_id -> ns_id extmark_id
@@ -135,7 +135,7 @@ M.item_by_image_id = {}
 
 --- UI reaction hooks registered by plan.lua at module load time.
 --- Allows apply.lua to trigger post-page-commit UI reactions without a
---- direct reverse require("typst-concealer.plan") dependency.
+--- direct reverse require("math-conceal.image.plan") dependency.
 --- @type { on_page_committed: (fun(bufnr: integer)|nil), present_rendered_preview_item: (fun(bufnr: integer, item: table)|nil) }
 M.hooks = {
   on_page_committed = nil,
@@ -256,7 +256,7 @@ function M.invalidate_hover(bufnr)
     bs.hover.invalidated = true
   end
 
-  local ok, runtime = pcall(require, "typst-concealer.machine.runtime")
+  local ok, runtime = pcall(require, "math-conceal.image.machine.runtime")
   if ok and runtime ~= nil and type(runtime.invalidate_hover) == "function" then
     runtime.invalidate_hover(bufnr)
   end
