@@ -137,7 +137,6 @@ local function setup_image()
 
   local image_cfg = vim.deepcopy(M.opts.image or {})
   image_cfg.enabled = nil
-  image_cfg.filetypes = nil
   if image_cfg.service_binary == nil then
     image_cfg.service_binary = bundled_service_binary() or "typst-concealer-service"
   end
