@@ -45,18 +45,20 @@ Feedback from Typst, Markdown streaming-output, and experimental LaTeX users is
 welcome. Please include your terminal, OS, Neovim version, filetype, a minimal
 snippet, and any `:messages` output.
 
+### LaTeX Conceal
+
 <table style="width: 80%; margin: auto; text-align: center;">
   <tr>
     <td style="width: 50%;">
       <figure>
-        <img src="https://github.com/user-attachments/assets/51702428-640b-4b5e-8888-2a3f6354ad4c" alt="Latex Showcase" style="width: 95%;">
-        <figcaption>LaTeX-Before</figcaption>
+        <img src="https://github.com/user-attachments/assets/3e73c907-66f0-46cd-8b25-d842473a2e1a" alt="Experimental LaTeX Image Conceal" style="width: 95%;">
+        <figcaption>Experimental LaTeX Image Conceal</figcaption>
       </figure>
     </td>
     <td style="width: 50%;">
       <figure>
-        <img src="https://github.com/user-attachments/assets/affbcc24-df83-4a45-9f02-aeba891f7727" alt="LaTeX Showcase" style="width: 99%;">
-        <figcaption>LaTeX-After</figcaption>
+        <img src="https://github.com/user-attachments/assets/affbcc24-df83-4a45-9f02-aeba891f7727" alt="Stable LaTeX ASCII Conceal" style="width: 99%;">
+        <figcaption>Stable LaTeX ASCII/Unicode Conceal</figcaption>
       </figure>
     </td>
   </tr>
