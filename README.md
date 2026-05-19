@@ -4,11 +4,11 @@
 
 Faster and More Precise [LaTeX](https://www.latex-project.org/) and [typst](https://github.com/typst/typst) conceal for [Neovim](https://github.com/neovim/neovim).
 
-### Markdown Stream Image Conceal
+### Typst Image Conceal
 
 https://github.com/user-attachments/assets/d78175a5-7462-40b6-be63-087fd100b97a
 
-### Typst Image Conceal
+### Markdown Stream Image Conceal
 
 https://github.com/user-attachments/assets/359fb62f-2031-4b5c-8d0b-0fe835fccd80
 
