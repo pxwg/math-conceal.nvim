@@ -6,6 +6,39 @@ Faster and More Precise [LaTeX](https://www.latex-project.org/) and [typst](http
 
 https://github.com/user-attachments/assets/65826ae2-2cd5-48a4-aa37-bfd3d9748b31
 
+## Preview Channel
+
+The stable `main` branch focuses on fast ASCII/Unicode math conceal. A preview
+branch is available for graphical equation conceal in Typst and Markdown, with
+experimental LaTeX rendering.
+
+### Typst Equation Conceal Preview
+
+https://github.com/user-attachments/assets/d78175a5-7462-40b6-be63-087fd100b97a
+
+Try the preview branch with lazy.nvim:
+
+```lua
+return {
+  "pxwg/math-conceal.nvim",
+  branch = "preview",
+  build = "cargo build --release --manifest-path service/Cargo.toml",
+  main = "math-conceal",
+  opts = {
+    conceal = { "greek", "script", "math", "font", "delim", "phy" },
+    ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+    image = {
+      enabled = true,
+      filetypes = { "typst", "markdown" },
+    },
+  },
+}
+```
+
+Feedback from Typst, Markdown streaming-output, and experimental LaTeX users is
+welcome. Please include your terminal, OS, Neovim version, filetype, a minimal
+snippet, and any `:messages` output.
+
 <table style="width: 80%; margin: auto; text-align: center;">
   <tr>
     <td style="width: 50%;">

@@ -1,0 +1,85 @@
+name: Equation conceal preview feedback
+description: Report feedback for the preview graphical equation conceal path.
+title: "[preview] "
+labels:
+  - preview
+  - equation-conceal
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing the preview branch.
+
+        The stable `main` branch and LuaRocks release focus on ASCII/Unicode conceal.
+        Graphical equation conceal is currently tested on the `preview` branch.
+  - type: checkboxes
+    id: channel
+    attributes:
+      label: Channel
+      options:
+        - label: I am using `branch = "preview"` or an equivalent preview checkout.
+          required: true
+        - label: I understand ASCII/Unicode conceal is the stable path on `main`.
+          required: true
+  - type: dropdown
+    id: source-kind
+    attributes:
+      label: Source kind
+      options:
+        - Typst
+        - Markdown
+        - Markdown stream output
+        - Experimental LaTeX
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "macOS 15.5, Ubuntu 24.04, Arch Linux, ..."
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal
+      placeholder: "kitty, Ghostty, WezTerm, ..."
+    validations:
+      required: true
+  - type: input
+    id: nvim-version
+    attributes:
+      label: Neovim version
+      placeholder: "nvim --version"
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Minimal plugin config
+      render: lua
+      description: Include the relevant `math-conceal.nvim` setup or lazy.nvim spec.
+    validations:
+      required: true
+  - type: textarea
+    id: snippet
+    attributes:
+      label: Minimal source snippet
+      render: text
+      description: Include the smallest Typst, Markdown, or LaTeX snippet that shows the behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe what you expected, what actually happened, and whether ASCII/Unicode conceal still works.
+    validations:
+      required: true
+  - type: textarea
+    id: messages
+    attributes:
+      label: Messages, logs, screenshots, or video
+      description: Paste relevant `:messages` output and attach screenshots or recordings if useful.
+      render: text
