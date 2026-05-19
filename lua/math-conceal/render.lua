@@ -32,16 +32,23 @@ local markdown_expand_nodes = {
   shortcut_link = true,
 }
 
-local function get_capture_hl_group(query, capture_id)
+local function get_capture_hl_group(query, capture_id, lang)
   local capture_name = query.captures[capture_id]
   if not capture_name then
     return nil
   end
 
-  local hl_group = "@" .. capture_name
-  local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = hl_group, link = true })
-  if ok and next(hl) ~= nil then
-    return hl_group
+  local groups = {}
+  if lang and not vim.startswith(capture_name, "_") then
+    table.insert(groups, "@" .. capture_name .. "." .. lang)
+  end
+  table.insert(groups, "@" .. capture_name)
+
+  for _, hl_group in ipairs(groups) do
+    local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = hl_group, link = true })
+    if ok and next(hl) ~= nil then
+      return hl_group
+    end
   end
 end
 
@@ -393,7 +400,7 @@ local function setup_decoration_provider()
                   local priority = (capture_data and capture_data.priority) or metadata.priority or 100
                   local hl_group = (capture_data and capture_data.highlight)
                     or metadata.highlight
-                    or get_capture_hl_group(spec.query, id)
+                    or get_capture_hl_group(spec.query, id, spec.target_lang)
                     or "Conceal"
 
                   -- Store all rendering data in pure Lua table (array is faster than hash)
