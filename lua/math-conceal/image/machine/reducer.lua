@@ -1216,36 +1216,34 @@ local function reduce_formula_renders_requested(state, ev)
               slot.pending_request_id = overlay.request_id
               slot.status = "dirty"
               slot.dirty = true
-              goto continue_slot
-            end
+            else
+              retire_node_candidate(new_state, node, effects)
 
-            retire_node_candidate(new_state, node, effects)
+              local current_request_id = ensure_request_id()
+              local overlay = new_overlay(new_state, buf, node, current_request_id, slot.page_index, slot.slot_id)
+              node.candidate_overlay_id = overlay.overlay_id
+              node.status = "pending"
+              node.pending_request_id = current_request_id
+              slot.candidate_overlay_id = overlay.overlay_id
+              slot.pending_request_id = current_request_id
+              slot.status = "dirty"
+              slot.dirty = true
+              jobs[#jobs + 1] = render_job_from_node(node, overlay)
 
-            local current_request_id = ensure_request_id()
-            local overlay = new_overlay(new_state, buf, node, current_request_id, slot.page_index, slot.slot_id)
-            node.candidate_overlay_id = overlay.overlay_id
-            node.status = "pending"
-            node.pending_request_id = current_request_id
-            slot.candidate_overlay_id = overlay.overlay_id
-            slot.pending_request_id = current_request_id
-            slot.status = "dirty"
-            slot.dirty = true
-            jobs[#jobs + 1] = render_job_from_node(node, overlay)
-
-            if node.visible_overlay_id == nil then
-              effects[#effects + 1] = {
-                kind = "ensure_overlay_placeholder",
-                overlay_id = overlay.overlay_id,
-                bufnr = buf.bufnr,
-                node_id = node.node_id,
-                display_range = copy_range(node.display_range),
-                semantics = deepcopy(node.semantics),
-              }
+              if node.visible_overlay_id == nil then
+                effects[#effects + 1] = {
+                  kind = "ensure_overlay_placeholder",
+                  overlay_id = overlay.overlay_id,
+                  bufnr = buf.bufnr,
+                  node_id = node.node_id,
+                  display_range = copy_range(node.display_range),
+                  semantics = deepcopy(node.semantics),
+                }
+              end
             end
           end
         end
       end
-      ::continue_slot::
     end
   end
 
@@ -1502,79 +1500,84 @@ local function reduce_overlay_pages_batch_ready(state, ev)
   local new_state = clone_state(state)
   local effects = {}
 
-  for _, entry in ipairs(ev.entries or {}) do
+  local function matching_ready_entry(entry)
     local overlay = new_state.overlays[entry.overlay_id]
     if overlay == nil then
-      goto continue_entry
+      return nil
     end
 
     local buf = new_state.buffers[overlay.owner_bufnr]
     if buf == nil then
-      goto continue_entry
+      return nil
     end
 
     local node = buf.nodes[overlay.owner_node_id]
     if node == nil then
-      goto continue_entry
+      return nil
     end
 
     if overlay.request_id ~= entry.request_id then
-      goto continue_entry
+      return nil
     end
     if overlay.page_index ~= nil and overlay.page_index ~= entry.request_page_index then
-      goto continue_entry
+      return nil
     end
     if overlay.owner_node_id ~= entry.owner_node_id then
-      goto continue_entry
+      return nil
     end
     if overlay.owner_bufnr ~= entry.owner_bufnr then
-      goto continue_entry
+      return nil
     end
     if overlay.owner_project_scope_id ~= entry.owner_project_scope_id then
-      goto continue_entry
+      return nil
     end
     if overlay.render_epoch ~= entry.render_epoch then
-      goto continue_entry
+      return nil
     end
     if entry.node_rev ~= nil and overlay.node_rev ~= entry.node_rev then
-      goto continue_entry
+      return nil
     end
     if entry.context_id ~= nil and overlay.context_id ~= entry.context_id then
-      goto continue_entry
+      return nil
     end
     if entry.context_rev ~= nil and overlay.context_rev ~= entry.context_rev then
-      goto continue_entry
+      return nil
     end
     if overlay.buffer_version ~= entry.buffer_version then
-      goto continue_entry
+      return nil
     end
     if overlay.layout_version ~= entry.layout_version then
-      goto continue_entry
+      return nil
     end
     if node.candidate_overlay_id ~= overlay.overlay_id then
-      goto continue_entry
+      return nil
     end
 
-    overlay.page_path = entry.page_path
-    overlay.page_stamp = entry.page_stamp
-    overlay.natural_cols = entry.natural_cols
-    overlay.natural_rows = entry.natural_rows
-    overlay.source_rows = entry.source_rows
-    overlay.status = "ready"
-    node.status = "ready"
+    return overlay, buf, node
+  end
 
-    effects[#effects + 1] = {
-      kind = "commit_overlay",
-      overlay_id = overlay.overlay_id,
-      node_id = node.node_id,
-      bufnr = buf.bufnr,
-      page_path = entry.page_path,
-      natural_cols = entry.natural_cols,
-      natural_rows = entry.natural_rows,
-      source_rows = entry.source_rows,
-    }
+  for _, entry in ipairs(ev.entries or {}) do
+    local overlay, buf, node = matching_ready_entry(entry)
+    if overlay ~= nil then
+      overlay.page_path = entry.page_path
+      overlay.page_stamp = entry.page_stamp
+      overlay.natural_cols = entry.natural_cols
+      overlay.natural_rows = entry.natural_rows
+      overlay.source_rows = entry.source_rows
+      overlay.status = "ready"
+      node.status = "ready"
 
-    ::continue_entry::
+      effects[#effects + 1] = {
+        kind = "commit_overlay",
+        overlay_id = overlay.overlay_id,
+        node_id = node.node_id,
+        bufnr = buf.bufnr,
+        page_path = entry.page_path,
+        natural_cols = entry.natural_cols,
+        natural_rows = entry.natural_rows,
+        source_rows = entry.source_rows,
+      }
+    end
   end
 
   return new_state, effects
@@ -1642,49 +1645,39 @@ local function reduce_overlay_commits_batch_succeeded(state, ev)
 
   for _, entry in ipairs(ev.entries or {}) do
     local overlay = new_state.overlays[entry.overlay_id]
-    if overlay == nil or overlay.owner_node_id ~= entry.node_id then
-      goto continue_commit
-    end
+    if overlay ~= nil and overlay.owner_node_id == entry.node_id then
+      local buf = new_state.buffers[overlay.owner_bufnr]
+      local node = buf and buf.nodes[overlay.owner_node_id] or nil
+      if node ~= nil and node.candidate_overlay_id == overlay.overlay_id then
+        local old_visible_id = node.visible_overlay_id
+        overlay.status = "visible"
+        node.visible_overlay_id = overlay.overlay_id
+        node.candidate_overlay_id = nil
+        node.status = "stable"
+        node.last_rendered_epoch = overlay.render_epoch
+        node.last_buffer_version = overlay.buffer_version
+        node.last_layout_version = overlay.layout_version
+        mark_slot_committed(buf, node, overlay)
 
-    local buf = new_state.buffers[overlay.owner_bufnr]
-    if buf == nil then
-      goto continue_commit
-    end
-
-    local node = buf.nodes[overlay.owner_node_id]
-    if node == nil or node.candidate_overlay_id ~= overlay.overlay_id then
-      goto continue_commit
-    end
-
-    local old_visible_id = node.visible_overlay_id
-    overlay.status = "visible"
-    node.visible_overlay_id = overlay.overlay_id
-    node.candidate_overlay_id = nil
-    node.status = "stable"
-    node.last_rendered_epoch = overlay.render_epoch
-    node.last_buffer_version = overlay.buffer_version
-    node.last_layout_version = overlay.layout_version
-    mark_slot_committed(buf, node, overlay)
-
-    if old_visible_id ~= nil and old_visible_id ~= overlay.overlay_id then
-      local old_overlay = new_state.overlays[old_visible_id]
-      if old_overlay ~= nil then
-        old_overlay.status = "retiring"
-        effects[#effects + 1] = {
-          kind = "retire_overlay",
-          overlay_id = old_visible_id,
-        }
+        if old_visible_id ~= nil and old_visible_id ~= overlay.overlay_id then
+          local old_overlay = new_state.overlays[old_visible_id]
+          if old_overlay ~= nil then
+            old_overlay.status = "retiring"
+            effects[#effects + 1] = {
+              kind = "retire_overlay",
+              overlay_id = old_visible_id,
+            }
+          end
+        end
+        retire_overlapping_orphans(new_state, buf, node, effects)
+        if
+          buf.active_request_id == overlay.request_id
+          and not request_has_pending_overlay(new_state, buf, overlay.request_id)
+        then
+          buf.active_request_id = nil
+        end
       end
     end
-    retire_overlapping_orphans(new_state, buf, node, effects)
-    if
-      buf.active_request_id == overlay.request_id
-      and not request_has_pending_overlay(new_state, buf, overlay.request_id)
-    then
-      buf.active_request_id = nil
-    end
-
-    ::continue_commit::
   end
 
   return new_state, effects
@@ -1717,31 +1710,25 @@ local function reduce_overlay_bindings_batch_succeeded(state, ev)
 
   for _, entry in ipairs(ev.entries or {}) do
     local overlay = new_state.overlays[entry.overlay_id]
-    if overlay == nil or overlay.owner_node_id ~= entry.node_id or overlay.request_id ~= entry.request_id then
-      goto continue_binding
+    if overlay ~= nil and overlay.owner_node_id == entry.node_id and overlay.request_id == entry.request_id then
+      local buf = new_state.buffers[overlay.owner_bufnr]
+      if
+        buf ~= nil
+        and buf.bufnr == entry.bufnr
+        and buf.buffer_version == entry.buffer_version
+        and buf.layout_version == entry.layout_version
+      then
+        local node = buf.nodes[overlay.owner_node_id]
+        if
+          node ~= nil
+          and node.visible_overlay_id == overlay.overlay_id
+          and ranges_equal(node.display_range, entry.display_range)
+        then
+          overlay.extmark_id = entry.extmark_id or overlay.extmark_id
+          record_overlay_binding(overlay, entry.buffer_version, entry.layout_version, entry.display_range)
+        end
+      end
     end
-
-    local buf = new_state.buffers[overlay.owner_bufnr]
-    if buf == nil or buf.bufnr ~= entry.bufnr then
-      goto continue_binding
-    end
-    if buf.buffer_version ~= entry.buffer_version or buf.layout_version ~= entry.layout_version then
-      goto continue_binding
-    end
-
-    local node = buf.nodes[overlay.owner_node_id]
-    if
-      node == nil
-      or node.visible_overlay_id ~= overlay.overlay_id
-      or not ranges_equal(node.display_range, entry.display_range)
-    then
-      goto continue_binding
-    end
-
-    overlay.extmark_id = entry.extmark_id or overlay.extmark_id
-    record_overlay_binding(overlay, entry.buffer_version, entry.layout_version, entry.display_range)
-
-    ::continue_binding::
   end
 
   return new_state, {}

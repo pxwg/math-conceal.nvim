@@ -4,8 +4,8 @@
 --- runs.  Atomic extmark resources live in extmark.lua; cursor transitions
 --- update those resources first and then reconcile line runs here.
 
-local state = require("math-conceal.image.state")
 local display = require("math-conceal.image.display")
+local state = require("math-conceal.image.state")
 
 local M = {}
 local adapter = {}

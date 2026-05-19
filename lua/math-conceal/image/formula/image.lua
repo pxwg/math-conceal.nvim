@@ -76,7 +76,12 @@ function M:upload(opts)
     return false
   end
 
-  require("math-conceal.image.extmark").create_image(self.page_path, self.image_id, self.natural_cols, self.natural_rows)
+  require("math-conceal.image.extmark").create_image(
+    self.page_path,
+    self.image_id,
+    self.natural_cols,
+    self.natural_rows
+  )
   self.sent_epoch = state.terminal_upload_epoch
   return true
 end

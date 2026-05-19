@@ -3,8 +3,8 @@
 --- (render_live_typst_preview).  Both paths share semantics.classify() and the
 --- same extmark/session infrastructure.
 
-local semantics_mod = require("math-conceal.image.semantics")
 local cursor_visibility = require("math-conceal.image.cursor-visibility")
+local semantics_mod = require("math-conceal.image.semantics")
 local state = require("math-conceal.image.state")
 local M = {}
 

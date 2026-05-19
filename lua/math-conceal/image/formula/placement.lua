@@ -240,8 +240,13 @@ function M:expand_preview(cursor_row, cursor_col, mode)
     return false
   end
 
-  local ok, preview_item, render_key =
-    require("math-conceal.image.plan").render_live_typst_preview_for_item(self.bufnr, item, cursor_row, cursor_col, mode)
+  local ok, preview_item, render_key = require("math-conceal.image.plan").render_live_typst_preview_for_item(
+    self.bufnr,
+    item,
+    cursor_row,
+    cursor_col,
+    mode
+  )
   if ok then
     self.preview_item = preview_item
     self.preview_render_key = render_key

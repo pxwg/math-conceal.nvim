@@ -2,9 +2,9 @@
 --- Owns image_id / extmark_id allocation, reuse, release, and index maintenance.
 --- Receives PlannedItem[] from render.lua (the planner) and produces AppliedItem[].
 
-local state = require("math-conceal.image.state")
-local resources = require("math-conceal.image.machine.resources")
 local cursor_visibility = require("math-conceal.image.cursor-visibility")
+local resources = require("math-conceal.image.machine.resources")
+local state = require("math-conceal.image.state")
 local M = {}
 
 --- @class PlannedItem

@@ -1,9 +1,9 @@
 --- Runtime boundary for the full-overlay state machine.
 --- Converts reducer effects into Neovim/session/extmark side effects.
 
+local cursor_visibility = require("math-conceal.image.cursor-visibility")
 local reducer = require("math-conceal.image.machine.reducer")
 local resources = require("math-conceal.image.machine.resources")
-local cursor_visibility = require("math-conceal.image.cursor-visibility")
 local state = require("math-conceal.image.state")
 local types = require("math-conceal.image.machine.types")
 
