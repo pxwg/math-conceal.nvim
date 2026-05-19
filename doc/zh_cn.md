@@ -10,18 +10,20 @@ https://github.com/user-attachments/assets/d78175a5-7462-40b6-be63-087fd100b97a
 
 https://github.com/user-attachments/assets/359fb62f-2031-4b5c-8d0b-0fe835fccd80
 
+### LaTeX Conceal
+
 <table style="width: 80%; margin: auto; text-align: center;">
   <tr>
     <td style="width: 50%;">
       <figure>
-        <img src="https://github.com/user-attachments/assets/51702428-640b-4b5e-8888-2a3f6354ad4c" alt="Latex 示例" style="width: 95%;">
-        <figcaption>LaTeX-前</figcaption>
+        <img src="https://github.com/user-attachments/assets/3e73c907-66f0-46cd-8b25-d842473a2e1a" alt="实验性 LaTeX 图片 Conceal" style="width: 95%;">
+        <figcaption>实验性 LaTeX 图片 Conceal</figcaption>
       </figure>
     </td>
     <td style="width: 50%;">
       <figure>
-        <img src="https://github.com/user-attachments/assets/affbcc24-df83-4a45-9f02-aeba891f7727" alt="LaTeX 示例" style="width: 99%;">
-        <figcaption>LaTeX-后</figcaption>
+        <img src="https://github.com/user-attachments/assets/affbcc24-df83-4a45-9f02-aeba891f7727" alt="稳定 LaTeX ASCII Conceal" style="width: 99%;">
+        <figcaption>稳定 LaTeX ASCII/Unicode 字符 Conceal</figcaption>
       </figure>
     </td>
   </tr>
