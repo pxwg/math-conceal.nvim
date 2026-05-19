@@ -3,11 +3,11 @@
 --- All display decisions come from semantics.display_kind.
 --- block_padding_cols = 终端显示留白（Neovim display 层，与 Typst page width 正交）
 
-local state = require("math-conceal.image.state")
 local cursor_visibility = require("math-conceal.image.cursor-visibility")
 local display = require("math-conceal.image.display")
 local kitty_codes = require("math-conceal.image.kitty-codes")
 local line_run = require("math-conceal.image.line-run")
+local state = require("math-conceal.image.state")
 local M = {}
 
 local is_tmux = vim.env.TMUX ~= nil

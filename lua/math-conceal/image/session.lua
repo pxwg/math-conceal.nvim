@@ -1018,38 +1018,34 @@ local function build_formula_service_spec(request, project_scope, prelude_chunks
   local generated_node_paths = {}
 
   for _, job in ipairs(request.jobs or {}) do
-    if job.is_stub or job.is_tombstone or job.overlay_id == nil then
-      goto continue_job
+    if not (job.is_stub or job.is_tombstone or job.overlay_id == nil) then
+      context_id = context_id or job.context_id or project_scope.project_scope_id
+      context_rev = context_rev or job.context_rev or 1
+
+      local slot_path = workspace_mod.slot_path(workspace, job.slot_id)
+      generated_slot_paths[job.slot_id] = slot_path
+      generated_node_paths[job.node_id] = formula_virtual_node_path(job.node_id)
+      local slot_text, slot_map = wrapper.build_slot_document(
+        job,
+        project_scope.buf_dir,
+        project_scope.source_root,
+        project_scope.effective_root,
+        prelude_chunks
+      )
+      if slot_map ~= nil then
+        slot_map.filename = vim.api.nvim_buf_get_name(job.bufnr)
+        formula_line_maps[job.node_id] = slot_map
+        formula_line_offsets[job.node_id] = context_line_offset
+      end
+
+      nodes[#nodes + 1] = {
+        node_id = job.node_id,
+        node_rev = job.node_rev or 1,
+        source_hash = job.source_text_hash or stable_hash(slot_text),
+        kind = job.node_type,
+        source = slot_text,
+      }
     end
-
-    context_id = context_id or job.context_id or project_scope.project_scope_id
-    context_rev = context_rev or job.context_rev or 1
-
-    local slot_path = workspace_mod.slot_path(workspace, job.slot_id)
-    generated_slot_paths[job.slot_id] = slot_path
-    generated_node_paths[job.node_id] = formula_virtual_node_path(job.node_id)
-    local slot_text, slot_map = wrapper.build_slot_document(
-      job,
-      project_scope.buf_dir,
-      project_scope.source_root,
-      project_scope.effective_root,
-      prelude_chunks
-    )
-    if slot_map ~= nil then
-      slot_map.filename = vim.api.nvim_buf_get_name(job.bufnr)
-      formula_line_maps[job.node_id] = slot_map
-      formula_line_offsets[job.node_id] = context_line_offset
-    end
-
-    nodes[#nodes + 1] = {
-      node_id = job.node_id,
-      node_rev = job.node_rev or 1,
-      source_hash = job.source_text_hash or stable_hash(slot_text),
-      kind = job.node_type,
-      source = slot_text,
-    }
-
-    ::continue_job::
   end
 
   context_id = context_id or project_scope.project_scope_id or ("ctx:" .. stable_hash(context_source))
@@ -1091,33 +1087,29 @@ local function build_latex_formula_service_spec(request, project_scope, config)
   local generated_node_paths = {}
 
   for _, job in ipairs(request.jobs or {}) do
-    if job.is_stub or job.is_tombstone or job.overlay_id == nil then
-      goto continue_job
+    if not (job.is_stub or job.is_tombstone or job.overlay_id == nil) then
+      context_id = context_id or job.context_id or project_scope.project_scope_id
+      context_rev = context_rev or job.context_rev or 1
+
+      local slot_path = workspace_mod.slot_path(workspace, job.slot_id)
+      generated_slot_paths[job.slot_id] = slot_path
+      generated_node_paths[job.node_id] = latex_formula_virtual_node_path(job.node_id)
+      formula_line_maps[job.node_id] = wrapper.build_formula_line_map(job, context_source)
+      formula_line_offsets[job.node_id] = 0
+
+      local source = job.source_str or job.source_text or job.str or ""
+      local backend_node_type = job.backend_node_type
+        or (job.semantics and job.semantics.backend_node_type)
+        or "inline_formula"
+
+      nodes[#nodes + 1] = {
+        node_id = job.node_id,
+        node_rev = job.node_rev or 1,
+        source_hash = job.source_text_hash or stable_hash(source),
+        kind = backend_node_type,
+        source = source,
+      }
     end
-
-    context_id = context_id or job.context_id or project_scope.project_scope_id
-    context_rev = context_rev or job.context_rev or 1
-
-    local slot_path = workspace_mod.slot_path(workspace, job.slot_id)
-    generated_slot_paths[job.slot_id] = slot_path
-    generated_node_paths[job.node_id] = latex_formula_virtual_node_path(job.node_id)
-    formula_line_maps[job.node_id] = wrapper.build_formula_line_map(job, context_source)
-    formula_line_offsets[job.node_id] = 0
-
-    local source = job.source_str or job.source_text or job.str or ""
-    local backend_node_type = job.backend_node_type
-      or (job.semantics and job.semantics.backend_node_type)
-      or "inline_formula"
-
-    nodes[#nodes + 1] = {
-      node_id = job.node_id,
-      node_rev = job.node_rev or 1,
-      source_hash = job.source_text_hash or stable_hash(source),
-      kind = backend_node_type,
-      source = source,
-    }
-
-    ::continue_job::
   end
 
   context_id = context_id or project_scope.project_scope_id or ("ctx:" .. stable_hash(context_source))
@@ -1396,14 +1388,12 @@ end
 --- @return boolean, string?
 local function validate_service_job_ranges(meta)
   for _, job in ipairs(meta.jobs or {}) do
-    if job.is_stub or job.overlay_id == nil then
-      goto continue_validate
+    if not (job.is_stub or job.overlay_id == nil) then
+      local expected_str = job.source_str or job.source_text or job.str
+      if expected_str ~= nil and range_to_string(job.bufnr, job.range) ~= expected_str then
+        return false, ("source range changed for %s"):format(tostring(job.overlay_id))
+      end
     end
-    local expected_str = job.source_str or job.source_text or job.str
-    if expected_str ~= nil and range_to_string(job.bufnr, job.range) ~= expected_str then
-      return false, ("source range changed for %s"):format(tostring(job.overlay_id))
-    end
-    ::continue_validate::
   end
   return true
 end
@@ -2072,7 +2062,10 @@ local function try_handle_formula_service_response(bufnr, service_kind, resp)
         return true
       end
       vim.schedule(function()
-        vim.notify("[math-conceal.image] LaTeX MiTeX fallback was not queued: " .. tostring(reason), vim.log.levels.WARN)
+        vim.notify(
+          "[math-conceal.image] LaTeX MiTeX fallback was not queued: " .. tostring(reason),
+          vim.log.levels.WARN
+        )
       end)
     end
     handle_formula_diagnostics(bufnr, meta, resp, job)
@@ -2340,43 +2333,45 @@ on_service_response = function(bufnr, service_kind, resp)
     local page = pages_by_request_index[page_index]
     local job = meta.jobs[page_index]
     if job ~= nil then
+      local should_dispatch = true
       -- Skip stub jobs — these are stable slots with no active overlay
       if job.is_stub or job.overlay_id == nil then
         skipped_cached = skipped_cached + 1
-        goto continue_page
+        should_dispatch = false
       end
 
       -- Skip re-dispatching for cached (unchanged) pages whose overlay is
       -- already visible — avoids redundant image uploads and extmark updates.
-      if page.cached then
+      if should_dispatch and page.cached then
         local ms = state.machine_state
         local overlay = ms and ms.overlays and ms.overlays[job.overlay_id]
         if overlay and overlay.status == "visible" and overlay.page_path == page.path then
           skipped_cached = skipped_cached + 1
-          goto continue_page
+          should_dispatch = false
         end
       end
 
-      local width_px = tonumber(page.width_px) or 1
-      local height_px = tonumber(page.height_px) or 1
-      batch_entries[#batch_entries + 1] = {
-        request_id = resp.request_id,
-        request_page_index = page_index,
-        overlay_id = job.overlay_id,
-        owner_node_id = job.node_id,
-        owner_bufnr = job.bufnr,
-        owner_project_scope_id = job.project_scope_id,
-        render_epoch = job.render_epoch,
-        buffer_version = job.buffer_version,
-        layout_version = job.layout_version,
-        page_path = page.path,
-        page_stamp = nil,
-        natural_cols = compute_natural_cols(width_px, height_px, job),
-        natural_rows = compute_natural_rows(width_px, height_px, job),
-        source_rows = job.range[3] - job.range[1] + 1,
-      }
-      dispatched = dispatched + 1
-      ::continue_page::
+      if should_dispatch then
+        local width_px = tonumber(page.width_px) or 1
+        local height_px = tonumber(page.height_px) or 1
+        batch_entries[#batch_entries + 1] = {
+          request_id = resp.request_id,
+          request_page_index = page_index,
+          overlay_id = job.overlay_id,
+          owner_node_id = job.node_id,
+          owner_bufnr = job.bufnr,
+          owner_project_scope_id = job.project_scope_id,
+          render_epoch = job.render_epoch,
+          buffer_version = job.buffer_version,
+          layout_version = job.layout_version,
+          page_path = page.path,
+          page_stamp = nil,
+          natural_cols = compute_natural_cols(width_px, height_px, job),
+          natural_rows = compute_natural_rows(width_px, height_px, job),
+          source_rows = job.range[3] - job.range[1] + 1,
+        }
+        dispatched = dispatched + 1
+      end
     end
   end
 
@@ -3608,7 +3603,10 @@ function M.render_preview_tail_via_service(bufnr, item)
     end
     if not ok then
       vim.schedule(function()
-        vim.notify("[math-conceal.image] failed to encode LaTeX preview request: " .. tostring(msg), vim.log.levels.ERROR)
+        vim.notify(
+          "[math-conceal.image] failed to encode LaTeX preview request: " .. tostring(msg),
+          vim.log.levels.ERROR
+        )
       end)
       return
     end
