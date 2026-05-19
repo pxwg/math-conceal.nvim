@@ -4,11 +4,11 @@
 
 Faster and More Precise [LaTeX](https://www.latex-project.org/) and [typst](https://github.com/typst/typst) conceal for [Neovim](https://github.com/neovim/neovim).
 
-### Typst Image Conceal
+### Typst Equation Conceal
 
 https://github.com/user-attachments/assets/d78175a5-7462-40b6-be63-087fd100b97a
 
-### Markdown Stream Image Conceal
+### Markdown Equation Conceal (Compatible with Stream Output)
 
 https://github.com/user-attachments/assets/359fb62f-2031-4b5c-8d0b-0fe835fccd80
 
@@ -118,7 +118,7 @@ return {
   "pxwg/math-conceal.nvim",
   event = "VeryLazy",
   main = "math-conceal",
-  build = "cargo build --release --manifest-path service/Cargo.toml", -- required for image conceal
+  build = "cargo build --release --manifest-path service/Cargo.toml", -- required for graphical equation conceal
   --- @type LaTeXConcealOptions
   opts = {
     conceal = {
@@ -131,22 +131,22 @@ return {
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
     image = {
-      enabled = false, -- set true to enable image conceal
+      enabled = false, -- set true to enable graphical equation conceal
       filetypes = { "typst", "markdown" },
     },
   },
 }
 ```
 
-## Image Conceal
+## Equation Conceal
 
-`math-conceal.nvim` can also render math as inline images using the renderer
+`math-conceal.nvim` can also render equations as terminal graphics using the renderer
 migrated from [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer),
 which is a fork of [PartyWumpus/typst-concealer](https://github.com/PartyWumpus/typst-concealer).
 This path uses kitty graphics protocol and works in terminals that support it,
 such as kitty and Ghostty.
 
-Image conceal supports Typst, Markdown math through
+Graphical equation conceal supports Typst, Markdown math through
 [MiTeX](https://github.com/mitex-rs/mitex), and experimental LaTeX rendering.
 
 Enable it from the same setup table:
@@ -174,7 +174,7 @@ Build the bundled Rust service after installing or updating:
 cargo build --release --manifest-path service/Cargo.toml
 ```
 
-Most advanced image options are passed through to the migrated renderer, including
+Most advanced renderer options are passed through to the migrated renderer, including
 `styling_type`, `live_preview_enabled`, `render_paths`, `get_root`, `get_inputs`,
 and `get_preamble_file`.
 
