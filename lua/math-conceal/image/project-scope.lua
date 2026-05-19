@@ -41,7 +41,7 @@ local function call_config_fn(fn, bufnr, buf_path, cwd, kind)
 end
 
 local function source_kind_for_bufnr(bufnr)
-  local ok, main = pcall(require, "typst-concealer")
+  local ok, main = pcall(require, "math-conceal.image")
   if ok and type(main.source_kind_for_bufnr) == "function" then
     return main.source_kind_for_bufnr(bufnr)
   end
@@ -123,7 +123,7 @@ local function resolve_latex_scope(bufnr, kind, main, config)
   local compiler_args = vim.deepcopy(latex_config.compiler_args or {})
   local compiler_args_signature = signature(compiler_args)
   local preamble_signature = signature({ preamble_kind, preamble_path, preamble_source })
-  local state = require("typst-concealer.state")
+  local state = require("math-conceal.image.state")
   local context_signature = signature({
     "latex-context-v1",
     kind or "",
@@ -166,9 +166,9 @@ end
 --- @param kind "full"
 --- @return ProjectScope
 function M.resolve(bufnr, kind)
-  local main = require("typst-concealer")
+  local main = require("math-conceal.image")
   local config = main.config or {}
-  local path_rewrite = require("typst-concealer.path-rewrite")
+  local path_rewrite = require("math-conceal.image.path-rewrite")
 
   if source_kind_for_bufnr(bufnr) == "latex" then
     return resolve_latex_scope(bufnr, kind, main, config)

@@ -1,4 +1,4 @@
---- Typst document wrapper construction for typst-concealer.
+--- Typst document wrapper construction for math-conceal.image.
 --- Builds the Typst source that wraps each snippet so it renders at the correct
 --- cell-grid dimensions.
 ---
@@ -9,7 +9,7 @@
 ---   M.make_inline_sizing_wrap(source_rows)     intrinsic-constraint wrapper
 ---   M.make_flow_block_wrap(bufnr)              flow-constraint wrapper
 ---                                              (page width = available cols, no terminal padding)
-local state = require("typst-concealer.state")
+local state = require("math-conceal.image.state")
 local M = {}
 
 --- @param s string
@@ -70,7 +70,7 @@ local function normalize_item_str(item)
 end
 
 local function mitex_import_line()
-  local config = require("typst-concealer").config or {}
+  local config = require("math-conceal.image").config or {}
   local package = config.mitex_package or "@preview/mitex:0.2.7"
   if package == "" then
     return ""
@@ -98,10 +98,10 @@ end
 --- @param preamble_include_line string|nil
 --- @return string
 function M.build_context_document(bufnr, buf_dir, source_root, effective_root, preamble_include_line)
-  local main = require("typst-concealer")
+  local main = require("math-conceal.image")
   local config = main.config
   local do_rewrite = buf_dir ~= nil and source_root ~= nil and effective_root ~= nil
-  local pr = do_rewrite and require("typst-concealer.path-rewrite") or nil
+  local pr = do_rewrite and require("math-conceal.image.path-rewrite") or nil
   local function maybe_rewrite(text)
     if pr == nil then
       return text
@@ -129,7 +129,7 @@ end
 --- @param bufnr integer
 --- @return number
 local function current_window_width_pt(bufnr)
-  local config = require("typst-concealer").config
+  local config = require("math-conceal.image").config
   local baseline_pt = config.math_baseline_pt or 11
   local pad_cols = config.block_padding_cols or 4
   local win_cols = get_win_cols(bufnr)
@@ -148,7 +148,7 @@ end
 --- @param source_rows integer
 --- @return string prefix, string suffix   both "" when cell size is unknown
 function M.make_inline_sizing_wrap(source_rows)
-  local config = require("typst-concealer").config
+  local config = require("math-conceal.image").config
   if state._cell_px_h and state._cell_px_w then
     local baseline_pt = config.math_baseline_pt
     local cell_w_pt = baseline_pt * (state._cell_px_w / state._cell_px_h)
@@ -207,7 +207,7 @@ end
 --- @param bufnr integer
 --- @return string prefix, string suffix
 function M.make_flow_block_wrap(bufnr)
-  local config = require("typst-concealer").config
+  local config = require("math-conceal.image").config
   local page_w_pt = current_window_width_pt(bufnr)
   local margin_pt = config.block_preview_margin_pt or 0
   return string.format(
@@ -249,7 +249,7 @@ function M.build_item_fragment(item, buf_dir, source_root, effective_root, prelu
   prelude_chunks = prelude_chunks or state.runtime_preludes
 
   local do_rewrite = buf_dir ~= nil and source_root ~= nil and effective_root ~= nil
-  local pr = do_rewrite and require("typst-concealer.path-rewrite") or nil
+  local pr = do_rewrite and require("math-conceal.image.path-rewrite") or nil
   local function maybe_rewrite(text)
     if pr == nil then
       return text
@@ -302,7 +302,7 @@ function M.build_slot_document(item, buf_dir, source_root, effective_root, prelu
   prelude_chunks = prelude_chunks or state.runtime_preludes
 
   local do_rewrite = buf_dir ~= nil and source_root ~= nil and effective_root ~= nil
-  local pr = do_rewrite and require("typst-concealer.path-rewrite") or nil
+  local pr = do_rewrite and require("math-conceal.image.path-rewrite") or nil
   local function maybe_rewrite(text)
     if pr == nil then
       return text
@@ -387,7 +387,7 @@ function M.build_batch_document(
   build_line_map,
   cache
 )
-  local main = require("typst-concealer")
+  local main = require("math-conceal.image")
   local config = main.config
   local doc = {}
   local line_map = build_line_map == false and nil or {}
@@ -397,7 +397,7 @@ function M.build_batch_document(
   prelude_chunks = prelude_chunks or state.runtime_preludes
 
   local do_rewrite = buf_dir ~= nil and source_root ~= nil and effective_root ~= nil
-  local pr = do_rewrite and require("typst-concealer.path-rewrite") or nil
+  local pr = do_rewrite and require("math-conceal.image.path-rewrite") or nil
   local function maybe_rewrite(text)
     if pr == nil then
       return text

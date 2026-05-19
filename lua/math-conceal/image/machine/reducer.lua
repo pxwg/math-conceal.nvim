@@ -1,6 +1,6 @@
 --- Pure reducer for the full-overlay state machine.
 
-local types = require("typst-concealer.machine.types")
+local types = require("math-conceal.image.machine.types")
 
 local M = {}
 

@@ -1,11 +1,11 @@
 --- Runtime boundary for the full-overlay state machine.
 --- Converts reducer effects into Neovim/session/extmark side effects.
 
-local reducer = require("typst-concealer.machine.reducer")
-local resources = require("typst-concealer.machine.resources")
-local cursor_visibility = require("typst-concealer.cursor-visibility")
-local state = require("typst-concealer.state")
-local types = require("typst-concealer.machine.types")
+local reducer = require("math-conceal.image.machine.reducer")
+local resources = require("math-conceal.image.machine.resources")
+local cursor_visibility = require("math-conceal.image.cursor-visibility")
+local state = require("math-conceal.image.state")
+local types = require("math-conceal.image.machine.types")
 
 local M = {}
 
@@ -79,14 +79,14 @@ local function cursor_line_range(bufnr)
 end
 
 local function sync_cursor_ui_now(bufnr)
-  local ok_main, main = pcall(require, "typst-concealer")
+  local ok_main, main = pcall(require, "math-conceal.image")
   if ok_main and formula_cursor_ui_can_batch(bufnr, main) then
     local lo, hi = cursor_line_range(bufnr)
     local defer_opts = { defer_line_run_reconcile = true }
     M.sync_hover(bufnr, defer_opts)
     M.render_live_preview(bufnr, defer_opts)
     if lo ~= nil then
-      require("typst-concealer.extmark").reconcile_cursor_line_runs(bufnr, lo, hi)
+      require("math-conceal.image.extmark").reconcile_cursor_line_runs(bufnr, lo, hi)
     end
     return
   end
@@ -141,7 +141,7 @@ end
 
 function M.reconcile_visible_overlay_bindings(bufnr)
   if state.formula_managers ~= nil and state.formula_managers[bufnr] ~= nil then
-    return require("typst-concealer.formula.manager").reconcile_visible_overlay_bindings(bufnr)
+    return require("math-conceal.image.formula.manager").reconcile_visible_overlay_bindings(bufnr)
   end
 
   local machine_state = ensure_machine_state()
@@ -247,7 +247,7 @@ function M.refresh_visible_overlays(bufnr, opts)
     return 0
   end
 
-  return require("typst-concealer.formula.manager").update_presentation_all(bufnr, opts)
+  return require("math-conceal.image.formula.manager").update_presentation_all(bufnr, opts)
 end
 
 function M.schedule_visible_overlay_refresh(bufnr, opts)
@@ -316,7 +316,7 @@ function M.accept_preview_page_update(update, opts)
     return false
   end
   if opts.apply ~= false then
-    require("typst-concealer.apply").accept_page_update(update)
+    require("math-conceal.image.apply").accept_page_update(update)
   end
   preview.status = "ready"
   return true
@@ -397,7 +397,7 @@ end
 function M.rebuild_buffer_read_model(machine_state, bufnr)
   machine_state = machine_state or ensure_machine_state()
   if state.formula_managers ~= nil and state.formula_managers[bufnr] ~= nil then
-    require("typst-concealer.formula.manager").get(bufnr):sync_read_model()
+    require("math-conceal.image.formula.manager").get(bufnr):sync_read_model()
     return
   end
   resources.rebuild_indices(machine_state, bufnr, M.build_compat_item)
@@ -425,7 +425,7 @@ function M.reset_buffer(bufnr)
     resources.release_overlay_resources(bufnr, entry.image_id, entry.extmark_id)
     machine_state.overlays[entry.overlay_id] = nil
     if entry.page_path ~= nil then
-      require("typst-concealer.session")._safe_unlink_service_artifact(entry.page_path)
+      require("math-conceal.image.session")._safe_unlink_service_artifact(entry.page_path)
     end
   end
   machine_state.buffers[bufnr] = nil
@@ -441,8 +441,8 @@ function M.reset_buffer(bufnr)
   if state.active_preview_service_requests then
     state.active_preview_service_requests[bufnr] = nil
   end
-  require("typst-concealer.formula.manager").drop(bufnr)
-  local session = require("typst-concealer.session")
+  require("math-conceal.image.formula.manager").drop(bufnr)
+  local session = require("math-conceal.image.session")
   if type(session._cleanup_service_workspace_for_buf) == "function" then
     session._cleanup_service_workspace_for_buf(bufnr)
   end
@@ -592,20 +592,20 @@ local function run_request_full_render(effect)
   if #request.jobs == 0 then
     return
   end
-  local session = require("typst-concealer.session")
+  local session = require("math-conceal.image.session")
   session.render_request_via_service(request.bufnr, request)
 end
 
 local function run_request_formula_render_batch(effect)
   local source_request = effect.request or {}
   local request =
-    require("typst-concealer.formula.manager").get(source_request.bufnr):build_render_batch_request(source_request)
+    require("math-conceal.image.formula.manager").get(source_request.bufnr):build_render_batch_request(source_request)
 
   if #request.jobs == 0 then
     return
   end
 
-  local session = require("typst-concealer.session")
+  local session = require("math-conceal.image.session")
   if type(session.render_formula_batch_via_service) == "function" then
     session.render_formula_batch_via_service(request.bufnr, request)
   end
@@ -613,7 +613,7 @@ end
 
 local function run_commit_overlay(effect, batch_mode)
   local placement =
-    require("typst-concealer.formula.manager").get(effect.bufnr):placement_for_overlay(effect.overlay_id)
+    require("math-conceal.image.formula.manager").get(effect.bufnr):placement_for_overlay(effect.overlay_id)
   if placement ~= nil then
     return placement:commit_render(effect, batch_mode)
   end
@@ -622,7 +622,7 @@ end
 
 local function run_bind_overlay(effect)
   local placement =
-    require("typst-concealer.formula.manager").get(effect.bufnr):placement_for_overlay(effect.overlay_id)
+    require("math-conceal.image.formula.manager").get(effect.bufnr):placement_for_overlay(effect.overlay_id)
   if placement ~= nil then
     return placement:bind(effect)
   end
@@ -638,7 +638,7 @@ local function run_retire_overlay(effect)
 
   local bufnr = overlay.owner_bufnr
   local page_path = overlay.page_path
-  local manager = require("typst-concealer.formula.manager").get(bufnr)
+  local manager = require("math-conceal.image.formula.manager").get(bufnr)
   local placement = manager:placement_for_overlay(effect.overlay_id)
   if placement ~= nil then
     placement:close({ overlay_id = effect.overlay_id })
@@ -652,13 +652,13 @@ local function run_retire_overlay(effect)
   -- pixel hash), so unconditional deletion would destroy files still needed
   -- by visible or rendering overlays.
   if page_path then
-    require("typst-concealer.session")._safe_unlink_service_artifact(page_path)
+    require("math-conceal.image.session")._safe_unlink_service_artifact(page_path)
   end
   manager:sync_from_machine()
 end
 
 local function run_rerender_buffer(effect)
-  require("typst-concealer.plan").render_buf(effect.bufnr)
+  require("math-conceal.image.plan").render_buf(effect.bufnr)
 end
 
 local function run_abandon_request(effect)
@@ -710,7 +710,7 @@ function M.run_effects(effects)
     end
   end
 
-  local extmark = require("typst-concealer.extmark")
+  local extmark = require("math-conceal.image.extmark")
 
   for _, effect in ipairs(other_effects) do
     if effect.kind == "ensure_overlay_placeholder" then
@@ -746,7 +746,7 @@ function M.run_effects(effects)
         entries = batch_entries,
       })
       for bufnr in pairs(affected_buffers) do
-        require("typst-concealer.formula.manager").get(bufnr):sync_from_machine()
+        require("math-conceal.image.formula.manager").get(bufnr):sync_from_machine()
         M.invalidate_hover(bufnr)
       end
     end
@@ -769,7 +769,7 @@ function M.run_effects(effects)
         entries = batch_entries,
       })
       for bufnr in pairs(affected_buffers) do
-        require("typst-concealer.formula.manager").get(bufnr):sync_from_machine()
+        require("math-conceal.image.formula.manager").get(bufnr):sync_from_machine()
         M.invalidate_hover(bufnr)
         schedule_post_commit_ui(bufnr)
       end
@@ -788,11 +788,11 @@ function M.dispatch(event, opts)
 end
 
 function M.render_buf(bufnr)
-  require("typst-concealer.plan").render_buf(bufnr)
+  require("math-conceal.image.plan").render_buf(bufnr)
 end
 
 function M.schedule_full_render(bufnr, opts)
-  require("typst-concealer.plan").schedule_full_render(bufnr, opts)
+  require("math-conceal.image.plan").schedule_full_render(bufnr, opts)
 end
 
 function M.schedule_formula_renders(bufnr, opts)
@@ -807,31 +807,31 @@ end
 
 function M.render_live_preview(bufnr, opts)
   opts = opts or {}
-  local ok_main, main = pcall(require, "typst-concealer")
+  local ok_main, main = pcall(require, "math-conceal.image")
   if ok_main and uses_formula_manager(bufnr, main) then
-    require("typst-concealer.formula.manager").sync_cursor_preview(bufnr, opts)
+    require("math-conceal.image.formula.manager").sync_cursor_preview(bufnr, opts)
     return
   end
-  require("typst-concealer.plan").render_live_typst_preview(bufnr)
+  require("math-conceal.image.plan").render_live_typst_preview(bufnr)
 end
 
 function M.clear_live_preview(bufnr, opts)
   M.clear_preview_request(bufnr)
-  require("typst-concealer.plan").clear_live_typst_preview(bufnr, opts)
+  require("math-conceal.image.plan").clear_live_typst_preview(bufnr, opts)
 end
 
 function M.sync_hover(bufnr, opts)
   opts = opts or {}
-  local ok_main, main = pcall(require, "typst-concealer")
+  local ok_main, main = pcall(require, "math-conceal.image")
   if ok_main and uses_formula_manager(bufnr, main) then
-    require("typst-concealer.formula.manager").sync_cursor_conceal(bufnr, opts)
+    require("math-conceal.image.formula.manager").sync_cursor_conceal(bufnr, opts)
     return
   end
-  require("typst-concealer.plan").hide_extmarks_at_cursor(bufnr)
+  require("math-conceal.image.plan").hide_extmarks_at_cursor(bufnr)
 end
 
 function M.sync_cursor_ui(bufnr)
-  local throttle = require("typst-concealer").config.cursor_hover_throttle_ms
+  local throttle = require("math-conceal.image").config.cursor_hover_throttle_ms
   if throttle <= 0 then
     sync_cursor_ui_now(bufnr)
     return
@@ -852,12 +852,12 @@ function M.sync_cursor_ui(bufnr)
 end
 
 function M.schedule_live_preview_sync(bufnr, opts)
-  require("typst-concealer.plan").schedule_live_preview_sync(bufnr, opts)
+  require("math-conceal.image.plan").schedule_live_preview_sync(bufnr, opts)
 end
 
 function M.render_preview_tail(bufnr, item)
   M.prepare_preview_request(bufnr, item)
-  local session = require("typst-concealer.session")
+  local session = require("math-conceal.image.session")
   session.render_preview_tail_via_service(bufnr, item)
 end
 

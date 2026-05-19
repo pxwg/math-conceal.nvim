@@ -4,7 +4,7 @@
 --- Placements keep extmarks and source ranges; this object tracks whether the
 --- backing PNG has been sent to the terminal for the current terminal epoch.
 
-local state = require("typst-concealer.state")
+local state = require("math-conceal.image.state")
 
 local M = {}
 M.__index = M
@@ -76,7 +76,7 @@ function M:upload(opts)
     return false
   end
 
-  require("typst-concealer.extmark").create_image(self.page_path, self.image_id, self.natural_cols, self.natural_rows)
+  require("math-conceal.image.extmark").create_image(self.page_path, self.image_id, self.natural_cols, self.natural_rows)
   self.sent_epoch = state.terminal_upload_epoch
   return true
 end
@@ -85,7 +85,7 @@ function M:conceal(bufnr, source_rows, opts)
   if not self:is_ready() then
     return false
   end
-  require("typst-concealer.extmark").conceal_for_image_id(
+  require("math-conceal.image.extmark").conceal_for_image_id(
     bufnr,
     self.image_id,
     self.natural_cols,

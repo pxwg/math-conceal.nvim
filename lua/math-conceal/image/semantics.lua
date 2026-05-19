@@ -1,4 +1,4 @@
---- Unified render semantics classification for typst-concealer.
+--- Unified render semantics classification for math-conceal.image.
 --- Replaces the old is_block_formula() + classify_layout_kind() pair with a single
 --- orthogonal structure that decouples Typst wrapper choice from Neovim display strategy.
 local M = {}

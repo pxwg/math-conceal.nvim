@@ -2,7 +2,7 @@
 --- This is the **single entry point** for writing to the three index tables:
 ---   state.image_ids_in_use, state.image_id_to_extmark, state.item_by_image_id
 
-local state = require("typst-concealer.state")
+local state = require("math-conceal.image.state")
 
 local M = {}
 
@@ -18,7 +18,7 @@ function M.allocate_image_id(bufnr)
     end
   end
   print(
-    "[typst-concealer] >65536 image ids in use, overflowing. "
+    "[math-conceal.image] >65536 image ids in use, overflowing. "
       .. "This is probably a bug, you're looking at a very long document or a lot of documents.\n"
       .. "Open an issue if you see this, the cap can be increased if someone actually needs it.\n"
   )
@@ -34,7 +34,7 @@ end
 --- @param semantics NodeSemantics
 --- @return integer
 function M.place_overlay_extmark(bufnr, image_id, range, extmark_id, concealing, semantics)
-  return require("typst-concealer.extmark").place_render_extmark(
+  return require("math-conceal.image.extmark").place_render_extmark(
     bufnr,
     image_id,
     range,
@@ -50,7 +50,7 @@ function M.release_image_id(image_id)
   if image_id == nil then
     return
   end
-  require("typst-concealer.extmark").clear_image_only(image_id)
+  require("math-conceal.image.extmark").clear_image_only(image_id)
   state.image_id_to_extmark[image_id] = nil
   state.item_by_image_id[image_id] = nil
   state.image_ids_in_use[image_id] = nil

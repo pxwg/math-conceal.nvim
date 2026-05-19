@@ -19,7 +19,7 @@ local DEFAULT_PROGRESSIVE_STEP = 120
 local DEFAULT_PROGRESSIVE_DELAY_MS = 80
 
 local function source_kind_for_bufnr(bufnr)
-  local ok, main = pcall(require, "typst-concealer")
+  local ok, main = pcall(require, "math-conceal.image")
   if ok and type(main.source_kind_for_bufnr) == "function" then
     return main.source_kind_for_bufnr(bufnr)
   end
@@ -40,7 +40,7 @@ local function adapter_for_source(source_kind)
   if type(source_kind) ~= "string" or source_kind == "" then
     return nil
   end
-  local ok, adapter = pcall(require, "typst-concealer.source-adapters." .. source_kind)
+  local ok, adapter = pcall(require, "math-conceal.image.source-adapters." .. source_kind)
   if ok and type(adapter) == "table" then
     return adapter
   end
@@ -302,7 +302,7 @@ function M.resolve_render_plan(bufnr, opts)
   local line_count = vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_line_count(bufnr) or 0
   local priority_viewport = M.visible(bufnr, { margin = 0 })
   local viewport_key = M.key(priority_viewport)
-  local brs = require("typst-concealer.state").buffer_render_state[bufnr] or {}
+  local brs = require("math-conceal.image.state").buffer_render_state[bufnr] or {}
   local prev_state = brs.render_coverage_state or {}
   local prev_ranges = copy_ranges(prev_state.ranges or (brs.render_coverage and brs.render_coverage.ranges) or {})
 
@@ -348,7 +348,7 @@ function M.changed_since_last_render(bufnr)
 
   local viewport = M.current_viewport(bufnr)
   local key = M.key(viewport)
-  local brs = require("typst-concealer.state").buffer_render_state[bufnr]
+  local brs = require("math-conceal.image.state").buffer_render_state[bufnr]
   return brs == nil or brs.render_viewport_key ~= key or brs.render_coverage_complete ~= true, viewport, key
 end
 

@@ -1,11 +1,11 @@
----Display-stream reconstruction for rows redrawn by typst-concealer.
+---Display-stream reconstruction for rows redrawn by math-conceal.image.
 ---
 ---The compositor cannot ask Neovim for a pre-layout "final line", so this
 ---module reconstructs the parts we can own: native syntax/tree-sitter/semantic
 ---highlights, persistent extmark highlights, syntax conceal, extmark conceal,
 ---and inline virtual text.  Callers can then inject image atoms before wrapping.
 
-local kitty_codes = require("typst-concealer.kitty-codes")
+local kitty_codes = require("math-conceal.image.kitty-codes")
 local M = {}
 
 local function buf_win(bufnr)
