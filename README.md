@@ -112,6 +112,7 @@ return {
   "pxwg/math-conceal.nvim",
   event = "VeryLazy",
   main = "math-conceal",
+  build = "cargo build --release --manifest-path service/Cargo.toml", -- required for image conceal
   --- @type LaTeXConcealOptions
   opts = {
     conceal = {
@@ -123,9 +124,43 @@ return {
       "phy",
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+    image = {
+      enabled = false, -- set true to enable Typst image conceal
+      filetypes = { "typst" },
+    },
   },
 }
 ```
+
+## Typst Image Conceal
+
+`math-conceal.nvim` can also render Typst math/code as inline images using the
+migrated `typst-concealer` pipeline. This path uses kitty graphics protocol and
+works in terminals that support it, such as kitty and Ghostty.
+
+Enable it from the same setup table:
+
+```lua
+require("math-conceal").setup({
+  image = {
+    enabled = true,
+    filetypes = { "typst" },
+    -- Optional. When omitted, math-conceal first tries the bundled release binary:
+    -- service/target/release/typst-concealer-service
+    service_binary = "typst-concealer-service",
+  },
+})
+```
+
+Build the bundled Rust service after installing or updating:
+
+```sh
+cargo build --release --manifest-path service/Cargo.toml
+```
+
+Most advanced image options are passed through to the migrated renderer, including
+`styling_type`, `live_preview_enabled`, `render_paths`, `get_root`, `get_inputs`,
+and `get_preamble_file`.
 
 ## To-do
 

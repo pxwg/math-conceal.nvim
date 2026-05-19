@@ -75,6 +75,7 @@ return {
   "pxwg/math-conceal.nvim",
   event = "VeryLazy",
   main = "math-conceal",
+  build = "cargo build --release --manifest-path service/Cargo.toml", -- 图片隐藏需要
   --- @type LaTeXConcealOptions
   opts = {
     conceal = {
@@ -86,9 +87,39 @@ return {
       "phy",
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+    image = {
+      enabled = false, -- 改为 true 以启用 Typst 图片隐藏
+      filetypes = { "typst" },
+    },
   },
 }
 ```
+
+## Typst 图片隐藏
+
+本插件可以通过迁移进来的 `typst-concealer` 渲染管线，将 Typst 数学公式/代码块渲染为终端内联图片。该功能依赖 kitty graphics protocol，适用于 kitty、Ghostty 等兼容终端。
+
+统一配置入口如下：
+
+```lua
+require("math-conceal").setup({
+  image = {
+    enabled = true,
+    filetypes = { "typst" },
+    -- 可选；未设置时会优先查找当前插件内的 release 二进制：
+    -- service/target/release/typst-concealer-service
+    service_binary = "typst-concealer-service",
+  },
+})
+```
+
+安装或更新后需要构建 Rust 服务：
+
+```sh
+cargo build --release --manifest-path service/Cargo.toml
+```
+
+`styling_type`、`live_preview_enabled`、`render_paths`、`get_root`、`get_inputs`、`get_preamble_file` 等高级选项会透传给图片渲染管线。
 
 ## 待办事项
 
