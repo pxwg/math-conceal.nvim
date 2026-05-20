@@ -136,7 +136,7 @@ end
 --- @field get_root?              fun(bufnr: integer, path: string, cwd: string, kind: "full"): string|nil
 ---                                     Return the Typst root base passed to `--root` and used to interpret rooted paths
 ---                                     like `/fig/a.png`. Must be an absolute filesystem path. `nil` falls back to the
----                                     current working directory, then to the detected project root.
+---                                     detected project root, then to the buffer directory/current working directory.
 --- @field get_inputs?            fun(bufnr: integer, path: string, cwd: string, kind: "full"): string[]|nil
 ---                                     Return extra `--input` values, e.g. `{"focus=123", "preview=true"}`. `nil`/`{}` appends nothing.
 --- @field get_preamble_file?     fun(bufnr: integer, path: string, cwd: string, kind: "full"): string|nil

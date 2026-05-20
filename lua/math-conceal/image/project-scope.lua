@@ -26,7 +26,7 @@ local function signature(parts)
 end
 
 local function resolve_root_base(configured_root, cwd, project_root, buf_dir)
-  return normalize(configured_root) or normalize(cwd) or normalize(project_root) or normalize(buf_dir)
+  return normalize(configured_root) or normalize(project_root) or normalize(buf_dir) or normalize(cwd)
 end
 
 local function call_config_fn(fn, bufnr, buf_path, cwd, kind)
