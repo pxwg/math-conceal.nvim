@@ -356,7 +356,8 @@ Restrict rendering by path:
 `image.get_root(bufnr, path, cwd, kind)`~
         Returns the Typst root directory passed to the compiler service. Must be
         an absolute directory. Returning nil falls back to automatic root
-        detection.
+        detection from the buffer path (`typst.toml`, VCS markers), then the
+        buffer directory/current working directory.
 
                                                       *math-conceal-image.get_inputs*
 `image.get_inputs(bufnr, path, cwd, kind)`~

@@ -80,7 +80,7 @@ function M.common_ancestor(dir1, dir2)
   return #shared > 0 and ("/" .. table.concat(shared, "/")) or "/"
 end
 
---- Walk upward from buf_dir to find the nearest directory containing typst.toml.
+--- Walk upward from buf_dir to find the nearest Typst/project root marker.
 --- Falls back to buf_dir if none is found.
 --- @param buf_dir string
 --- @return string
@@ -90,9 +90,11 @@ function M.get_project_root(buf_dir)
   end
   local dir = buf_dir
   while true do
-    if vim.uv.fs_stat(dir .. "/typst.toml") ~= nil then
-      project_root_cache[buf_dir] = dir
-      return dir
+    for _, marker in ipairs({ "typst.toml", ".git", ".jj", ".hg" }) do
+      if vim.uv.fs_stat(dir .. "/" .. marker) ~= nil then
+        project_root_cache[buf_dir] = dir
+        return dir
+      end
     end
     local parent = vim.fn.fnamemodify(dir, ":h")
     if parent == dir then
