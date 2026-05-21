@@ -883,7 +883,7 @@ function M.setup(cfg)
     end,
   })
 
-  vim.api.nvim_create_autocmd("VimResized", {
+  vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
     group = augroup,
     desc = "refresh cell pixel size on terminal resize",
     callback = handle_vim_resized,
