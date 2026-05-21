@@ -609,13 +609,11 @@ function M.unconceal_extmark(bufnr, extmark_id, opts)
   local mm = bs.multiline_marks[extmark_id]
   if mm ~= nil then
     if mm.is_block_carrier then
-      local start_row = mm.line_run_start_row or source_start_row
-      local end_row = mm.line_run_end_row or source_end_row or start_row
+      local start_row = source_start_row
+      local end_row = source_end_row or start_row
       if mm.line_run_id ~= nil then
         line_run.clear(bufnr, mm.line_run_id)
         mm.line_run_display_lines = nil
-        mm.line_run_start_row = nil
-        mm.line_run_end_row = nil
         if not defer_line_run_reconcile then
           line_run.refresh_around_range(bufnr, start_row, end_row, {
             anchor_rows = line_run.row_set(start_row, end_row),
@@ -729,6 +727,7 @@ function M.update_extmark_text(bufnr, extmark_id, virt_text_data, skip_hide_chec
   local mm = bs.multiline_marks[extmark_id]
   if mm and mm.is_block_carrier then
     -- Top-carrier atomic model: one ns_id2 carrier owns the visible display.
+    local start_row = row
     if mm.line_run_id ~= nil then
       line_run.clear(bufnr, mm.line_run_id)
     elseif mm.carrier_id then
@@ -742,10 +741,8 @@ function M.update_extmark_text(bufnr, extmark_id, virt_text_data, skip_hide_chec
 
     local display_lines = normalize_virt_text_lines(virt_text_data)
     mm.line_run_display_lines = display_lines
-    mm.line_run_start_row = row
-    mm.line_run_end_row = mark_opts.end_row
     if update_opts.defer_line_run_reconcile ~= true then
-      line_run.refresh_for_row(bufnr, row)
+      line_run.refresh_for_row(bufnr, start_row)
     end
     return
   else
@@ -771,7 +768,6 @@ function M.update_extmark_text(bufnr, extmark_id, virt_text_data, skip_hide_chec
 
       local lines = vim.api.nvim_buf_get_lines(bufnr, row, mark_opts.end_row + 1, false)
       local sub_ids = {}
-      local rows = {}
       for i = 1, height do
         local source_row = row + i - 1
         local conceal = nil
@@ -793,15 +789,11 @@ function M.update_extmark_text(bufnr, extmark_id, virt_text_data, skip_hide_chec
           end_row = row + i - 1,
         })
         sub_ids[#sub_ids + 1] = new_id
-        rows[source_row] = true
         bs.line_run_by_row[source_row] = run_id
       end
 
       bs.line_run_marks[run_id] = {
         mode = "row_overlay",
-        start_row = row,
-        end_row = mark_opts.end_row,
-        rows = rows,
         sub_ids = sub_ids,
         extmark_ids = {
           [extmark_id] = true,

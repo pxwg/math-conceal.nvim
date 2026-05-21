@@ -81,6 +81,72 @@ local function extmark_row(bufnr, ns_id, extmark_id)
   return mark[1]
 end
 
+local function extmark_range(bufnr, ns_id, extmark_id)
+  if type(extmark_id) ~= "number" then
+    return nil
+  end
+  local ok, mark = pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, ns_id, extmark_id, { details = true })
+  if not ok or mark == nil or #mark == 0 then
+    return nil
+  end
+  local details = mark[3] or {}
+  if details.invalid then
+    return nil
+  end
+  return {
+    start_row = mark[1],
+    end_row = details.end_row or mark[1],
+    start_col = mark[2],
+    end_col = details.end_col or mark[2],
+  }
+end
+
+local function add_range(geo, range)
+  if range == nil then
+    return
+  end
+  geo.start_row = geo.start_row == nil and range.start_row or math.min(geo.start_row, range.start_row)
+  geo.end_row = geo.end_row == nil and range.end_row or math.max(geo.end_row, range.end_row)
+  for row = range.start_row, range.end_row do
+    geo.rows[row] = true
+  end
+end
+
+local function line_run_geometry(bufnr, run)
+  if run == nil then
+    return nil
+  end
+
+  local geo = {
+    start_row = nil,
+    end_row = nil,
+    rows = {},
+  }
+
+  for extmark_id in pairs(run.extmark_ids or run.block_extmark_ids or {}) do
+    add_range(geo, extmark_range(bufnr, state.ns_id, extmark_id))
+  end
+
+  for _, conceal_id in pairs(run.conceal_ids or {}) do
+    local row = extmark_row(bufnr, state.ns_id2, conceal_id)
+    if row ~= nil then
+      add_range(geo, { start_row = row, end_row = row })
+    end
+  end
+
+  for _, sub_id in pairs(run.sub_ids or {}) do
+    local row = extmark_row(bufnr, state.ns_id2, sub_id)
+    if row ~= nil then
+      add_range(geo, { start_row = row, end_row = row })
+    end
+  end
+
+  if geo.start_row == nil or geo.end_row == nil then
+    return nil
+  end
+  return geo
+end
+
 local function row_in_range(row, start_row, end_row)
   if type(row) ~= "number" then
     return false
@@ -106,7 +172,7 @@ function M.row_set(start_row, end_row)
 end
 
 local function inline_line_mark_in_range(bufnr, row, mark, start_row, end_row)
-  if row_in_range(row, start_row, end_row) or row_in_range(mark.anchor_row, start_row, end_row) then
+  if row_in_range(row, start_row, end_row) then
     return true
   end
   if row_in_range(extmark_row(bufnr, state.ns_id2, mark.carrier_id), start_row, end_row) then
@@ -127,11 +193,12 @@ function M.clear(bufnr, run_id)
   if run.carrier_id ~= nil then
     pcall(vim.api.nvim_buf_del_extmark, bufnr, state.ns_id2, run.carrier_id)
   end
+  local geo = line_run_geometry(bufnr, run)
   for _, conceal_id in pairs(run.conceal_ids or {}) do
     pcall(vim.api.nvim_buf_del_extmark, bufnr, state.ns_id2, conceal_id)
   end
 
-  for row in pairs(run.rows or {}) do
+  for row in pairs(geo and geo.rows or {}) do
     if bs.inline_line_marks and bs.inline_line_marks[row] and bs.inline_line_marks[row].line_run_id == run_id then
       bs.inline_line_marks[row] = nil
     end
@@ -358,10 +425,9 @@ local function line_run_block_for_row(bufnr, row, opts)
       and type(mm.line_run_display_lines) == "table"
       and not extmark_suppressed(bufnr, extmark_id, opts)
     then
-      local start_row = mm.line_run_start_row or extmark_row(bufnr, state.ns_id, extmark_id)
-      local end_row = mm.line_run_end_row or start_row
-      if start_row ~= nil and row >= start_row and row <= end_row then
-        return item, extmark_id, mm, row == start_row
+      local range = extmark_range(bufnr, state.ns_id, extmark_id)
+      if range ~= nil and row >= range.start_row and row <= range.end_row then
+        return item, extmark_id, mm, row == range.start_row
       end
     end
   end
@@ -425,7 +491,8 @@ local function clear_line_runs_in_range(bufnr, start_row, end_row)
   local bs = state.get_buf_state(bufnr)
   local run_ids = {}
   for run_id, run in pairs(bs.line_run_marks or {}) do
-    if not (run.end_row < start_row or run.start_row > end_row) then
+    local geo = line_run_geometry(bufnr, run)
+    if geo ~= nil and not (geo.end_row < start_row or geo.start_row > end_row) then
       run_ids[run_id] = true
     end
   end
@@ -576,25 +643,15 @@ function M.refresh_for_row(bufnr, row, opts)
     bs.line_run_by_row[run_row] = run_id
   end
 
-  local rows = {}
-  for run_row = start_row, end_row do
-    rows[run_row] = true
-  end
-
   bs.line_run_marks[run_id] = {
-    start_row = start_row,
-    end_row = end_row,
-    anchor_row = anchor_row,
     carrier_id = carrier_id,
     conceal_ids = conceal_ids,
-    rows = rows,
     extmark_ids = block_extmark_ids,
     block_extmark_ids = block_extmark_ids,
   }
 
   for run_row in pairs(inline_rows) do
     bs.inline_line_marks[run_row] = {
-      anchor_row = anchor_row,
       carrier_id = carrier_id,
       conceal_id = conceal_ids[run_row],
       line_run_id = run_id,
@@ -606,10 +663,9 @@ function M.refresh_for_row(bufnr, row, opts)
     if mm then
       mm.carrier_id = carrier_id
       mm.tail_ids = {}
-      local start_row_for_extmark = mm.line_run_start_row or extmark_row(bufnr, state.ns_id, extmark_id)
-      local end_row_for_extmark = mm.line_run_end_row or start_row_for_extmark
-      if start_row_for_extmark ~= nil and end_row_for_extmark ~= nil then
-        for run_row = start_row_for_extmark, end_row_for_extmark do
+      local range = extmark_range(bufnr, state.ns_id, extmark_id)
+      if range ~= nil then
+        for run_row = range.start_row, range.end_row do
           if conceal_ids[run_row] ~= nil then
             mm.tail_ids[#mm.tail_ids + 1] = conceal_ids[run_row]
           end
