@@ -33,7 +33,7 @@ source = {
   dir = '$repo_name-' .. '$archive_dir_suffix',
 }
 
-if modrev == 'scm' or modrev == 'dev' then
+if (modrev == 'scm' or modrev == 'dev') and git_ref:sub(1, 1) == '$' then
   source = {
     url = repo_url:gsub('https', 'git')
   }
