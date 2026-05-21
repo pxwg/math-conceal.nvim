@@ -146,11 +146,64 @@ local function collect_top_level_typst_units(root, match_index, start_row, end_r
   return units
 end
 
+local function typst_unit_key(unit)
+  local range = unit and unit.range
+  if range == nil then
+    return nil
+  end
+  return table.concat({ "typst", unit.node_type or "", range[1], range[2], range[3], range[4] }, ":")
+end
+
+local function collect_nested_typst_math_entries(bufnr, parent_unit, query, prelude_count)
+  if parent_unit == nil or parent_unit.node == nil or query == nil then
+    return {}
+  end
+
+  local parent_key = typst_unit_key(parent_unit)
+  local match_index =
+    build_typst_match_index(bufnr, parent_unit.node, query, parent_unit.range[1], parent_unit.range[3] + 1)
+  local entries = {}
+
+  local function visit(node)
+    if node == nil then
+      return
+    end
+
+    local entry = match_index[node:id()]
+    if entry ~= nil and entry.node_type == "math" then
+      entries[#entries + 1] = {
+        range = entry.range,
+        prelude_count = prelude_count,
+        node_type = "math",
+        ts_node = entry.node,
+        stable_key = table.concat({ "nested", parent_key or "", tostring(entry.node:id()) }, ":"),
+      }
+      return
+    end
+
+    for child in node:iter_children() do
+      if child:named() then
+        visit(child)
+      end
+    end
+  end
+
+  for child in parent_unit.node:iter_children() do
+    if child:named() then
+      visit(child)
+    end
+  end
+
+  return entries
+end
+
 --- Convert top-level units into ordered render entries while accumulating preludes.
 --- @param bufnr integer
 --- @param units table[]
+--- @param opts table|nil
 --- @return table[]
-local function build_render_entries_from_units(bufnr, units)
+local function build_render_entries_from_units(bufnr, units, opts)
+  opts = opts or {}
   local render_entries = {}
 
   for _, unit in ipairs(units) do
@@ -178,6 +231,12 @@ local function build_render_entries_from_units(bufnr, units)
           node_type = "code",
           ts_node = unit.node,
         }
+        if opts.progressive_parent_key ~= nil and opts.progressive_parent_key == typst_unit_key(unit) then
+          local nested_entries = collect_nested_typst_math_entries(bufnr, unit, opts.query, #state.runtime_preludes)
+          for _, nested_entry in ipairs(nested_entries) do
+            render_entries[#render_entries + 1] = nested_entry
+          end
+        end
       end
     end
   end
@@ -832,6 +891,69 @@ function M.render_buf(bufnr)
   if scan.render_coverage_can_grow then
     M.schedule_full_render(bufnr, { delay_ms = scan.render_coverage_delay_ms })
   end
+  M.sync_progressive_render(bufnr)
+end
+
+local function active_progressive_typst_parent_key(bufnr)
+  if buffer_source_kind(bufnr) ~= "typst" then
+    return nil
+  end
+
+  local ok_main, main = pcall(require, "math-conceal.image")
+  if not ok_main or main._enabled_buffers[bufnr] ~= true or not main.is_render_allowed(bufnr) then
+    return nil
+  end
+
+  local mode = vim.api.nvim_get_mode().mode or ""
+  if main.config.conceal_in_normal and mode:find("n", 1, true) ~= nil then
+    return nil
+  end
+
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 or not vim.api.nvim_win_is_valid(winid) then
+    return nil
+  end
+
+  local ok_cursor, cursor = pcall(vim.api.nvim_win_get_cursor, winid)
+  if not ok_cursor or cursor == nil then
+    return nil
+  end
+
+  local cursor_row = cursor[1] - 1
+  local cursor_col = cursor[2]
+  local brs = state.buffer_render_state[bufnr]
+  local units = brs and brs.full_units or nil
+  for _, unit in ipairs(units or {}) do
+    if unit.node_type == "code" then
+      local item = {
+        bufnr = bufnr,
+        range = unit.range,
+        node_type = "code",
+        semantics = { source_kind = "code" },
+      }
+      if cursor_visibility.should_unconceal_item_for_row(item, cursor_row, cursor_row, cursor_col, mode) then
+        return typst_unit_key(unit)
+      end
+    end
+  end
+
+  return nil
+end
+
+function M.sync_progressive_render(bufnr)
+  bufnr = bufnr or vim.fn.bufnr()
+  if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+    return
+  end
+
+  local bs = state.get_buf_state(bufnr)
+  local next_key = active_progressive_typst_parent_key(bufnr)
+  if bs.progressive_typst_parent_key == next_key then
+    return
+  end
+
+  bs.progressive_typst_parent_key = next_key
+  M.schedule_full_render(bufnr, { immediate = true })
 end
 
 --- Hide a single extmark (removes virt_text/virt_lines from display).
@@ -1158,7 +1280,10 @@ scan_formula_matches = function(bufnr, main)
     if units == nil then
       units = collect_full_units(bufnr, tree, main._typst_query)
     end
-    sorted_entries = build_render_entries_from_units(bufnr, units)
+    sorted_entries = build_render_entries_from_units(bufnr, units, {
+      progressive_parent_key = bs.progressive_typst_parent_key,
+      query = main._typst_query,
+    })
   elseif source_kind == "markdown" then
     units = require("math-conceal.image.source-adapters.markdown").collect(bufnr)
     sorted_entries = units
