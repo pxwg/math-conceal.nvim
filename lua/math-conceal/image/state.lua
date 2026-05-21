@@ -268,10 +268,37 @@ end
 function M.prepare_extmark_reuse(bufnr, extmark_id)
   local bs = M.get_buf_state(bufnr)
 
+  local function add_extmark_rows(rows, ns_id, id)
+    if type(id) ~= "number" then
+      return
+    end
+    local ok, mark = pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, ns_id, id, { details = true })
+    if not ok or mark == nil or #mark == 0 then
+      return
+    end
+    local details = mark[3] or {}
+    if details.invalid then
+      return
+    end
+    for row = mark[1], details.end_row or mark[1] do
+      rows[row] = true
+    end
+  end
+
   local function clear_line_run_id(run_id)
     local run = bs.line_run_marks and bs.line_run_marks[run_id] or nil
     if run == nil then
       return false
+    end
+    local rows = {}
+    for run_extmark_id in pairs(run.extmark_ids or run.block_extmark_ids or {}) do
+      add_extmark_rows(rows, M.ns_id, run_extmark_id)
+    end
+    for _, id in pairs(run.conceal_ids or {}) do
+      add_extmark_rows(rows, M.ns_id2, id)
+    end
+    for _, id in pairs(run.sub_ids or {}) do
+      add_extmark_rows(rows, M.ns_id2, id)
     end
     if run.carrier_id ~= nil then
       pcall(vim.api.nvim_buf_del_extmark, bufnr, M.ns_id2, run.carrier_id)
@@ -282,7 +309,7 @@ function M.prepare_extmark_reuse(bufnr, extmark_id)
     for _, id in pairs(run.sub_ids or {}) do
       pcall(vim.api.nvim_buf_del_extmark, bufnr, M.ns_id2, id)
     end
-    for row in pairs(run.rows or {}) do
+    for row in pairs(rows) do
       if bs.inline_line_marks and bs.inline_line_marks[row] and bs.inline_line_marks[row].line_run_id == run_id then
         bs.inline_line_marks[row] = nil
       end
