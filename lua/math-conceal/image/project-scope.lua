@@ -29,6 +29,14 @@ local function resolve_root_base(configured_root, cwd, project_root, buf_dir)
   return normalize(configured_root) or normalize(project_root) or normalize(buf_dir) or normalize(cwd)
 end
 
+local function effective_root_for_cache(source_root)
+  local cache_root = normalize(require("math-conceal.image.workspace").base_dir())
+  if source_root == nil or cache_root == nil then
+    return source_root
+  end
+  return require("math-conceal.image.path-rewrite").common_ancestor(source_root, cache_root)
+end
+
 local function call_config_fn(fn, bufnr, buf_path, cwd, kind)
   if type(fn) ~= "function" then
     return nil
@@ -104,7 +112,7 @@ local function resolve_latex_scope(bufnr, kind, main, config)
   local configured_root = call_config_fn(latex_config.get_root, bufnr, buf_path, cwd, kind)
   local root_from_main = configured_main and vim.fn.fnamemodify(configured_main, ":h") or nil
   local source_root = normalize(configured_root) or normalize(root_from_main) or nearest_latex_marker_root(buf_dir)
-  local effective_root = source_root
+  local effective_root = effective_root_for_cache(source_root)
   local main_path = configured_main or normalize(buf_path) or ""
 
   local configured_preamble = normalize(call_config_fn(latex_config.get_preamble_file, bufnr, buf_path, cwd, kind))
@@ -188,7 +196,7 @@ function M.resolve(bufnr, kind)
   end
 
   local source_root = resolve_root_base(configured_root, cwd, project_root, buf_dir)
-  local effective_root = source_root
+  local effective_root = effective_root_for_cache(source_root)
 
   local inputs = {}
   if type(config.get_inputs) == "function" then

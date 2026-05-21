@@ -389,38 +389,13 @@ local function diagnostics_have_errors(items)
   return false
 end
 
---- Returns (and creates) a per-buffer cache directory.
---- Prefer placing it inside source_root so generated inputs stay within
---- the same Typst project root as real source files.
+--- Returns (and creates) a per-buffer preview cache directory.
+--- Image assets live under the Neovim cache tree rather than project roots.
 --- @param bufnr integer
 --- @param source_root string|nil
 --- @return string
 local function get_cache_dir(bufnr, source_root)
-  local buf_file = vim.api.nvim_buf_get_name(bufnr)
-  local safe_name
-  if buf_file == nil or buf_file == "" then
-    safe_name = "unnamed"
-  else
-    safe_name = vim.fn.fnamemodify(buf_file, ":t:r"):gsub("[^%w%-]", "_")
-    if #safe_name > 40 then
-      safe_name = safe_name:sub(1, 40)
-    end
-  end
-  -- Simple polynomial hash to distinguish same-named files in different directories
-  local hash_input = (buf_file ~= nil and buf_file ~= "") and buf_file or tostring(bufnr)
-  local h = 0
-  for i = 1, #hash_input do
-    h = (h * 31 + hash_input:byte(i)) % 0xFFFF
-  end
-  local base_dir
-  if source_root ~= nil and source_root ~= "" then
-    base_dir = source_root .. "/.math-conceal.image"
-  else
-    base_dir = vim.fn.stdpath("cache") .. "/math-conceal.image"
-  end
-  local dir = base_dir .. "/" .. safe_name .. "-" .. string.format("%04x", h)
-  vim.fn.mkdir(dir, "p")
-  return dir
+  return require("math-conceal.image.workspace").for_buffer(bufnr, source_root).preview_dir
 end
 
 --- Recursively remove generated, per-render service work directories.
