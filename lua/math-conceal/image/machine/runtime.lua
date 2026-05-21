@@ -79,11 +79,13 @@ local function cursor_line_range(bufnr)
 end
 
 local function sync_cursor_ui_now(bufnr)
+  local plan = require("math-conceal.image.plan")
   local ok_main, main = pcall(require, "math-conceal.image")
   if ok_main and formula_cursor_ui_can_batch(bufnr, main) then
     local lo, hi = cursor_line_range(bufnr)
     local defer_opts = { defer_line_run_reconcile = true }
     M.sync_hover(bufnr, defer_opts)
+    plan.sync_progressive_render(bufnr)
     M.render_live_preview(bufnr, defer_opts)
     if lo ~= nil then
       require("math-conceal.image.extmark").reconcile_cursor_line_runs(bufnr, lo, hi)
@@ -92,6 +94,7 @@ local function sync_cursor_ui_now(bufnr)
   end
 
   M.sync_hover(bufnr)
+  plan.sync_progressive_render(bufnr)
   M.render_live_preview(bufnr)
 end
 
@@ -852,6 +855,7 @@ function M.sync_cursor_ui(bufnr)
 end
 
 function M.schedule_live_preview_sync(bufnr, opts)
+  require("math-conceal.image.plan").sync_progressive_render(bufnr)
   require("math-conceal.image.plan").schedule_live_preview_sync(bufnr, opts)
 end
 
