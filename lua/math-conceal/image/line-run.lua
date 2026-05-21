@@ -441,6 +441,16 @@ local function choose_line_run_anchor(bufnr, start_row, end_row, opts)
   local line_count = vim.api.nvim_buf_line_count(bufnr)
   local anchor_rows = opts and opts.anchor_rows or nil
 
+  -- Keep the visual replacement before the concealed source run whenever
+  -- possible. Anchoring to the next visible line with virt_lines_above makes
+  -- Neovim map screen-line movement back through a later buffer row, which can
+  -- cause k/gk to bounce between adjacent rows. Anchoring on the concealed row
+  -- itself is also problematic because it combines virt_lines and conceal_lines
+  -- on the same buffer row.
+  if start_row > 0 then
+    return start_row - 1, false
+  end
+
   local function scan_safe(anchor_row, direction)
     while anchor_row >= 0 and anchor_row < line_count do
       if row_has_render_item(bufnr, anchor_row) then
