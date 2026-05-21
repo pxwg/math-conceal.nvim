@@ -336,6 +336,32 @@ local function schedule_render_if_viewport_changed(bufnr)
   end
 end
 
+local function cleanup_image_assets_on_exit()
+  local state = require("math-conceal.image.state")
+  local session = require("math-conceal.image.session")
+  local seen = {}
+
+  for bufnr in pairs(M._enabled_buffers or {}) do
+    seen[bufnr] = true
+  end
+  for bufnr in pairs(state.compiler_services or {}) do
+    seen[bufnr] = true
+  end
+  for bufnr in pairs(state.service_cache_dirs or {}) do
+    seen[bufnr] = true
+  end
+  for bufnr in pairs(state.service_workspace_dirs or {}) do
+    seen[bufnr] = true
+  end
+
+  for bufnr in pairs(seen) do
+    session.stop_compiler_service(bufnr)
+    state.clear_preview_timer(bufnr)
+  end
+
+  require("math-conceal.image.workspace").cleanup_all()
+end
+
 local function attach_buffer_local_autocmds(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) or not M.is_supported_bufnr(bufnr) then
     return
@@ -887,6 +913,12 @@ function M.setup(cfg)
     group = augroup,
     desc = "refresh cell pixel size on terminal resize",
     callback = handle_vim_resized,
+  })
+
+  vim.api.nvim_create_autocmd("VimLeavePre", {
+    group = augroup,
+    desc = "remove math-conceal image assets from the Neovim cache",
+    callback = cleanup_image_assets_on_exit,
   })
 
   vim.api.nvim_create_autocmd({ "BufLeave", "BufWinLeave", "BufHidden", "BufDelete" }, {

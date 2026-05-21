@@ -2,6 +2,20 @@
 
 local M = {}
 
+local session_base_dir = nil
+
+local function cache_base_dir()
+  if session_base_dir == nil then
+    session_base_dir = table.concat({
+      vim.fn.stdpath("cache"),
+      "math-conceal.nvim",
+      "image",
+      tostring(vim.fn.getpid()),
+    }, "/")
+  end
+  return session_base_dir
+end
+
 local function stable_hash(text)
   local ok, digest = pcall(vim.fn.sha256, text or "")
   if ok and type(digest) == "string" and digest ~= "" then
@@ -34,18 +48,48 @@ local function buffer_slug(bufnr)
   return base .. "-" .. stable_hash(buf_file)
 end
 
---- @param bufnr integer
---- @param source_root string|nil
---- @return table
-function M.for_buffer(bufnr, source_root)
-  local base_dir
-  if source_root ~= nil and source_root ~= "" then
-    base_dir = source_root .. "/.math-conceal.image"
-  else
-    base_dir = vim.fn.stdpath("cache") .. "/math-conceal.image"
-  end
+--- Return the root directory used for this Neovim instance's image assets.
+--- @return string
+function M.base_dir()
+  return cache_base_dir()
+end
 
-  local root = base_dir .. "/" .. buffer_slug(bufnr)
+local function safe_unlink(path)
+  if vim.uv.fs_stat(path) ~= nil then
+    pcall(vim.uv.fs_unlink, path)
+  end
+end
+
+local function remove_tree(dir)
+  local scan = vim.uv.fs_scandir(dir)
+  if scan ~= nil then
+    while true do
+      local name, typ = vim.uv.fs_scandir_next(scan)
+      if name == nil then
+        break
+      end
+      local path = dir .. "/" .. name
+      if typ == "directory" then
+        remove_tree(path)
+        pcall(vim.uv.fs_rmdir, path)
+      else
+        safe_unlink(path)
+      end
+    end
+  end
+  pcall(vim.uv.fs_rmdir, dir)
+end
+
+--- Remove all image assets created by this Neovim instance.
+function M.cleanup_all()
+  remove_tree(cache_base_dir())
+end
+
+--- @param bufnr integer
+--- @param _source_root string|nil
+--- @return table
+function M.for_buffer(bufnr, _source_root)
+  local root = cache_base_dir() .. "/" .. buffer_slug(bufnr)
   local full = root .. "/full"
   local slots = full .. "/slots"
   local outputs = full .. "/outputs"
