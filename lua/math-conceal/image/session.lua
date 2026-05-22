@@ -1957,6 +1957,7 @@ local function try_handle_latex_preview_formula_response(bufnr, service_kind, re
 
   if resp.status ~= "ok" or type(resp.path) ~= "string" or resp.path == "" then
     cleanup_formula_artifact(resp)
+    require("math-conceal.image.machine.runtime").clear_preview_request(bufnr)
     return true
   end
 
@@ -1964,6 +1965,7 @@ local function try_handle_latex_preview_formula_response(bufnr, service_kind, re
   local update = build_page_update(bufnr, resp.path, item, item.range, nil)
   if update == nil then
     cleanup_formula_artifact(resp)
+    require("math-conceal.image.machine.runtime").clear_preview_request(bufnr)
     return true
   end
 
@@ -2148,6 +2150,7 @@ local function try_handle_preview_service_response(bufnr, service_kind, resp)
     if queue_latex_preview_fallback(bufnr, service_kind, pmeta) then
       return true
     end
+    require("math-conceal.image.machine.runtime").clear_preview_request(bufnr)
     state.active_preview_service_requests[bufnr] = nil
     return true
   end
@@ -2158,6 +2161,7 @@ local function try_handle_preview_service_response(bufnr, service_kind, resp)
     if queue_latex_preview_fallback(bufnr, service_kind, pmeta) then
       return true
     end
+    require("math-conceal.image.machine.runtime").clear_preview_request(bufnr)
     state.active_preview_service_requests[bufnr] = nil
     return true
   end
@@ -2166,6 +2170,7 @@ local function try_handle_preview_service_response(bufnr, service_kind, resp)
   local update = build_page_update(bufnr, page.path, item, item.range, nil)
   if update == nil then
     cleanup_request_artifacts(resp)
+    require("math-conceal.image.machine.runtime").clear_preview_request(bufnr)
     state.active_preview_service_requests[bufnr] = nil
     return true
   end
@@ -2624,6 +2629,7 @@ local function build_preview_service_spec(bufnr, service, item, project_scope, p
   include_item.source_text = nil
   include_item.prelude_count = 0
   include_item.skip_wrapper = true
+  include_item.skip_path_rewrite = true
 
   service._preview_wrapper_caches = service._preview_wrapper_caches or {}
   service._preview_wrapper_caches[context_hash] = service._preview_wrapper_caches[context_hash]

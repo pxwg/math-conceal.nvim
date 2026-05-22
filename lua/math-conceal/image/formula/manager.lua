@@ -242,7 +242,7 @@ function Manager:placement_for_cursor(row, col, mode, opts)
           local best_span = (best_range[3] - best_range[1]) * 100000 + (best_range[4] - best_range[2])
           local placement_span = (placement_range[3] - placement_range[1]) * 100000
             + (placement_range[4] - placement_range[2])
-          if placement_span < best_span then
+          if placement_span > best_span then
             best = placement
           end
         end
