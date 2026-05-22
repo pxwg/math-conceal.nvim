@@ -1559,7 +1559,7 @@ local function find_full_item_at_cursor(bufnr, row, col, mode)
         local best_range = get_item_effective_range(best_item)
         local best_span = (best_range[3] - best_range[1]) * 100000 + (best_range[4] - best_range[2])
         local item_span = (effective_range[3] - effective_range[1]) * 100000 + (effective_range[4] - effective_range[2])
-        if item_span < best_span then
+        if item_span > best_span then
           best_item = item
         end
       end

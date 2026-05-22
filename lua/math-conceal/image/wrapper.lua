@@ -469,7 +469,8 @@ function M.build_batch_document(
       if wrap_prefix ~= "" then
         prefix_parts[#prefix_parts + 1] = wrap_prefix
       end
-      local item_text = maybe_rewrite(normalize_item_str(item))
+      local item_text = item.skip_path_rewrite == true and normalize_item_str(item)
+        or maybe_rewrite(normalize_item_str(item))
       item_cache = {
         prefix = table.concat(prefix_parts),
         item_text = item_text,
