@@ -1,4 +1,5 @@
 math-conceal-ascii	math-conceal.txt	/*math-conceal-ascii*
+math-conceal-buffer	math-conceal.txt	/*math-conceal-buffer*
 math-conceal-conceal	math-conceal.txt	/*math-conceal-conceal*
 math-conceal-contents	math-conceal.txt	/*math-conceal-contents*
 math-conceal-ft	math-conceal.txt	/*math-conceal-ft*

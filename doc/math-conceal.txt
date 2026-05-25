@@ -107,6 +107,29 @@ Options:
 `highlights`~
         Highlight definitions for conceal capture groups.
 
+                                                        *math-conceal-buffer*
+`buffer`~
+        Default buffer-local ASCII/Unicode conceal behavior.
+>
+  require("math-conceal").setup({
+    buffer = {
+      mode = "edit",
+    },
+  })
+<
+
+        `buffer.mode` accepts:
+
+        - `edit`: expand only the concealed node under the cursor. This is the
+          default.
+        - `preview`: keep the node concealed when the cursor moves over it.
+
+        The same setting can be changed for one buffer:
+>
+  require("math-conceal").setup_buffer({ mode = "preview" })
+  require("math-conceal").setup_buffer(bufnr, { mode = "edit" })
+<
+
 ==============================================================================
 4. Equation conceal                                      *math-conceal-image*
 
