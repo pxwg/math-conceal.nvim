@@ -22,6 +22,10 @@ local line_ns_id = vim.api.nvim_create_namespace("math-conceal-render-lines")
 local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = true })
 
 local active_configs = {}
+local default_buffer_config = {
+  mode = "edit",
+}
+local buffer_configs = {}
 
 local markdown_expand_nodes = {
   code_span = true,
@@ -301,6 +305,26 @@ local function position_inside_range(row, col, r1, c1, r2, c2)
   return (row == r1 and col >= c1) or (row == r2 and col < c2) or (row > r1 and row < r2)
 end
 
+local function normalize_buffer_config(opts, base)
+  opts = opts or {}
+  base = base or default_buffer_config
+  local config = vim.tbl_extend("force", base, opts)
+
+  if config.mode ~= "edit" and config.mode ~= "preview" then
+    error("math-conceal: buffer mode must be 'edit' or 'preview'", 3)
+  end
+
+  return config
+end
+
+local function get_buffer_config(buf)
+  return buffer_configs[buf] or default_buffer_config
+end
+
+local function keep_conceal_under_cursor(buf)
+  return get_buffer_config(buf).mode == "preview"
+end
+
 local function collect_marks(buf_id, cache, toprow, botrow)
   local marks = {}
   for _, spec in ipairs(cache.specs) do
@@ -479,9 +503,12 @@ local function sync_line_conceal_marks(buf_id, state, curr_row, curr_col)
 
   local seen = {}
   local set_extmark = vim.api.nvim_buf_set_extmark
+  local keep_conceal = keep_conceal_under_cursor(buf_id)
 
   for _, m in ipairs(state.marks) do
-    if m[12] == "line" and not position_inside_range(curr_row, curr_col, m[8], m[9], m[10], m[11]) then
+    if
+      m[12] == "line" and (keep_conceal or not position_inside_range(curr_row, curr_col, m[8], m[9], m[10], m[11]))
+    then
       local key = table.concat({ m[1], m[2], m[3], m[4] }, ":")
       if not seen[key] then
         seen[key] = true
@@ -537,6 +564,7 @@ local function setup_decoration_provider()
       local curr_col = cursor[2]
       local set_extmark = vim.api.nvim_buf_set_extmark
       sync_line_conceal_marks(buf_id, state, curr_row, curr_col)
+      local keep_conceal = keep_conceal_under_cursor(buf_id)
 
       for _, m in ipairs(state.marks) do
         if m[12] == "line" then
@@ -548,7 +576,7 @@ local function setup_decoration_provider()
         -- Collision detection: check if cursor is inside node
         local is_cursor_inside = position_inside_range(curr_row, curr_col, r1, c1, r2, c2)
 
-        if not is_cursor_inside then
+        if keep_conceal or not is_cursor_inside then
           set_extmark(buf_id, ns_id, m[1], m[2], {
             conceal = m[5],
             hl_group = m[6],
@@ -632,6 +660,7 @@ local function attach_to_buffer(buf, config)
     buffer = buf,
     callback = function()
       buffer_cache[buf] = nil
+      buffer_configs[buf] = nil
       if vim.api.nvim_buf_is_valid(buf) then
         vim.api.nvim_buf_clear_namespace(buf, line_ns_id, 0, -1)
       end
@@ -718,6 +747,7 @@ end
 ---@param lang "latex" | "typst"
 function M.setup(opts, lang)
   opts = opts or {}
+  M.set_default_buffer_config(opts.buffer)
   local conceal = opts.conceal or {}
   local file_lang = utils.lang_to_ft(lang)
   local parser_lang = utils.lang_to_lt(lang)
@@ -737,6 +767,53 @@ function M.setup(opts, lang)
   if vim.bo.filetype == file_lang then
     M.attach(vim.api.nvim_get_current_buf(), lang)
   end
+end
+
+---Set the default ASCII/Unicode conceal config used by buffers without overrides.
+---@param opts table?
+---@return table config
+function M.set_default_buffer_config(opts)
+  default_buffer_config = normalize_buffer_config(opts, default_buffer_config)
+  return vim.deepcopy(default_buffer_config)
+end
+
+---Configure ASCII/Unicode conceal behavior for one buffer.
+---@param buf number?
+---@param opts table?
+---@return table config
+function M.setup_buffer(buf, opts)
+  if type(buf) == "table" then
+    opts = buf
+    buf = nil
+  end
+
+  if buf == 0 or buf == nil then
+    buf = vim.api.nvim_get_current_buf()
+  end
+
+  if not vim.api.nvim_buf_is_valid(buf) then
+    error("math-conceal: invalid buffer " .. tostring(buf), 2)
+  end
+
+  local config = normalize_buffer_config(opts, get_buffer_config(buf))
+  buffer_configs[buf] = config
+
+  for _, win in ipairs(buf_wins(buf)) do
+    redraw_win(win)
+  end
+
+  return vim.deepcopy(config)
+end
+
+---Return the effective ASCII/Unicode conceal config for one buffer.
+---@param buf number?
+---@return table config
+function M.get_buffer_config(buf)
+  if buf == 0 or buf == nil then
+    buf = vim.api.nvim_get_current_buf()
+  end
+
+  return vim.deepcopy(get_buffer_config(buf))
 end
 
 function M.update_query(lang, query_string)

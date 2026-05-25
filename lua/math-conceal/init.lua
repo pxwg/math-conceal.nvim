@@ -17,6 +17,9 @@ local M = {
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
     depth = 90,
     ns_id = 0,
+    buffer = {
+      mode = "edit",
+    },
     image = {
       enabled = false,
       filetypes = { "typst" },
@@ -88,8 +91,12 @@ local M = {
 --- @field depth integer
 --- @field augroup_id integer?
 --- @field ns_id integer
+--- @field buffer MathConcealBufferOptions?
 --- @field highlights table<string, table<string, string>>
 --- @field image MathConcealImageOptions?
+
+--- @class MathConcealBufferOptions
+--- @field mode "edit"|"preview"?: ASCII conceal cursor behavior. `edit` expands the item under the cursor; `preview` keeps it concealed.
 
 --- @class MathConcealImageOptions
 --- @field enabled boolean?: Enable image conceal. Default false.
@@ -162,7 +169,26 @@ end
 ---@param opts MathConcealOptions?
 function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", M.opts, opts or {})
+  render.set_default_buffer_config(M.opts.buffer)
   setup_image()
+end
+
+---Configure ASCII/Unicode conceal behavior for one buffer.
+---Examples:
+---  require("math-conceal").setup_buffer({ mode = "preview" })
+---  require("math-conceal").setup_buffer(bufnr, { mode = "edit" })
+---@param bufnr integer|MathConcealBufferOptions?
+---@param opts MathConcealBufferOptions?
+---@return MathConcealBufferOptions
+function M.setup_buffer(bufnr, opts)
+  return render.setup_buffer(bufnr, opts)
+end
+
+---Return the effective ASCII/Unicode conceal config for one buffer.
+---@param bufnr integer?
+---@return MathConcealBufferOptions
+function M.get_buffer_config(bufnr)
+  return render.get_buffer_config(bufnr)
 end
 
 ---check if `filetype` is in `M.opts.ft`.
