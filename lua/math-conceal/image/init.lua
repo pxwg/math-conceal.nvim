@@ -47,8 +47,6 @@ local function handle_vim_resized()
     if M.is_supported_bufnr(bufnr) and M.is_render_allowed(bufnr) then
       if render_inputs_changed or columns_changed then
         runtime.render_buf(bufnr)
-      else
-        runtime.refresh_visible_overlays(bufnr, { force_reupload = true })
       end
     end
   end

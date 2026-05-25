@@ -20,6 +20,19 @@ local display_size_for_image
 --- are cleared+re-created in the same event-loop tick (bind_overlay batches).
 local pending_terminal_buf = {}
 
+local function refresh_line_run_for_row(bufnr, row, opts)
+  opts = opts or {}
+  local refreshed = opts.line_run_refresh_rows
+  if type(refreshed) == "table" then
+    local key = tostring(bufnr) .. ":" .. tostring(row)
+    if refreshed[key] then
+      return false
+    end
+    refreshed[key] = true
+  end
+  return line_run.refresh_for_row(bufnr, row)
+end
+
 local function tmux_escape(message)
   return "\x1bPtmux;" .. message:gsub("\x1b", "\x1b\x1b") .. "\x1b\\"
 end
@@ -742,7 +755,7 @@ function M.update_extmark_text(bufnr, extmark_id, virt_text_data, skip_hide_chec
     local display_lines = normalize_virt_text_lines(virt_text_data)
     mm.line_run_display_lines = display_lines
     if update_opts.defer_line_run_reconcile ~= true then
-      line_run.refresh_for_row(bufnr, start_row)
+      refresh_line_run_for_row(bufnr, start_row, update_opts)
     end
     return
   else
@@ -1003,7 +1016,7 @@ conceal_extmark_with_image = function(
     and item.range[1] == item.range[3]
     and opts.defer_line_run_reconcile ~= true
   then
-    line_run.refresh_for_row(bufnr, item.range[1])
+    refresh_line_run_for_row(bufnr, item.range[1], opts)
   end
 end
 

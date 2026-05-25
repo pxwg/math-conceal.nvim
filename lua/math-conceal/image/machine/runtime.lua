@@ -264,11 +264,16 @@ function M.schedule_visible_overlay_refresh(bufnr, opts)
     bs.visible_refresh_timer = vim.uv.new_timer()
   end
 
+  bs.visible_refresh_generation = (bs.visible_refresh_generation or 0) + 1
+  local generation = bs.visible_refresh_generation
   bs.visible_refresh_timer:stop()
   bs.visible_refresh_timer:start(
     opts.immediate == true and 0 or (opts.delay_ms or 16),
     0,
     vim.schedule_wrap(function()
+      if bs.visible_refresh_generation ~= generation then
+        return
+      end
       M.refresh_visible_overlays(bufnr, opts)
     end)
   )
