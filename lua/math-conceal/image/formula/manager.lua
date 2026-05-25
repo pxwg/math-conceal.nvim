@@ -712,11 +712,14 @@ function Manager:update_presentation_all(opts)
   self:reconcile_visible_overlay_bindings()
   local refreshed = 0
   local uploaded = false
+  local batch_opts = vim.tbl_extend("force", opts, {
+    line_run_refresh_rows = opts.line_run_refresh_rows or {},
+  })
   for _, placement in ipairs(self:visible_placements()) do
     local _, node = placement:resolve(placement.visible_overlay_id)
     local is_block = node ~= nil and node.semantics ~= nil and node.semantics.display_kind == "block"
     if not (opts.skip_blocks == true and is_block) then
-      local did_refresh, did_upload = placement:update_presentation(opts)
+      local did_refresh, did_upload = placement:update_presentation(batch_opts)
       if did_refresh then
         refreshed = refreshed + 1
       end

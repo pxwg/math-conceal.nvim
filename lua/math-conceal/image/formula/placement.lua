@@ -27,6 +27,24 @@ local function ranges_equal(a, b)
   return a[1] == b[1] and a[2] == b[2] and a[3] == b[3] and a[4] == b[4]
 end
 
+local function range_key(range)
+  if range == nil then
+    return "-"
+  end
+  return table.concat({ range[1], range[2], range[3], range[4] }, ",")
+end
+
+local function display_width_for_bufnr(bufnr)
+  if bufnr == nil or not vim.api.nvim_buf_is_valid(bufnr) then
+    return vim.o.columns
+  end
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid ~= -1 and vim.api.nvim_win_is_valid(winid) then
+    return vim.api.nvim_win_get_width(winid)
+  end
+  return vim.o.columns
+end
+
 local function cursor_item_from_node(node)
   if node == nil then
     return nil
@@ -430,6 +448,35 @@ function M:update_presentation(opts)
   local extmark = require("math-conceal.image.extmark")
   local extmark_id = overlay.extmark_id
   local concealing = self:concealing_for_cursor(node)
+  local force_upload = opts.force_reupload == true
+    or (opts.force_reupload_blocks == true and node.semantics ~= nil and node.semantics.display_kind == "block")
+  local presentation_key = table.concat({
+    tostring(overlay.overlay_id),
+    tostring(overlay.image_id),
+    tostring(extmark_id),
+    tostring(overlay.page_stamp or overlay.page_path),
+    tostring(overlay.natural_cols),
+    tostring(overlay.natural_rows),
+    tostring(overlay.source_rows),
+    range_key(node.display_range),
+    range_key(node.source_range),
+    tostring(node.display_prefix),
+    tostring(node.display_suffix),
+    tostring(concealing),
+    tostring(display_width_for_bufnr(node.bufnr)),
+  }, "|")
+
+  if opts.skip_upload ~= true and self.presentation_key == presentation_key then
+    local uploaded = false
+    if force_upload and self.image ~= nil then
+      uploaded = self.image:upload({ force_reupload = true })
+      if uploaded then
+        overlay.terminal_upload_epoch = self.image.sent_epoch
+      end
+    end
+    return false, uploaded
+  end
+
   if extmark_id ~= nil then
     extmark.swap_extmark_to_range(
       node.bufnr,
@@ -494,9 +541,11 @@ function M:update_presentation(opts)
 
   self.image:conceal(node.bufnr, overlay.source_rows or 1, {
     defer_line_run_reconcile = opts.defer_line_run_reconcile == true,
+    line_run_refresh_rows = opts.line_run_refresh_rows,
   })
   self.manager:replace_read_model_entry(self, self:compat_item(machine_state, node, overlay))
   self.manager:reindex_placement(self)
+  self.presentation_key = presentation_key
   return true, uploaded
 end
 
