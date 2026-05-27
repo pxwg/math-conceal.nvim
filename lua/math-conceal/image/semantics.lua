@@ -17,7 +17,7 @@ local M = {}
 ---
 --- Mapping:
 ---   math inline  → intrinsic + inline
----   math block   → intrinsic + block
+---   math display → intrinsic + block
 ---   code inline  → intrinsic + inline
 ---   code block   → flow      + block
 ---
@@ -42,16 +42,14 @@ function M.classify(range, bufnr, node_type)
     local line = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1] or ""
     local trimmed = line:match("^%s*(.-)%s*$") or ""
     local formula_text = line:sub(start_col + 1, end_col)
+    local is_typst_display_math = formula_text:match("^%$%s+") ~= nil and formula_text:match("%s+%$$") ~= nil
 
-    if trimmed == formula_text then
-      -- Single-line math occupying the whole trimmed line.
-      display_kind = "block"
-    elseif formula_text:match("^%$%s+") and formula_text:match("%s+%$$") then
+    if is_typst_display_math then
       -- Typst treats `$ ... $` with inner-edge whitespace as display math even
       -- when it appears inside surrounding markup. Keep the existing math node
       -- capture, but upgrade it at render/display time to a whole-line block.
       display_kind = "block"
-      render_whole_line = true
+      render_whole_line = trimmed ~= formula_text
     else
       display_kind = "inline"
     end
