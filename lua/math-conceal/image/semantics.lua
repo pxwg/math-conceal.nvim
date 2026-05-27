@@ -46,12 +46,6 @@ function M.classify(range, bufnr, node_type)
     if trimmed == formula_text then
       -- Single-line math occupying the whole trimmed line.
       display_kind = "block"
-    elseif formula_text:match("^%$%s+") and formula_text:match("%s+%$$") then
-      -- Typst treats `$ ... $` with inner-edge whitespace as display math even
-      -- when it appears inside surrounding markup. Keep the existing math node
-      -- capture, but upgrade it at render/display time to a whole-line block.
-      display_kind = "block"
-      render_whole_line = true
     else
       display_kind = "inline"
     end
