@@ -153,7 +153,8 @@ conceal still uses `ft`; graphical equation rendering uses `image.filetypes`.
 Supported source kinds:
 
 - `typst`: Typst math and supported top-level Typst code blocks.
-- `markdown`: `$...$` and `$$...$$` Markdown math rendered through MiTeX.
+- `markdown`: `$...$`, `$$...$$`, `\(...\)`, and `\[...\]`
+  Markdown math rendered through MiTeX.
 - `latex`: experimental LaTeX backend, off by default.
 
 ==============================================================================
