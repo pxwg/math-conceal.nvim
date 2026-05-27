@@ -687,6 +687,31 @@ local function attach_to_buffer(buf, config)
       redraw_win(win, { top, bot })
     end,
   })
+
+  vim.api.nvim_create_autocmd("ModeChanged", {
+    group = augroup,
+    pattern = "i:n",
+    buffer = buf,
+    callback = function()
+      local win = vim.api.nvim_get_current_win()
+      if vim.api.nvim_win_get_buf(win) ~= buf then
+        return
+      end
+      local info = vim.fn.getwininfo(win)[1]
+      if not info then
+        vim.api.nvim__redraw({ win = win, valid = true, flush = true })
+        return
+      end
+      local top = info.topline - 1
+      local bot = info.botline
+      vim.api.nvim__redraw({
+        win = win,
+        valid = true,
+        flush = true,
+        range = { top, bot },
+      })
+    end,
+  })
 end
 
 ---Get conceal query string for a given language and list of names
