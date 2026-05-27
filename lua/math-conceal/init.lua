@@ -17,6 +17,13 @@ local M = {
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
     depth = 90,
     ns_id = 0,
+    buffer = {
+      mode = "edit",
+    },
+    image = {
+      enabled = false,
+      filetypes = { "typst" },
+    },
     highlights = {
       ["@_env"] = { link = "@conceal", default = true },
       ["@_frac_name"] = { link = "@conceal", default = true },
@@ -84,12 +91,104 @@ local M = {
 --- @field depth integer
 --- @field augroup_id integer?
 --- @field ns_id integer
+--- @field buffer MathConcealBufferOptions?
 --- @field highlights table<string, table<string, string>>
+--- @field image MathConcealImageOptions?
+
+--- @class MathConcealBufferOptions
+--- @field mode "edit"|"preview"?: ASCII conceal cursor behavior. `edit` expands the item under the cursor; `preview` keeps it concealed.
+
+--- @class MathConcealImageOptions
+--- @field enabled boolean?: Enable image conceal. Default false.
+--- @field filetypes string[]?: Filetypes managed by image conceal. Default { "typst" }.
+--- Other fields are passed through to `math-conceal.image`.
+
+local function plugin_root()
+  local source = debug.getinfo(1, "S").source
+  if source:sub(1, 1) == "@" then
+    local init_path = source:sub(2)
+    return vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(init_path)))
+  end
+end
+
+local function bundled_service_binary()
+  local root = plugin_root()
+  if not root then
+    return nil
+  end
+  local exe = vim.fn.has("win32") == 1 and "typst-concealer-service.exe" or "typst-concealer-service"
+  local path = table.concat({ root, "service", "target", "release", exe }, "/")
+  if vim.uv.fs_stat(path) ~= nil then
+    return path
+  end
+end
+
+local function image_enabled()
+  return M.opts.image ~= nil and M.opts.image.enabled == true
+end
+
+local function image_filetype_enabled(filetype)
+  local image = M.opts.image or {}
+  for _, ft in ipairs(image.filetypes or {}) do
+    if ft == filetype then
+      return true
+    end
+  end
+  return false
+end
+
+local function setup_image()
+  if not image_enabled() or M._image_setup_ran then
+    return
+  end
+
+  local image_cfg = vim.deepcopy(M.opts.image or {})
+  image_cfg.enabled = nil
+  if image_cfg.service_binary == nil then
+    image_cfg.service_binary = bundled_service_binary() or "typst-concealer-service"
+  end
+
+  require("math-conceal.image").setup(image_cfg)
+  M._image_setup_ran = true
+end
+
+local function set_image(filetype)
+  if not image_enabled() or not image_filetype_enabled(filetype) then
+    return
+  end
+
+  setup_image()
+  local image = require("math-conceal.image")
+  local bufnr = vim.api.nvim_get_current_buf()
+  if image.config.enabled_by_default and image.is_supported_bufnr(bufnr) and image.is_render_allowed(bufnr) then
+    image.enable_buf(bufnr)
+  end
+end
 
 ---set up
 ---@param opts MathConcealOptions?
 function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", M.opts, opts or {})
+  render.set_default_buffer_config(M.opts.buffer)
+  setup_image()
+end
+
+---Configure ASCII/Unicode conceal behavior for one buffer.
+---Examples:
+---  require("math-conceal").setup_buffer({ mode = "preview" })
+---  require("math-conceal").setup_buffer(bufnr, { mode = "edit" })
+---@param bufnr integer|MathConcealBufferOptions?
+---@param opts MathConcealBufferOptions?
+---@return MathConcealBufferOptions
+function M.setup_buffer(bufnr, opts)
+  return render.setup_buffer(bufnr, opts)
+end
+
+---Return the effective ASCII/Unicode conceal config for one buffer.
+---@param bufnr integer?
+---@return MathConcealBufferOptions
+function M.get_buffer_config(bufnr)
+  return render.get_buffer_config(bufnr)
 end
 
 ---check if `filetype` is in `M.opts.ft`.
@@ -102,6 +201,7 @@ function M.set(filetype)
       M.set_hl(filetype)
     end
   end
+  set_image(filetype)
 end
 
 local function restart_treesitter(bufnr)

@@ -1,0 +1,486 @@
+*math-conceal.nvim*                 Math symbol and graphical equation conceal for Neovim
+
+==============================================================================
+CONTENTS                                             *math-conceal-contents*
+
+1. Introduction                                      |math-conceal-intro|
+2. Setup                                             |math-conceal-setup|
+3. ASCII conceal                                     |math-conceal-ascii|
+4. Equation conceal                                  |math-conceal-image|
+5. Equation conceal examples                         |math-conceal-image-examples|
+6. Equation conceal options                          |math-conceal-image-options|
+7. Equation conceal API                              |math-conceal-image-api|
+8. Troubleshooting                                   |math-conceal-troubleshooting|
+
+==============================================================================
+1. Introduction                                        *math-conceal-intro*
+
+math-conceal.nvim provides math conceal for LaTeX, Typst, Markdown, and related
+filetypes.
+
+There are two rendering paths:
+
+- ASCII/Unicode conceal: fast tree-sitter based symbol replacement using
+  Neovim extmark conceal.
+- Graphical equation conceal: terminal-graphics rendering for richer math
+  previews, migrated from https://github.com/pxwg/typst-concealer, a fork of
+  the original
+  https://github.com/PartyWumpus/typst-concealer.
+
+Graphical equation conceal supports:
+
+- Typst math and code blocks.
+- Markdown math through https://github.com/mitex-rs/mitex.
+- Experimental LaTeX rendering when the LaTeX backend is explicitly enabled.
+
+Graphical equation conceal uses the kitty graphics protocol. Use a compatible
+terminal such as kitty or Ghostty.
+
+==============================================================================
+2. Setup                                                *math-conceal-setup*
+
+Minimal setup:
+>
+  require("math-conceal").setup({
+    conceal = { "greek", "script", "math", "font", "delim", "phy" },
+    ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+  })
+<
+
+lazy.nvim setup with graphical equation conceal:
+>
+  return {
+    "pxwg/math-conceal.nvim",
+    main = "math-conceal",
+    build = "cargo build --release --manifest-path service/Cargo.toml",
+    opts = {
+      conceal = { "greek", "script", "math", "font", "delim", "phy" },
+      ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+      image = {
+        enabled = true,
+        filetypes = { "typst", "markdown" },
+      },
+    },
+  }
+<
+
+The Rust service is required only when graphical equation rendering is enabled.
+If you do not use a plugin manager build hook, build it manually:
+>
+  cargo build --release --manifest-path service/Cargo.toml
+<
+
+When `image.service_binary` is omitted, math-conceal first checks the bundled
+release binary:
+>
+  service/target/release/typst-concealer-service
+<
+
+If it is not found, it falls back to `typst-concealer-service` on $PATH.
+
+==============================================================================
+3. ASCII conceal                                      *math-conceal-ascii*
+
+ASCII/Unicode conceal is enabled by the top-level options:
+>
+  require("math-conceal").setup({
+    conceal = { "greek", "script", "math", "font", "delim", "phy" },
+    ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+    highlights = {
+      ["@sup_symbol"] = { link = "@boolean" },
+    },
+  })
+<
+
+Options:
+
+                                                        *math-conceal-conceal*
+`conceal`~
+        List of conceal query groups to enable. Built-in groups include:
+        `greek`, `script`, `math`, `font`, `delim`, and `phy`.
+
+                                                             *math-conceal-ft*
+`ft`~
+        Filetypes where ASCII/Unicode conceal is attached.
+
+                                                     *math-conceal-highlights*
+`highlights`~
+        Highlight definitions for conceal capture groups.
+
+                                                        *math-conceal-buffer*
+`buffer`~
+        Default buffer-local ASCII/Unicode conceal behavior.
+>
+  require("math-conceal").setup({
+    buffer = {
+      mode = "edit",
+    },
+  })
+<
+
+        `buffer.mode` accepts:
+
+        - `edit`: expand only the concealed node under the cursor. This is the
+          default.
+        - `preview`: keep the node concealed when the cursor moves over it.
+
+        The same setting can be changed for one buffer:
+>
+  require("math-conceal").setup_buffer({ mode = "preview" })
+  require("math-conceal").setup_buffer(bufnr, { mode = "edit" })
+<
+
+==============================================================================
+4. Equation conceal                                      *math-conceal-image*
+
+Graphical equation conceal is configured under the top-level `image` table:
+>
+  require("math-conceal").setup({
+    image = {
+      enabled = true,
+      filetypes = { "typst", "markdown" },
+    },
+  })
+<
+
+The `image` table is passed to the migrated renderer after removing the
+top-level control key `enabled`. This means advanced renderer options can be
+placed directly under `image`.
+
+Graphical equation conceal and ASCII conceal can be enabled together. ASCII
+conceal still uses `ft`; graphical equation rendering uses `image.filetypes`.
+
+Supported source kinds:
+
+- `typst`: Typst math and supported top-level Typst code blocks.
+- `markdown`: `$...$`, `$$...$$`, `\(...\)`, and `\[...\]`
+  Markdown math rendered through MiTeX.
+- `latex`: experimental LaTeX backend, off by default.
+
+==============================================================================
+5. Equation conceal examples                    *math-conceal-image-examples*
+
+Typst only:
+>
+  require("math-conceal").setup({
+    image = {
+      enabled = true,
+      filetypes = { "typst" },
+    },
+  })
+<
+
+Typst and Markdown:
+>
+  require("math-conceal").setup({
+    image = {
+      enabled = true,
+      filetypes = { "typst", "markdown" },
+      markdown_filetypes = { "markdown" },
+    },
+  })
+<
+
+Typst and plugin-owned Markdown-like buffers:
+>
+  require("math-conceal").setup({
+    image = {
+      enabled = true,
+      filetypes = { "typst", "markdown" },
+      markdown_filetypes = { "markdown", "copilot-chat" },
+    },
+  })
+<
+
+Experimental LaTeX equation rendering:
+>
+  require("math-conceal").setup({
+    image = {
+      enabled = true,
+      filetypes = { "typst", "markdown", "latex" },
+      backends = {
+        latex = {
+          enabled = true,
+          compiler = "pdflatex",
+          converter = "pdftocairo",
+        },
+      },
+    },
+  })
+<
+
+Project-aware Typst rendering:
+>
+  require("math-conceal").setup({
+    image = {
+      enabled = true,
+      filetypes = { "typst" },
+      get_root = function(_bufnr, path, _cwd, _kind)
+        local wiki = vim.fs.normalize(vim.fn.expand("~/wiki"))
+        path = vim.fs.normalize(path)
+        if path == wiki or path:sub(1, #wiki + 1) == wiki .. "/" then
+          return wiki
+        end
+      end,
+      get_inputs = function()
+        return { "concealed=true", "preview=true" }
+      end,
+      get_preamble_file = function(_bufnr, path)
+        if path:match("/wiki/") then
+          return vim.fn.expand("~/wiki/concealer-context.typ")
+        end
+      end,
+    },
+  })
+<
+
+Restrict rendering by path:
+>
+  require("math-conceal").setup({
+    image = {
+      enabled = true,
+      render_paths = {
+        include = { "/notes/", "/slides/" },
+        exclude = { "/vendor/", "/node_modules/", "/large%-generated/" },
+      },
+    },
+  })
+<
+
+==============================================================================
+6. Equation conceal options                      *math-conceal-image-options*
+
+                                                         *math-conceal-image.enabled*
+`image.enabled`~
+        Boolean. Enables graphical equation conceal. Default: false.
+
+                                                       *math-conceal-image.filetypes*
+`image.filetypes`~
+        List of source kinds/filetypes managed by graphical equation rendering.
+        Common values: `typst`, `markdown`, `latex`.
+
+        Default at the top-level math-conceal integration: `{ "typst" }`.
+        The migrated renderer itself defaults to Typst and Markdown when used
+        directly.
+
+                                                  *math-conceal-image.service_binary*
+`image.service_binary`~
+        Path to the Rust compiler service. If omitted, math-conceal tries:
+>
+        service/target/release/typst-concealer-service
+<
+        then falls back to `typst-concealer-service` on $PATH.
+
+                                              *math-conceal-image.enabled_by_default*
+`image.enabled_by_default`~
+        Boolean. Enables graphical equation conceal automatically for supported
+        buffers. Default: true inside the renderer.
+
+                                                   *math-conceal-image.styling_type*
+`image.styling_type`~
+        One of `colorscheme`, `simple`, or `none`.
+
+        `colorscheme` matches the current Normal foreground and uses a
+        transparent page fill.
+
+        `simple` uses a simple document prelude without colorscheme matching.
+
+        `none` does not inject styling. Use this when your project prelude fully
+        controls the rendered output.
+
+                                                         *math-conceal-image.color*
+`image.color`~
+        Typst color string used when `styling_type = "colorscheme"`. When nil,
+        math-conceal derives the color from the current `Normal` highlight.
+
+                                                           *math-conceal-image.ppi*
+`image.ppi`~
+        Fallback render PPI when terminal cell pixel size cannot be detected.
+        Default: 300.
+
+                                              *math-conceal-image.math_baseline_pt*
+`image.math_baseline_pt`~
+        Baseline point size used to derive render PPI from terminal cell height.
+        Default: 11.
+
+                                                       *math-conceal-image.header*
+`image.header`~
+        Typst code prepended to every rendered document.
+
+                                                *math-conceal-image.compiler_args*
+`image.compiler_args`~
+        Backward-compatible Typst `--input` arguments. Prefer `get_inputs` for
+        new configuration.
+
+                                              *math-conceal-image.live_preview_enabled*
+`image.live_preview_enabled`~
+        Boolean. Enables the cursor-following live preview in insert mode.
+        Default: true.
+
+                                             *math-conceal-image.live_preview_debounce*
+`image.live_preview_debounce`~
+        Delay in milliseconds for live preview updates. Default: 100.
+
+                                        *math-conceal-image.cursor_hover_throttle_ms*
+`image.cursor_hover_throttle_ms`~
+        Throttle delay for cursor hover synchronization. Default: 0.
+
+                                                *math-conceal-image.conceal_in_normal*
+`image.conceal_in_normal`~
+        Boolean. Keeps concealing when the cursor is on a rendered item in
+        normal mode. Default: false.
+
+                                                *math-conceal-image.markdown_filetypes*
+`image.markdown_filetypes`~
+        Filetypes treated as Markdown math sources. Default: `{ "markdown" }`.
+        Add plugin-owned buffers such as `copilot-chat` here when needed.
+
+                                                  *math-conceal-image.mitex_package*
+`image.mitex_package`~
+        Typst package spec used for Markdown LaTeX math conversion through
+        MiTeX. Default: `@preview/mitex:0.2.7`.
+
+                                                    *math-conceal-image.backends*
+`image.backends.latex`~
+        Experimental LaTeX backend configuration.
+>
+        image = {
+          backends = {
+            latex = {
+              enabled = true,
+              compiler = "pdflatex",
+              converter = "pdftocairo",
+              compiler_args = {},
+              header = "",
+              mitex_fast_path = true,
+              viewport_margin = 0,
+            },
+          },
+        }
+<
+
+                                                    *math-conceal-image.render_paths*
+`image.render_paths`~
+        Optional path include/exclude rules. String rules are Lua patterns
+        matched against normalized absolute paths. Function rules receive
+        `(path, bufnr)` and should return true when matched.
+>
+        render_paths = {
+          include = { "/notes/" },
+          exclude = {
+            "/vendor/",
+            function(path)
+              return path:match("/generated/") ~= nil
+            end,
+          },
+        }
+<
+
+                                                        *math-conceal-image.get_root*
+`image.get_root(bufnr, path, cwd, kind)`~
+        Returns the Typst root directory passed to the compiler service. Must be
+        an absolute directory. Returning nil falls back to automatic root
+        detection from the buffer path (`typst.toml`, VCS markers), then the
+        buffer directory/current working directory.
+
+                                                      *math-conceal-image.get_inputs*
+`image.get_inputs(bufnr, path, cwd, kind)`~
+        Returns extra Typst input values such as:
+>
+        return { "concealed=true", "preview=true" }
+<
+
+                                               *math-conceal-image.get_preamble_file*
+`image.get_preamble_file(bufnr, path, cwd, kind)`~
+        Returns an absolute `.typ` file to include at the top of generated
+        render documents. Use this for project imports, bibliography setup, or
+        show rules needed by snippets.
+
+==============================================================================
+7. Equation conceal API                              *math-conceal-image-api*
+
+The public renderer module is:
+>
+  local image = require("math-conceal.image")
+<
+
+Available buffer controls:
+>
+  image.enable_buf(bufnr)
+  image.disable_buf(bufnr)
+  image.toggle_buf(bufnr)
+  image.rerender_buf(bufnr)
+<
+
+These are useful for keymaps:
+>
+  vim.keymap.set("n", "<leader>mi", function()
+    require("math-conceal.image").toggle_buf(0)
+  end, { desc = "Toggle graphical equation conceal" })
+<
+
+Query helpers:
+>
+  image.source_kind_for_bufnr(bufnr)
+  image.is_supported_bufnr(bufnr)
+  image.is_render_allowed(bufnr)
+<
+
+Advanced integrations can use the runtime directly:
+>
+  local runtime = require("math-conceal.image.machine.runtime")
+  runtime.render_buf(bufnr)
+  runtime.refresh_visible_overlays(bufnr, { force_reupload_blocks = true })
+<
+
+==============================================================================
+8. Troubleshooting                            *math-conceal-troubleshooting*
+
+No rendered equations appear~
+        Check terminal support first. Graphical equation conceal requires kitty
+        graphics protocol support.
+
+        Confirm the service is built:
+>
+        test -x service/target/release/typst-concealer-service
+<
+
+        Confirm graphical equation conceal is enabled:
+>
+        :lua print(vim.inspect(require("math-conceal").opts.image))
+<
+
+Service cannot be spawned~
+        Set `image.service_binary` to an absolute path:
+>
+        image = {
+          service_binary = "/absolute/path/to/typst-concealer-service",
+        }
+<
+
+Markdown math does not render~
+        Ensure Markdown is enabled for graphical equation conceal:
+>
+        image = {
+          enabled = true,
+          filetypes = { "typst", "markdown" },
+          markdown_filetypes = { "markdown" },
+        }
+<
+
+Custom Markdown-like filetypes do not render~
+        Add both the source kind and the concrete filetype:
+>
+        image = {
+          filetypes = { "typst", "markdown" },
+          markdown_filetypes = { "markdown", "copilot-chat" },
+        }
+<
+
+Project imports fail~
+        Configure `get_root`, `get_inputs`, or `get_preamble_file` so snippets
+        compile under the same context as the real project.
+
+==============================================================================
+
+vim:tw=78:ts=8:noet:ft=help:norl:

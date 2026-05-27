@@ -15,12 +15,17 @@ local query_obj_cache = {}
 local buffer_cache = {}
 -- Viewport caching: store computed node lists per window
 local win_states = {}
+local range_cache_limit = 64
 
 local ns_id = vim.api.nvim_create_namespace("math-conceal-render")
 local line_ns_id = vim.api.nvim_create_namespace("math-conceal-render-lines")
 local augroup = vim.api.nvim_create_augroup("math-conceal-render", { clear = true })
 
 local active_configs = {}
+local default_buffer_config = {
+  mode = "edit",
+}
+local buffer_configs = {}
 
 local markdown_expand_nodes = {
   code_span = true,
@@ -300,14 +305,210 @@ local function position_inside_range(row, col, r1, c1, r2, c2)
   return (row == r1 and col >= c1) or (row == r2 and col < c2) or (row > r1 and row < r2)
 end
 
+local function normalize_buffer_config(opts, base)
+  opts = opts or {}
+  base = base or default_buffer_config
+  local config = vim.tbl_extend("force", base, opts)
+
+  if config.mode ~= "edit" and config.mode ~= "preview" then
+    error("math-conceal: buffer mode must be 'edit' or 'preview'", 3)
+  end
+
+  return config
+end
+
+local function get_buffer_config(buf)
+  return buffer_configs[buf] or default_buffer_config
+end
+
+local function keep_conceal_under_cursor(buf)
+  return get_buffer_config(buf).mode == "preview"
+end
+
+local function collect_marks(buf_id, cache, toprow, botrow)
+  local marks = {}
+  for _, spec in ipairs(cache.specs) do
+    local trees = get_query_trees(cache, spec)
+    for _, tree in ipairs(trees) do
+      local root = tree:root()
+      -- Query only visible range + small buffer (30 lines) for smooth scrolling
+      local query_top = math.max(0, toprow - 30)
+      local query_bot = botrow + 30
+
+      for id, node, metadata in spec.query:iter_captures(root, buf_id, query_top, query_bot) do
+        local capture_data = metadata[id]
+        local conceal_char = capture_data and capture_data.conceal or metadata.conceal
+        local conceal_lines = capture_data and capture_data.conceal_lines or metadata.conceal_lines
+
+        if conceal_lines ~= nil then
+          local r1, c1, r2, c2 = get_conceal_line_range(node)
+          if r1 <= botrow and r2 >= toprow then
+            local priority = (capture_data and capture_data.priority) or metadata.priority or 100
+            local line = vim.api.nvim_buf_get_lines(buf_id, r1, r1 + 1, false)[1] or ""
+
+            table.insert(marks, {
+              r1,
+              c1,
+              r2,
+              c2, -- [1-4] position
+              conceal_lines, -- [5]
+              nil, -- [6] hl_group
+              tonumber(priority) or 100, -- [7]
+              r1, -- [8]
+              c1, -- [9]
+              r1, -- [10]
+              #line, -- [11]
+              "line", -- [12]
+            })
+          end
+        elseif conceal_char then
+          local r1, c1, r2, c2 = node:range()
+          local er1, ec1, er2, ec2 = get_expand_range(spec, node)
+          -- Only cache marks within actual viewport
+          if r1 <= botrow and r2 >= toprow then
+            local priority = (capture_data and capture_data.priority) or metadata.priority or 100
+            local hl_group = (capture_data and capture_data.highlight)
+              or metadata.highlight
+              or get_capture_hl_group(spec.query, id, spec.target_lang)
+              or "Conceal"
+
+            -- Store all rendering data in pure Lua table (array is faster than hash)
+            table.insert(marks, {
+              r1,
+              c1,
+              r2,
+              c2, -- [1-4] position
+              conceal_char, -- [5]
+              hl_group, -- [6]
+              tonumber(priority) or 100, -- [7]
+              er1, -- [8]
+              ec1, -- [9]
+              er2, -- [10]
+              ec2, -- [11]
+            })
+          end
+        end
+      end
+    end
+  end
+  return marks
+end
+
+local function marks_cover_range(state, tick, version, toprow, botrow)
+  return state
+    and state.tick == tick
+    and state.version == version
+    and state.top <= toprow
+    and state.bot >= botrow
+    and type(state.marks) == "table"
+end
+
+local function range_cache_key(tick, version, toprow, botrow)
+  return table.concat({ tostring(tick), tostring(version), tostring(toprow), tostring(botrow) }, ":")
+end
+
+local function cache_range_marks(cache, key, marks)
+  cache.range_cache = cache.range_cache or {}
+  cache.range_cache_order = cache.range_cache_order or {}
+
+  if cache.range_cache[key] == nil then
+    cache.range_cache_order[#cache.range_cache_order + 1] = key
+  end
+  cache.range_cache[key] = marks
+
+  while #cache.range_cache_order > range_cache_limit do
+    local evicted = table.remove(cache.range_cache_order, 1)
+    cache.range_cache[evicted] = nil
+  end
+end
+
+local function collect_cached_marks(buf_id, cache, toprow, botrow, opts)
+  local tick = vim.b[buf_id].changedtick
+  local version = cache.version
+  local win_id = opts and opts.winid
+
+  if type(win_id) == "number" and vim.api.nvim_win_is_valid(win_id) and vim.api.nvim_win_get_buf(win_id) == buf_id then
+    local state = win_states[win_id]
+    if marks_cover_range(state, tick, version, toprow, botrow) then
+      return state.marks
+    end
+  end
+
+  local key = range_cache_key(tick, version, toprow, botrow)
+  cache.range_cache = cache.range_cache or {}
+  if cache.range_cache[key] ~= nil then
+    return cache.range_cache[key]
+  end
+
+  local marks = collect_marks(buf_id, cache, toprow, botrow)
+  cache_range_marks(cache, key, marks)
+  return marks
+end
+
+local function display_mark(m)
+  if m[12] == "line" then
+    return {
+      source = "math-conceal",
+      kind = "line",
+      row = m[1],
+      col = m[2],
+      end_row = m[3],
+      end_col = m[4],
+      conceal_lines = m[5],
+      priority = m[7],
+      expand_range = { m[8], m[9], m[10], m[11] },
+    }
+  end
+
+  return {
+    source = "math-conceal",
+    kind = "conceal",
+    row = m[1],
+    col = m[2],
+    end_row = m[3],
+    end_col = m[4],
+    conceal = m[5],
+    hl_group = m[6],
+    priority = m[7],
+    expand_range = { m[8], m[9], m[10], m[11] },
+  }
+end
+
+local function mark_overlaps_range(mark, toprow, botrow)
+  return mark[1] <= botrow and mark[3] >= toprow
+end
+
+local function marks_by_row(raw_marks, toprow, botrow)
+  local by_row = {}
+  for row = toprow, botrow do
+    by_row[row] = {}
+  end
+
+  for _, mark in ipairs(raw_marks or {}) do
+    local start_row = math.max(toprow, mark[1])
+    local end_row = math.min(botrow, mark[3])
+    if start_row <= end_row then
+      local display = display_mark(mark)
+      for row = start_row, end_row do
+        by_row[row][#by_row[row] + 1] = display
+      end
+    end
+  end
+
+  return by_row
+end
+
 local function sync_line_conceal_marks(buf_id, state, curr_row, curr_col)
   vim.api.nvim_buf_clear_namespace(buf_id, line_ns_id, 0, -1)
 
   local seen = {}
   local set_extmark = vim.api.nvim_buf_set_extmark
+  local keep_conceal = keep_conceal_under_cursor(buf_id)
 
   for _, m in ipairs(state.marks) do
-    if m[12] == "line" and not position_inside_range(curr_row, curr_col, m[8], m[9], m[10], m[11]) then
+    if
+      m[12] == "line" and (keep_conceal or not position_inside_range(curr_row, curr_col, m[8], m[9], m[10], m[11]))
+    then
       local key = table.concat({ m[1], m[2], m[3], m[4] }, ":")
       if not seen[key] then
         seen[key] = true
@@ -350,78 +551,11 @@ local function setup_decoration_provider()
         and (state.version == cache.version)
 
       if not is_cache_valid then
-        -- Cache miss: requery Tree-sitter
-        state.marks = {}
         state.tick = buf_tick
         state.top = toprow
         state.bot = botrow
         state.version = cache.version
-
-        -- Incremental parse (use true for full correctness)
-        for _, spec in ipairs(cache.specs) do
-          local trees = get_query_trees(cache, spec)
-          for _, tree in ipairs(trees) do
-            local root = tree:root()
-            -- Query only visible range + small buffer (30 lines) for smooth scrolling
-            local query_top = math.max(0, toprow - 30)
-            local query_bot = botrow + 30
-
-            for id, node, metadata in spec.query:iter_captures(root, buf_id, query_top, query_bot) do
-              local capture_data = metadata[id]
-              local conceal_char = capture_data and capture_data.conceal or metadata.conceal
-              local conceal_lines = capture_data and capture_data.conceal_lines or metadata.conceal_lines
-
-              if conceal_lines ~= nil then
-                local r1, c1, r2, c2 = get_conceal_line_range(node)
-                if r1 <= botrow and r2 >= toprow then
-                  local priority = (capture_data and capture_data.priority) or metadata.priority or 100
-                  local line = vim.api.nvim_buf_get_lines(buf_id, r1, r1 + 1, false)[1] or ""
-
-                  table.insert(state.marks, {
-                    r1,
-                    c1,
-                    r2,
-                    c2, -- [1-4] position
-                    conceal_lines, -- [5]
-                    nil, -- [6] hl_group
-                    tonumber(priority) or 100, -- [7]
-                    r1, -- [8]
-                    c1, -- [9]
-                    r1, -- [10]
-                    #line, -- [11]
-                    "line", -- [12]
-                  })
-                end
-              elseif conceal_char then
-                local r1, c1, r2, c2 = node:range()
-                local er1, ec1, er2, ec2 = get_expand_range(spec, node)
-                -- Only cache marks within actual viewport
-                if r1 <= botrow and r2 >= toprow then
-                  local priority = (capture_data and capture_data.priority) or metadata.priority or 100
-                  local hl_group = (capture_data and capture_data.highlight)
-                    or metadata.highlight
-                    or get_capture_hl_group(spec.query, id, spec.target_lang)
-                    or "Conceal"
-
-                  -- Store all rendering data in pure Lua table (array is faster than hash)
-                  table.insert(state.marks, {
-                    r1,
-                    c1,
-                    r2,
-                    c2, -- [1-4] position
-                    conceal_char, -- [5]
-                    hl_group, -- [6]
-                    tonumber(priority) or 100, -- [7]
-                    er1, -- [8]
-                    ec1, -- [9]
-                    er2, -- [10]
-                    ec2, -- [11]
-                  })
-                end
-              end
-            end
-          end
-        end
+        state.marks = collect_marks(buf_id, cache, toprow, botrow)
       end
 
       -- Render phase: ultra-fast iteration over cached Lua table
@@ -430,6 +564,7 @@ local function setup_decoration_provider()
       local curr_col = cursor[2]
       local set_extmark = vim.api.nvim_buf_set_extmark
       sync_line_conceal_marks(buf_id, state, curr_row, curr_col)
+      local keep_conceal = keep_conceal_under_cursor(buf_id)
 
       for _, m in ipairs(state.marks) do
         if m[12] == "line" then
@@ -441,7 +576,7 @@ local function setup_decoration_provider()
         -- Collision detection: check if cursor is inside node
         local is_cursor_inside = position_inside_range(curr_row, curr_col, r1, c1, r2, c2)
 
-        if not is_cursor_inside then
+        if keep_conceal or not is_cursor_inside then
           set_extmark(buf_id, ns_id, m[1], m[2], {
             conceal = m[5],
             hl_group = m[6],
@@ -480,6 +615,8 @@ local function attach_to_buffer(buf, config)
     buffer_cache[buf].root_lang = root_lang
     buffer_cache[buf].specs = specs
     buffer_cache[buf].version = buffer_cache[buf].version + 1
+    buffer_cache[buf].range_cache = {}
+    buffer_cache[buf].range_cache_order = {}
     return
   end
 
@@ -488,6 +625,8 @@ local function attach_to_buffer(buf, config)
     root_lang = root_lang,
     specs = specs,
     version = 1,
+    range_cache = {},
+    range_cache_order = {},
   }
 
   parser:register_cbs({
@@ -521,6 +660,7 @@ local function attach_to_buffer(buf, config)
     buffer = buf,
     callback = function()
       buffer_cache[buf] = nil
+      buffer_configs[buf] = nil
       if vim.api.nvim_buf_is_valid(buf) then
         vim.api.nvim_buf_clear_namespace(buf, line_ns_id, 0, -1)
       end
@@ -607,6 +747,7 @@ end
 ---@param lang "latex" | "typst"
 function M.setup(opts, lang)
   opts = opts or {}
+  M.set_default_buffer_config(opts.buffer)
   local conceal = opts.conceal or {}
   local file_lang = utils.lang_to_ft(lang)
   local parser_lang = utils.lang_to_lt(lang)
@@ -628,6 +769,53 @@ function M.setup(opts, lang)
   end
 end
 
+---Set the default ASCII/Unicode conceal config used by buffers without overrides.
+---@param opts table?
+---@return table config
+function M.set_default_buffer_config(opts)
+  default_buffer_config = normalize_buffer_config(opts, default_buffer_config)
+  return vim.deepcopy(default_buffer_config)
+end
+
+---Configure ASCII/Unicode conceal behavior for one buffer.
+---@param buf number?
+---@param opts table?
+---@return table config
+function M.setup_buffer(buf, opts)
+  if type(buf) == "table" then
+    opts = buf
+    buf = nil
+  end
+
+  if buf == 0 or buf == nil then
+    buf = vim.api.nvim_get_current_buf()
+  end
+
+  if not vim.api.nvim_buf_is_valid(buf) then
+    error("math-conceal: invalid buffer " .. tostring(buf), 2)
+  end
+
+  local config = normalize_buffer_config(opts, get_buffer_config(buf))
+  buffer_configs[buf] = config
+
+  for _, win in ipairs(buf_wins(buf)) do
+    redraw_win(win)
+  end
+
+  return vim.deepcopy(config)
+end
+
+---Return the effective ASCII/Unicode conceal config for one buffer.
+---@param buf number?
+---@return table config
+function M.get_buffer_config(buf)
+  if buf == 0 or buf == nil then
+    buf = vim.api.nvim_get_current_buf()
+  end
+
+  return vim.deepcopy(get_buffer_config(buf))
+end
+
 function M.update_query(lang, query_string)
   local config = active_configs[lang]
   if not config then
@@ -646,6 +834,50 @@ function M.update_extra_query(lang, query_string)
 
   config.extra_query_string = strip_extends(query_string or "")
   config.query_string = config.base_query_string .. "\n" .. config.extra_query_string
+end
+
+function M.collect_display_marks(buf, opts)
+  opts = opts or {}
+  if buf == 0 or buf == nil then
+    buf = vim.api.nvim_get_current_buf()
+  end
+
+  local cache = buffer_cache[buf]
+  if not cache or not cache.parser or not cache.specs or #cache.specs == 0 then
+    return {}
+  end
+
+  local toprow = tonumber(opts.toprow) or 0
+  local botrow = tonumber(opts.botrow) or toprow
+  local marks = collect_cached_marks(buf, cache, toprow, botrow, opts)
+  local out = {}
+  for _, mark in ipairs(marks) do
+    if mark_overlaps_range(mark, toprow, botrow) then
+      out[#out + 1] = display_mark(mark)
+    end
+  end
+  return out
+end
+
+function M.collect_display_marks_by_row(buf, opts)
+  opts = opts or {}
+  if buf == 0 or buf == nil then
+    buf = vim.api.nvim_get_current_buf()
+  end
+
+  local cache = buffer_cache[buf]
+  if not cache or not cache.parser or not cache.specs or #cache.specs == 0 then
+    return {}
+  end
+
+  local toprow = tonumber(opts.toprow) or 0
+  local botrow = tonumber(opts.botrow) or toprow
+  if botrow < toprow then
+    toprow, botrow = botrow, toprow
+  end
+
+  local marks = collect_cached_marks(buf, cache, toprow, botrow, opts)
+  return marks_by_row(marks, toprow, botrow)
 end
 
 return M

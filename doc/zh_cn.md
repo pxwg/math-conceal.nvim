@@ -2,20 +2,28 @@
 
 为 [Neovim](https://github.com/neovim/neovim) 提供更快、更精确的 [LaTeX](https://www.latex-project.org/) 和 [typst](https://github.com/typst/typst) 隐藏功能。
 
-https://github.com/user-attachments/assets/65826ae2-2cd5-48a4-aa37-bfd3d9748b31
+### Typst 数学公式 Conceal
+
+https://github.com/user-attachments/assets/d78175a5-7462-40b6-be63-087fd100b97a
+
+### Markdown 数学公式 Conceal（兼容流式输出）
+
+https://github.com/user-attachments/assets/359fb62f-2031-4b5c-8d0b-0fe835fccd80
+
+### LaTeX Conceal
 
 <table style="width: 80%; margin: auto; text-align: center;">
   <tr>
     <td style="width: 50%;">
       <figure>
-        <img src="https://github.com/user-attachments/assets/51702428-640b-4b5e-8888-2a3f6354ad4c" alt="Latex 示例" style="width: 95%;">
-        <figcaption>LaTeX-前</figcaption>
+        <img src="https://github.com/user-attachments/assets/3e73c907-66f0-46cd-8b25-d842473a2e1a" alt="实验性 LaTeX 图片 Conceal" style="width: 95%;">
+        <figcaption>实验性 LaTeX 图片 Conceal</figcaption>
       </figure>
     </td>
     <td style="width: 50%;">
       <figure>
-        <img src="https://github.com/user-attachments/assets/affbcc24-df83-4a45-9f02-aeba891f7727" alt="LaTeX 示例" style="width: 99%;">
-        <figcaption>LaTeX-后</figcaption>
+        <img src="https://github.com/user-attachments/assets/affbcc24-df83-4a45-9f02-aeba891f7727" alt="稳定 LaTeX ASCII Conceal" style="width: 99%;">
+        <figcaption>稳定 LaTeX ASCII/Unicode 字符 Conceal</figcaption>
       </figure>
     </td>
   </tr>
@@ -75,6 +83,7 @@ return {
   "pxwg/math-conceal.nvim",
   event = "VeryLazy",
   main = "math-conceal",
+  build = "cargo build --release --manifest-path service/Cargo.toml", -- 图形化公式渲染需要
   --- @type LaTeXConcealOptions
   opts = {
     conceal = {
@@ -86,9 +95,46 @@ return {
       "phy",
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+    image = {
+      enabled = false, -- 改为 true 以启用图形化公式 conceal
+      filetypes = { "typst", "markdown" },
+    },
   },
 }
 ```
+
+## 数学公式 Conceal
+
+本插件可以通过从 [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer) 迁移进来的渲染管线，将数学公式渲染为终端图形。该 fork 基于 [PartyWumpus/typst-concealer](https://github.com/PartyWumpus/typst-concealer)。该功能依赖 kitty graphics protocol，适用于 kitty、Ghostty 等兼容终端。
+
+图形化公式 conceal 支持 Typst、通过 [MiTeX](https://github.com/mitex-rs/mitex) 渲染数学公式的 Markdown，以及实验性的 LaTeX 渲染。Markdown 数学公式支持 `$...$`、`$$...$$`、`\(...\)` 和 `\[...\]` 分隔符。
+
+统一配置入口如下：
+
+```lua
+require("math-conceal").setup({
+  image = {
+    enabled = true,
+    filetypes = { "typst", "markdown" },
+    -- 可选；未设置时会优先查找当前插件内的 release 二进制：
+    -- service/target/release/typst-concealer-service
+    service_binary = "typst-concealer-service",
+    backends = {
+      latex = {
+        enabled = false, -- 实验性支持
+      },
+    },
+  },
+})
+```
+
+安装或更新后需要构建 Rust 服务：
+
+```sh
+cargo build --release --manifest-path service/Cargo.toml
+```
+
+`styling_type`、`live_preview_enabled`、`render_paths`、`get_root`、`get_inputs`、`get_preamble_file` 等高级渲染选项会透传给迁移后的管线。
 
 ## 待办事项
 
@@ -110,5 +156,7 @@ return {
 
 - [Freed-Wu](https://github.com/Freed-Wu)：在将本插件发布到 [LuaRocks](https://luarocks.org/modules/pxwg/math-conceal.nvim) 以及重构代码结构以符合 Neovim 插件最佳实践方面起到了关键作用。
 - [Dirichy](https://github.com/dirichy)：就 LaTeX 隐藏模式和优化进行了有益的讨论。
+- [PartyWumpus](https://github.com/PartyWumpus)：感谢原始 [typst-concealer](https://github.com/PartyWumpus/typst-concealer) 插件，它启发了 Typst 预览支持。
 - [latex.nvim](https://github.com/robbielyman/latex.nvim)：为使用自定义隐藏模式（conceal patterns）的想法提供了灵感。
 - [latex_concealer.nvim](http://github.com/dirichy/latex_concealer.nvim)：为细粒度隐藏模式的想法提供了灵感。
+- [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer)：本插件迁移图形化公式渲染源码所基于的 fork。

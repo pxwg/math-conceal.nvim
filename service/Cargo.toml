@@ -1,0 +1,18 @@
+[package]
+name = "typst-concealer-service"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+
+[dependencies]
+bytemuck = "1"
+comemo = "0.5"
+ecow = "0.2"
+image = { version = "0.25", default-features = false, features = ["png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+time = { version = "0.3", features = ["local-offset"] }
+tiny-skia = "0.11"
+typst = "0.14.2"
+typst-kit = { version = "0.14.2", features = ["embed-fonts", "fonts", "packages"] }
+typst-render = "0.14.2"
