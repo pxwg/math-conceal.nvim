@@ -153,6 +153,7 @@ such as kitty and Ghostty.
 
 Graphical equation conceal supports Typst, Markdown math through
 [MiTeX](https://github.com/mitex-rs/mitex), and experimental LaTeX rendering.
+Markdown math supports `$...$`, `$$...$$`, `\(...\)`, and `\[...\]` delimiters.
 
 Enable it from the same setup table:
 
