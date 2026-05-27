@@ -508,13 +508,34 @@ local function choose_line_run_anchor(bufnr, start_row, end_row, opts)
   local line_count = vim.api.nvim_buf_line_count(bufnr)
   local anchor_rows = opts and opts.anchor_rows or nil
 
-  -- Keep the visual replacement before the concealed source run whenever
-  -- possible. Anchoring to the next visible line with virt_lines_above makes
-  -- Neovim map screen-line movement back through a later buffer row, which can
-  -- cause k/gk to bounce between adjacent rows. Anchoring on the concealed row
-  -- itself is also problematic because it combines virt_lines and conceal_lines
-  -- on the same buffer row.
+  -- Prefer anchoring virt_lines to start_row itself with virt_lines_above so
+  -- the rendered image stays at the visual position of the concealed source
+  -- block.  This prevents cursor jumps to the top/bottom of the screen when
+  -- conceal is applied to a multi-line display math block.
+  -- Only fall back to start_row - 1 if start_row already has conflicting
+  -- virt_lines from another extmark in the secondary namespace.
   if start_row > 0 then
+    local ok, marks = pcall(
+      vim.api.nvim_buf_get_extmarks,
+      bufnr,
+      state.ns_id2,
+      { start_row, 0 },
+      { start_row, -1 },
+      { details = true }
+    )
+    local has_virt_lines_conflict = false
+    if ok and marks then
+      for _, mark in ipairs(marks) do
+        local details = mark[4] or {}
+        if details.virt_lines ~= nil then
+          has_virt_lines_conflict = true
+          break
+        end
+      end
+    end
+    if not has_virt_lines_conflict then
+      return start_row, true
+    end
     return start_row - 1, false
   end
 
