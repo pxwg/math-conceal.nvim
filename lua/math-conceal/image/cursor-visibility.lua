@@ -33,6 +33,15 @@ function M.is_insert_like_mode(mode)
   return mode:find("i", 1, true) ~= nil or mode:find("R", 1, true) ~= nil
 end
 
+function M.is_visual_mode(mode)
+  mode = mode or vim.api.nvim_get_mode().mode or ""
+  return mode == "v" or mode == "V" or mode == "\22"
+end
+
+function M.presentation_keeps_conceal(bufnr, mode)
+  return M.is_presentation_mode(bufnr) and not M.is_visual_mode(mode)
+end
+
 function M.cursor_in_range(range, row, col, opts)
   opts = opts or {}
   local sr, sc, er, ec = range[1], range[2], range[3], range[4]
@@ -67,6 +76,16 @@ function M.cursor_engages_inline_item(range, row, col, mode)
   return M.cursor_in_range(range, row, col, {
     include_right_edge = M.is_insert_like_mode(mode),
   })
+end
+
+function M.is_presentation_mode(bufnr)
+  local ok, render = pcall(require, "math-conceal.render")
+  if not ok or type(render.is_presentation_mode) ~= "function" then
+    return false
+  end
+
+  local ok_mode, enabled = pcall(render.is_presentation_mode, bufnr)
+  return ok_mode and enabled == true
 end
 
 local function byte_is_escaped(line, byte_idx)
@@ -120,6 +139,10 @@ function M.get_item_effective_range(item)
 end
 
 function M.should_unconceal_item_for_row(item, row, cursor_row, cursor_col, mode)
+  if item ~= nil and M.presentation_keeps_conceal(item.bufnr, mode) then
+    return false
+  end
+
   local effective_range = M.get_item_effective_range(item)
   if effective_range == nil then
     return false
@@ -178,6 +201,9 @@ function M.should_preserve_source_at_cursor(bufnr, item, mode)
   end
 
   mode = mode or vim.api.nvim_get_mode().mode or ""
+  if M.presentation_keeps_conceal(bufnr, mode) then
+    return false
+  end
   if conceal_in_normal_mode(mode) then
     return false
   end

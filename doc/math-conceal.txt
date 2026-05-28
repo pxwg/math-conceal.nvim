@@ -122,11 +122,19 @@ Options:
 
         - `edit`: expand only the concealed node under the cursor. This is the
           default.
-        - `preview`: keep the node concealed when the cursor moves over it.
+        - `preview`: keep ASCII/Unicode conceal collapsed when the cursor moves
+          over it.
+        - `presentation`: keep plugin-managed conceal collapsed for rendered
+          reading surfaces. Image-rendered rows are cursor-protected, live
+          source reveal paths are disabled, and the buffer window is kept at
+          `conceallevel=2` with `concealcursor=nci`. Visual selection
+          temporarily reveals source so inline text ranges can be selected
+          precisely.
 
         The same setting can be changed for one buffer:
 >
   require("math-conceal").setup_buffer({ mode = "preview" })
+  require("math-conceal").setup_buffer({ mode = "presentation" })
   require("math-conceal").setup_buffer(bufnr, { mode = "edit" })
 <
 

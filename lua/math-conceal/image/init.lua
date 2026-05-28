@@ -360,6 +360,22 @@ local function cleanup_image_assets_on_exit()
   require("math-conceal.image.workspace").cleanup_all()
 end
 
+local function is_visual_mode(mode)
+  return mode == "v" or mode == "V" or mode == "\22"
+end
+
+local function mode_changed_involves_visual(match)
+  local old_mode, new_mode = tostring(match or ""):match("^([^:]*):(.*)$")
+  return is_visual_mode(old_mode) or is_visual_mode(new_mode)
+end
+
+local function sync_cursor_ui_on_visual_mode_changed(bufnr, match)
+  if not mode_changed_involves_visual(match) then
+    return
+  end
+  require("math-conceal.image.machine.runtime").sync_cursor_ui(bufnr)
+end
+
 local function attach_buffer_local_autocmds(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) or not M.is_supported_bufnr(bufnr) then
     return
@@ -380,6 +396,15 @@ local function attach_buffer_local_autocmds(bufnr)
     desc = "unconceal on line hover",
     callback = function(ev)
       require("math-conceal.image.machine.runtime").sync_cursor_ui(ev.buf)
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("ModeChanged", {
+    group = augroup,
+    buffer = bufnr,
+    desc = "sync source reveal when entering or leaving visual mode",
+    callback = function(ev)
+      sync_cursor_ui_on_visual_mode_changed(ev.buf, ev.match)
     end,
   })
 
@@ -810,11 +835,14 @@ function M.setup(cfg)
 
   vim.api.nvim_create_autocmd({ "ModeChanged" }, {
     group = augroup,
-    pattern = "v:*",
-    desc = "unconceal when exiting visual mode (no CursorMoved event fires)",
+    desc = "sync source reveal when entering or leaving visual mode",
     callback = function(ev)
-      if M.is_supported_bufnr(ev.buf) then
-        require("math-conceal.image.machine.runtime").sync_hover(ev.buf)
+      local bufnr = ev.buf
+      if bufnr == nil or bufnr == 0 then
+        bufnr = vim.api.nvim_get_current_buf()
+      end
+      if M.is_supported_bufnr(bufnr) then
+        sync_cursor_ui_on_visual_mode_changed(bufnr, ev.match)
       end
     end,
   })

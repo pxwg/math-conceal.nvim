@@ -569,6 +569,19 @@ function Manager:sync_cursor_conceal(opts)
   end
 
   local mode = vim.api.nvim_get_mode().mode
+  if cursor_visibility.presentation_keeps_conceal(self.bufnr, mode) then
+    self:restore_all_hidden()
+    bs.currently_hidden_extmark_ids = {}
+    hover.last_cursor_row = nil
+    hover.last_cursor_col = nil
+    hover.last_mode = mode
+    hover.last_lo = nil
+    hover.last_hi = nil
+    hover.invalidated = false
+    require("math-conceal.image.presentation").keep_cursor_out_of_protected_range(self.bufnr)
+    return true
+  end
+
   if main.config.conceal_in_normal and mode:find("n", 1, true) ~= nil then
     self:restore_all_hidden()
     bs.currently_hidden_extmark_ids = {}
@@ -649,6 +662,16 @@ end
 
 function Manager:sync_cursor_preview(opts)
   opts = opts or {}
+  if cursor_visibility.is_presentation_mode(self.bufnr) then
+    if self.preview_placement_id ~= nil and self.placements[self.preview_placement_id] ~= nil then
+      self.placements[self.preview_placement_id]:clear_preview(opts)
+    else
+      require("math-conceal.image.plan").clear_live_typst_preview(self.bufnr, opts)
+    end
+    self.preview_placement_id = nil
+    return false
+  end
+
   self:sync_from_machine({ read_model = false })
   local ok_main, main = pcall(require, "math-conceal.image")
   if

@@ -4,6 +4,7 @@
 --- runs.  Atomic extmark resources live in extmark.lua; cursor transitions
 --- update those resources first and then reconcile line runs here.
 
+local cursor_visibility = require("math-conceal.image.cursor-visibility")
 local display = require("math-conceal.image.display")
 local state = require("math-conceal.image.state")
 
@@ -442,7 +443,11 @@ local function line_run_row_ready(bufnr, row, opts)
   if line_run_block_for_row(bufnr, row, opts) ~= nil then
     return true
   end
-  if opts.ignore_cursor ~= true and cursor_row_for_buf(bufnr) == row then
+  if
+    opts.ignore_cursor ~= true
+    and cursor_row_for_buf(bufnr) == row
+    and not cursor_visibility.presentation_keeps_conceal(bufnr)
+  then
     return false
   end
 

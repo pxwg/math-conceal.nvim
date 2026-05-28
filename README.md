@@ -77,9 +77,14 @@ Using a proper-designed lua module to handle the conceal patterns and only use t
 - Fine grained conceal patterns:
     - Original neovim conceal patterns: expand *all* concealed nodes on the line where the cursor is located.
   - Fine grained conceal patterns: only expand the concealed node under the cursor.
-- Buffer-local preview mode for ASCII/Unicode conceal:
+- Buffer-local preview and presentation modes:
   `require("math-conceal").setup_buffer({ mode = "preview" })` keeps concealed
-  nodes collapsed while the cursor moves over them.
+  ASCII/Unicode nodes collapsed while the cursor moves over them.
+  `require("math-conceal").setup_buffer({ mode = "presentation" })` is for
+  rendered reading surfaces such as AI chat buffers: plugin-managed conceal is
+  kept collapsed, rendered image rows are cursor-protected, and normal source
+  reveal paths are disabled for that buffer. Visual selection temporarily
+  reveals source so inline text ranges can still be selected precisely.
 - Support multiple conceal patterns, including greek letters, script letters, math symbols, font styles, delimiters, and physical units.
 - Multiple highlight groups for different conceal patterns, allowing you to customize the appearance of each pattern (all highlight groups can be found in [highlights](./highlights/highlights.md)).
 

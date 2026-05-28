@@ -815,6 +815,11 @@ end
 
 function M.render_live_preview(bufnr, opts)
   opts = opts or {}
+  if cursor_visibility.is_presentation_mode(bufnr) then
+    require("math-conceal.image.presentation").keep_cursor_out_of_protected_range(bufnr)
+    M.clear_live_preview(bufnr, opts)
+    return
+  end
   local ok_main, main = pcall(require, "math-conceal.image")
   if ok_main and uses_formula_manager(bufnr, main) then
     require("math-conceal.image.formula.manager").sync_cursor_preview(bufnr, opts)
@@ -839,6 +844,14 @@ function M.sync_hover(bufnr, opts)
 end
 
 function M.sync_cursor_ui(bufnr)
+  require("math-conceal.image.presentation").keep_cursor_out_of_protected_range(bufnr)
+
+  local mode = vim.api.nvim_get_mode().mode or ""
+  if cursor_visibility.is_presentation_mode(bufnr) and cursor_visibility.is_visual_mode(mode) then
+    sync_cursor_ui_now(bufnr)
+    return
+  end
+
   local throttle = require("math-conceal.image").config.cursor_hover_throttle_ms
   if throttle <= 0 then
     sync_cursor_ui_now(bufnr)

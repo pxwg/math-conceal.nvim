@@ -96,7 +96,7 @@ local M = {
 --- @field image MathConcealImageOptions?
 
 --- @class MathConcealBufferOptions
---- @field mode "edit"|"preview"?: ASCII conceal cursor behavior. `edit` expands the item under the cursor; `preview` keeps it concealed.
+--- @field mode "edit"|"preview"|"presentation"?: Conceal cursor behavior. `edit` expands the item under the cursor; `preview` keeps ASCII/Unicode items concealed; `presentation` keeps all plugin-managed conceal collapsed and treats rendered image rows as cursor-protected, except while Visual selection reveals source for precise selection.
 
 --- @class MathConcealImageOptions
 --- @field enabled boolean?: Enable image conceal. Default false.
@@ -176,6 +176,7 @@ end
 ---Configure ASCII/Unicode conceal behavior for one buffer.
 ---Examples:
 ---  require("math-conceal").setup_buffer({ mode = "preview" })
+---  require("math-conceal").setup_buffer({ mode = "presentation" })
 ---  require("math-conceal").setup_buffer(bufnr, { mode = "edit" })
 ---@param bufnr integer|MathConcealBufferOptions?
 ---@param opts MathConcealBufferOptions?
@@ -189,6 +190,13 @@ end
 ---@return MathConcealBufferOptions
 function M.get_buffer_config(bufnr)
   return render.get_buffer_config(bufnr)
+end
+
+---Return true when one buffer is in presentation mode.
+---@param bufnr integer?
+---@return boolean
+function M.is_presentation_mode(bufnr)
+  return render.is_presentation_mode(bufnr)
 end
 
 ---check if `filetype` is in `M.opts.ft`.

@@ -1050,6 +1050,7 @@ function M.conceal_for_image_id(bufnr, image_id, natural_cols, natural_rows, sou
     return
   end
   conceal_extmark_with_image(bufnr, extmark_id, image_id, natural_cols, natural_rows, source_rows, item, opts)
+  require("math-conceal.image.presentation").keep_cursor_out_of_protected_range(bufnr)
 end
 
 --- Render an existing kitty image into an arbitrary extmark.

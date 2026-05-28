@@ -1013,6 +1013,23 @@ function M.hide_extmarks_at_cursor(bufnr)
   local bs = state.get_buf_state(bufnr)
   local hover = require("math-conceal.image.machine.runtime").get_ui_buffer(bufnr).hover
 
+  local mode = vim.api.nvim_get_mode().mode
+
+  if cursor_visibility.presentation_keeps_conceal(bufnr, mode) then
+    for id in pairs(bs.currently_hidden_extmark_ids) do
+      restore_one_extmark(bufnr, id)
+    end
+    bs.currently_hidden_extmark_ids = {}
+    hover.last_cursor_row = nil
+    hover.last_cursor_col = nil
+    hover.last_mode = vim.api.nvim_get_mode().mode
+    hover.last_lo = nil
+    hover.last_hi = nil
+    hover.invalidated = false
+    require("math-conceal.image.presentation").keep_cursor_out_of_protected_range(bufnr)
+    return
+  end
+
   if main._enabled_buffers[bufnr] ~= true or not main.is_render_allowed(bufnr) then
     for id in pairs(bs.currently_hidden_extmark_ids) do
       restore_one_extmark(bufnr, id)
@@ -1026,8 +1043,6 @@ function M.hide_extmarks_at_cursor(bufnr)
     hover.invalidated = false
     return
   end
-
-  local mode = vim.api.nvim_get_mode().mode
 
   -- conceal_in_normal mode: don't hide anything, restore all hidden extmarks
   if main.config.conceal_in_normal and mode:find("n", 1, true) ~= nil then
@@ -1783,6 +1798,7 @@ function M.render_live_typst_preview(bufnr)
     main._enabled_buffers[bufnr] ~= true
     or not main.is_render_allowed(bufnr)
     or (main.config and main.config.live_preview_enabled == false)
+    or cursor_visibility.is_presentation_mode(bufnr)
   then
     M.clear_live_typst_preview(bufnr)
     return
