@@ -932,6 +932,14 @@ function M.setup_buffer(buf, opts)
   end
 
   local config = normalize_buffer_config(opts, get_buffer_config(buf))
+  local previous = buffer_configs[buf]
+  if previous ~= nil and vim.deep_equal(previous, config) then
+    for _, win in ipairs(buf_wins(buf)) do
+      sync_window_options(buf, win)
+    end
+    return vim.deepcopy(config)
+  end
+
   buffer_configs[buf] = config
   apply_buffer_window_options(buf, config)
   if config.mode == "presentation" then
