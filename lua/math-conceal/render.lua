@@ -484,7 +484,7 @@ local function apply_buffer_window_options(buf, config)
   end
 end
 
-vim.api.nvim_create_autocmd({ "BufWinEnter", "WinEnter" }, {
+vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "WinEnter" }, {
   group = augroup,
   callback = function(args)
     local buf = args.buf
