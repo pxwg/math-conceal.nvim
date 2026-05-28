@@ -25,11 +25,13 @@ local active_configs = {}
 local default_buffer_config = {
   mode = "edit",
 }
-local default_window_options = {
-  conceallevel = vim.o.conceallevel,
-  concealcursor = vim.o.concealcursor,
+local plugin_window_options = {
+  conceallevel = 2,
+  concealcursor = "nci",
 }
 local buffer_configs = {}
+local buffer_window_option_autocmds = {}
+local buffer_window_options = {}
 
 local markdown_expand_nodes = {
   code_span = true,
@@ -114,6 +116,9 @@ vim.api.nvim_create_autocmd("WinClosed", {
     local win_id = tonumber(args.match)
     if win_id then
       win_states[win_id] = nil
+      for _, by_win in pairs(buffer_window_options) do
+        by_win[win_id] = nil
+      end
     end
   end,
 })
@@ -356,23 +361,61 @@ local function valid_buf_window(buf, win)
   return ok and win_buf == buf
 end
 
-local function sync_window_options(buf, win)
+local function window_has_plugin_options(win)
+  return vim.wo[win].conceallevel == plugin_window_options.conceallevel
+    and vim.wo[win].concealcursor == plugin_window_options.concealcursor
+end
+
+local function remember_window_options(buf, win)
+  buffer_window_options[buf] = buffer_window_options[buf] or {}
+  if buffer_window_options[buf][win] ~= nil then
+    return
+  end
+
+  local inherited
+  if window_has_plugin_options(win) then
+    for _, saved in pairs(buffer_window_options[buf]) do
+      inherited = saved
+      break
+    end
+  end
+
+  buffer_window_options[buf][win] = {
+    conceallevel = inherited and inherited.conceallevel or vim.wo[win].conceallevel,
+    concealcursor = inherited and inherited.concealcursor or vim.wo[win].concealcursor,
+  }
+end
+
+local function apply_window_options(buf, win)
   if not valid_buf_window(buf, win) then
     return
   end
 
-  local opts
-  if should_apply_buffer_window_options(buf) then
-    opts = {
-      conceallevel = 2,
-      concealcursor = "nci",
-    }
-  else
-    opts = default_window_options
+  remember_window_options(buf, win)
+  vim.wo[win].conceallevel = plugin_window_options.conceallevel
+  vim.wo[win].concealcursor = plugin_window_options.concealcursor
+end
+
+local function restore_window_options(buf, win)
+  local by_win = buffer_window_options[buf]
+  local saved = by_win and by_win[win] or nil
+  if saved == nil then
+    return
   end
 
-  vim.wo[win].conceallevel = opts.conceallevel
-  vim.wo[win].concealcursor = opts.concealcursor
+  if vim.api.nvim_win_is_valid(win) and window_has_plugin_options(win) then
+    vim.wo[win].conceallevel = saved.conceallevel
+    vim.wo[win].concealcursor = saved.concealcursor
+  end
+
+  by_win[win] = nil
+  if next(by_win) == nil then
+    buffer_window_options[buf] = nil
+  end
+end
+
+local function clear_buffer_window_options(buf)
+  buffer_window_options[buf] = nil
 end
 
 local function guard_presentation_cursor(buf, win)
@@ -402,43 +445,58 @@ local function sync_presentation_image_state(buf)
   end
 end
 
+local function ensure_buffer_window_option_autocmds(buf)
+  if buffer_window_option_autocmds[buf] == true or not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+
+  buffer_window_option_autocmds[buf] = true
+  vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "WinEnter" }, {
+    group = augroup,
+    buffer = buf,
+    callback = function(args)
+      local win = vim.api.nvim_get_current_win()
+      apply_window_options(args.buf, win)
+      local config = get_buffer_config(args.buf)
+      if config.mode == "presentation" then
+        guard_presentation_cursor(args.buf, win)
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("BufWinLeave", {
+    group = augroup,
+    buffer = buf,
+    callback = function(args)
+      restore_window_options(args.buf, vim.api.nvim_get_current_win())
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "BufUnload", "BufDelete" }, {
+    group = augroup,
+    buffer = buf,
+    callback = function(args)
+      clear_buffer_window_options(args.buf)
+      buffer_window_option_autocmds[args.buf] = nil
+      buffer_cache[args.buf] = nil
+      buffer_configs[args.buf] = nil
+    end,
+  })
+end
+
 local function apply_buffer_window_options(buf, config)
   if not should_apply_buffer_window_options(buf) then
     return
   end
 
+  ensure_buffer_window_option_autocmds(buf)
   for _, win in ipairs(buf_wins(buf)) do
-    sync_window_options(buf, win)
+    apply_window_options(buf, win)
   end
   if config.mode == "presentation" then
     guard_presentation_cursor(buf)
   end
 end
-
-vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "WinEnter" }, {
-  group = augroup,
-  callback = function(args)
-    local buf = args.buf
-    if buf == nil or buf == 0 then
-      buf = vim.api.nvim_get_current_buf()
-    end
-    local win = vim.api.nvim_get_current_win()
-    local managed = should_apply_buffer_window_options(buf)
-    sync_window_options(buf, win)
-    local config = get_buffer_config(buf)
-    if managed and config.mode == "presentation" then
-      guard_presentation_cursor(buf, win)
-    end
-  end,
-})
-
-vim.api.nvim_create_autocmd("BufUnload", {
-  group = augroup,
-  callback = function(args)
-    buffer_cache[args.buf] = nil
-    buffer_configs[args.buf] = nil
-  end,
-})
 
 local function collect_marks(buf_id, cache, toprow, botrow)
   local marks = {}
@@ -934,9 +992,7 @@ function M.setup_buffer(buf, opts)
   local config = normalize_buffer_config(opts, get_buffer_config(buf))
   local previous = buffer_configs[buf]
   if previous ~= nil and vim.deep_equal(previous, config) then
-    for _, win in ipairs(buf_wins(buf)) do
-      sync_window_options(buf, win)
-    end
+    apply_buffer_window_options(buf, config)
     return vim.deepcopy(config)
   end
 
