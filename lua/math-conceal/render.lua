@@ -591,8 +591,10 @@ local function collect_marks(buf_id, cache, toprow, botrow)
   return marks
 end
 
-local function marks_cover_range(state, tick, version, toprow, botrow)
+local function marks_cover_range(state, buf_id, cache, tick, version, toprow, botrow)
   return state
+    and state.buf == buf_id
+    and state.cache == cache
     and state.tick == tick
     and state.version == version
     and state.top <= toprow
@@ -626,7 +628,7 @@ local function collect_cached_marks(buf_id, cache, toprow, botrow, opts)
 
   if type(win_id) == "number" and vim.api.nvim_win_is_valid(win_id) and vim.api.nvim_win_get_buf(win_id) == buf_id then
     local state = win_states[win_id]
-    if marks_cover_range(state, tick, version, toprow, botrow) then
+    if marks_cover_range(state, buf_id, cache, tick, version, toprow, botrow) then
       return state.marks
     end
   end
@@ -742,12 +744,16 @@ local function setup_decoration_provider()
 
       -- Core optimization: cache hit check
       -- Reuse marks if buffer unchanged AND viewport unchanged
-      local is_cache_valid = (state.tick == buf_tick)
+      local is_cache_valid = (state.buf == buf_id)
+        and (state.cache == cache)
+        and (state.tick == buf_tick)
         and (state.top == toprow)
         and (state.bot == botrow)
         and (state.version == cache.version)
 
       if not is_cache_valid then
+        state.buf = buf_id
+        state.cache = cache
         state.tick = buf_tick
         state.top = toprow
         state.bot = botrow
