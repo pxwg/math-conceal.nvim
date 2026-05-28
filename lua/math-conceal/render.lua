@@ -25,8 +25,11 @@ local active_configs = {}
 local default_buffer_config = {
   mode = "edit",
 }
+local default_window_options = {
+  conceallevel = vim.o.conceallevel,
+  concealcursor = vim.o.concealcursor,
+}
 local buffer_configs = {}
-local presentation_window_options = {}
 
 local markdown_expand_nodes = {
   code_span = true,
@@ -353,95 +356,23 @@ local function valid_buf_window(buf, win)
   return ok and win_buf == buf
 end
 
-local function remember_window_options(buf, win, opts)
-  opts = opts or {}
-  presentation_window_options[buf] = presentation_window_options[buf] or {}
-  if presentation_window_options[buf][win] ~= nil then
-    return
-  end
-
-  local inherited
-  if
-    opts.inherit_presentation_options
-    and vim.wo[win].concealcursor == "nci"
-    and (tonumber(vim.wo[win].conceallevel) or 0) == 2
-  then
-    for _, saved in pairs(presentation_window_options[buf]) do
-      inherited = saved
-      break
-    end
-  end
-
-  presentation_window_options[buf][win] = {
-    conceallevel = inherited and inherited.conceallevel or vim.wo[win].conceallevel,
-    concealcursor = inherited and inherited.concealcursor or vim.wo[win].concealcursor,
-  }
-end
-
-local function restore_window_options(buf, win)
-  local by_win = presentation_window_options[buf]
-  local saved = by_win and by_win[win] or nil
-  if saved == nil then
-    return
-  end
-
-  if vim.api.nvim_win_is_valid(win) then
-    vim.wo[win].conceallevel = saved.conceallevel
-    vim.wo[win].concealcursor = saved.concealcursor
-  end
-
-  by_win[win] = nil
-  if next(by_win) == nil then
-    presentation_window_options[buf] = nil
-  end
-end
-
-local function restore_all_window_options(buf)
-  local by_win = presentation_window_options[buf]
-  if by_win == nil then
-    return
-  end
-
-  for win, saved in pairs(by_win) do
-    if vim.api.nvim_win_is_valid(win) then
-      vim.wo[win].conceallevel = saved.conceallevel
-      vim.wo[win].concealcursor = saved.concealcursor
-    end
-  end
-
-  presentation_window_options[buf] = nil
-end
-
-local function restore_stale_window_options(win)
-  if type(win) ~= "number" or not vim.api.nvim_win_is_valid(win) then
-    return
-  end
-
-  local stale_buffers = {}
-  for buf, by_win in pairs(presentation_window_options) do
-    if by_win[win] ~= nil and not valid_buf_window(buf, win) then
-      stale_buffers[#stale_buffers + 1] = buf
-    end
-  end
-
-  for _, buf in ipairs(stale_buffers) do
-    restore_window_options(buf, win)
-  end
-end
-
-local function apply_window_options(buf, win, config, opts)
+local function sync_window_options(buf, win)
   if not valid_buf_window(buf, win) then
     return
   end
 
-  if config.mode ~= "presentation" then
-    restore_window_options(buf, win)
-    return
+  local opts
+  if should_apply_buffer_window_options(buf) then
+    opts = {
+      conceallevel = 2,
+      concealcursor = "nci",
+    }
+  else
+    opts = default_window_options
   end
 
-  remember_window_options(buf, win, opts)
-  vim.wo[win].conceallevel = 2
-  vim.wo[win].concealcursor = "nci"
+  vim.wo[win].conceallevel = opts.conceallevel
+  vim.wo[win].concealcursor = opts.concealcursor
 end
 
 local function guard_presentation_cursor(buf, win)
@@ -477,7 +408,7 @@ local function apply_buffer_window_options(buf, config)
   end
 
   for _, win in ipairs(buf_wins(buf)) do
-    apply_window_options(buf, win, config)
+    sync_window_options(buf, win)
   end
   if config.mode == "presentation" then
     guard_presentation_cursor(buf)
@@ -492,31 +423,18 @@ vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "WinEnter" }, {
       buf = vim.api.nvim_get_current_buf()
     end
     local win = vim.api.nvim_get_current_win()
-    restore_stale_window_options(win)
-    if not should_apply_buffer_window_options(buf) then
-      return
-    end
+    local managed = should_apply_buffer_window_options(buf)
+    sync_window_options(buf, win)
     local config = get_buffer_config(buf)
-    apply_window_options(buf, win, config, {
-      inherit_presentation_options = true,
-    })
-    if config.mode == "presentation" then
+    if managed and config.mode == "presentation" then
       guard_presentation_cursor(buf, win)
     end
-  end,
-})
-
-vim.api.nvim_create_autocmd("BufWinLeave", {
-  group = augroup,
-  callback = function(args)
-    restore_window_options(args.buf, vim.api.nvim_get_current_win())
   end,
 })
 
 vim.api.nvim_create_autocmd("BufUnload", {
   group = augroup,
   callback = function(args)
-    restore_all_window_options(args.buf)
     buffer_cache[args.buf] = nil
     buffer_configs[args.buf] = nil
   end,
