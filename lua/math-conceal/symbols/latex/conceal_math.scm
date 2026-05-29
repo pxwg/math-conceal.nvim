@@ -1,7 +1,8 @@
 ; math conceals - regex removed, Rust hash table will filter
 (generic_command
   command: (command_name) @tex_math_command
-  (#has-ancestor? @tex_math_command math_environment inline_formula displayed_equation generic_command)
+  (#has-ancestor? @tex_math_command
+    math_environment inline_formula displayed_equation generic_command)
   (#not-has-ancestor? @tex_math_command label_definition text_mode)
   (#set-conceal! @tex_math_command "conceal"))
 
@@ -157,10 +158,10 @@
   command: (command_name) @tex_math_command
   (#eq? @tex_math_command "\\sqrt")
   arg: (curly_group
-    "{" @left_paren_cmd
-    (text
-      word: (word))
-    "}" @right_paren_cmd)
+    [
+      "{" @left_paren_cmd
+      "}" @right_paren_cmd
+    ])
   (#has-ancestor? @tex_math_command math_environment inline_formula displayed_equation)
   (#set-conceal! @tex_math_command "conceal")
   (#set! @left_paren_cmd conceal "(")
