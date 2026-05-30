@@ -8,6 +8,15 @@
     subparagraph command generic_command subscript superscript)
   (#set! conceal ""))
 
+; Useful for visual concatenate in conceal: \textbackslash{}command -> \command
+; $a{}b$ -> $ab$ - two words
+; LaTeX output produce same
+(generic_command
+  command: (command_name)
+  (curly_group) @conceal
+  (#match? @conceal "^\\{\\}$")
+  (#set! @conceal conceal ""))
+
 ; Hints to simplify concealing
 ; \frac{{long_expression_1}}{{long_expression_2}}
 ;       ^               ^    ^                 ^
