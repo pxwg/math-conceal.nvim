@@ -35,14 +35,7 @@ local function range_key(range)
 end
 
 local function display_width_for_bufnr(bufnr)
-  if bufnr == nil or not vim.api.nvim_buf_is_valid(bufnr) then
-    return vim.o.columns
-  end
-  local winid = vim.fn.bufwinid(bufnr)
-  if winid ~= -1 and vim.api.nvim_win_is_valid(winid) then
-    return vim.api.nvim_win_get_width(winid)
-  end
-  return vim.o.columns
+  return state.visible_window_width(bufnr)
 end
 
 local function cursor_item_from_node(node)

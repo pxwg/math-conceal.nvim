@@ -59,8 +59,8 @@ local function formula_cursor_ui_can_batch(bufnr, main)
 end
 
 local function cursor_line_range(bufnr)
-  local winid = vim.fn.bufwinid(bufnr)
-  if winid == -1 then
+  local winid = state.active_window_for_bufnr(bufnr)
+  if winid == nil then
     return nil, nil
   end
 
@@ -154,7 +154,7 @@ function M.reconcile_visible_overlay_bindings(bufnr)
   end
 
   local changedtick = vim.api.nvim_buf_get_changedtick(bufnr)
-  local layout_version = vim.o.columns
+  local layout_version = state.visible_window_width(bufnr)
   local repaired = 0
 
   for _, node_id in ipairs(buf.node_order or {}) do

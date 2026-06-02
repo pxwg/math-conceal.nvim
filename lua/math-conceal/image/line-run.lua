@@ -16,27 +16,15 @@ function M.configure(opts)
 end
 
 local function get_win_cols(bufnr)
-  local winid = vim.fn.bufwinid(bufnr)
-  return vim.api.nvim_win_get_width(winid ~= -1 and winid or 0)
+  return state.visible_window_width(bufnr)
 end
 
 local function buf_win(bufnr)
-  local winid = vim.fn.bufwinid(bufnr)
-  if winid ~= -1 and vim.api.nvim_win_is_valid(winid) then
-    return winid
-  end
+  return state.active_window_for_bufnr(bufnr)
 end
 
 local function get_win_text_cols(bufnr)
-  local winid = vim.fn.bufwinid(bufnr)
-  local width = get_win_cols(bufnr)
-  if winid == -1 then
-    return width
-  end
-
-  local info = vim.fn.getwininfo(winid)[1]
-  local textoff = info and tonumber(info.textoff) or 0
-  return math.max(1, width - textoff)
+  return state.visible_window_text_width(bufnr)
 end
 
 local function item_display_bufnr(item)

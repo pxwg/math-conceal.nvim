@@ -347,7 +347,7 @@ function Manager:reconcile_visible_overlay_bindings()
   self:sync_from_machine({ read_model = false })
 
   local changedtick = vim.api.nvim_buf_get_changedtick(self.bufnr)
-  local layout_version = vim.o.columns
+  local layout_version = state.visible_window_width(self.bufnr)
   local repaired = 0
   for _, placement in ipairs(self:visible_placements()) do
     local _, _, overlay = placement:resolve(placement.visible_overlay_id)
@@ -690,8 +690,8 @@ function Manager:sync_cursor_preview(opts)
     return false
   end
 
-  local winid = vim.fn.bufwinid(self.bufnr)
-  if winid == -1 then
+  local winid = state.active_window_for_bufnr(self.bufnr)
+  if winid == nil then
     if self.preview_placement_id ~= nil and self.placements[self.preview_placement_id] ~= nil then
       self.placements[self.preview_placement_id]:clear_preview(opts)
     else

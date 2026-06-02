@@ -262,6 +262,78 @@ function M.invalidate_hover(bufnr)
   end
 end
 
+local function fallback_columns()
+  return math.max(1, tonumber(vim.o.columns) or 1)
+end
+
+--- Return the active window for cursor-driven UI for bufnr.
+--- Prefer the current window when it shows bufnr; otherwise fall back to any
+--- visible window showing the buffer.
+--- @param bufnr integer|nil
+--- @return integer|nil
+function M.active_window_for_bufnr(bufnr)
+  if bufnr == nil or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+
+  local current_win = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_is_valid(current_win) and vim.api.nvim_win_get_buf(current_win) == bufnr then
+    return current_win
+  end
+
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid ~= -1 and vim.api.nvim_win_is_valid(winid) then
+    return winid
+  end
+  return nil
+end
+
+--- Return the narrowest visible window width for bufnr.
+--- Buffer-local extmarks cannot vary per window, so shared-buffer presentation
+--- must fit every visible split that shows the buffer.
+--- @param bufnr integer|nil
+--- @return integer
+function M.visible_window_width(bufnr)
+  if bufnr == nil or not vim.api.nvim_buf_is_valid(bufnr) then
+    return fallback_columns()
+  end
+
+  local width = nil
+  for _, winid in ipairs(vim.fn.win_findbuf(bufnr)) do
+    if vim.api.nvim_win_is_valid(winid) then
+      local win_width = vim.api.nvim_win_get_width(winid)
+      if win_width > 0 and (width == nil or win_width < width) then
+        width = win_width
+      end
+    end
+  end
+
+  return width or fallback_columns()
+end
+
+--- Return the narrowest text area width for visible windows showing bufnr.
+--- @param bufnr integer|nil
+--- @return integer
+function M.visible_window_text_width(bufnr)
+  if bufnr == nil or not vim.api.nvim_buf_is_valid(bufnr) then
+    return fallback_columns()
+  end
+
+  local text_width = nil
+  for _, winid in ipairs(vim.fn.win_findbuf(bufnr)) do
+    if vim.api.nvim_win_is_valid(winid) then
+      local info = vim.fn.getwininfo(winid)[1]
+      local textoff = info and tonumber(info.textoff) or 0
+      local win_text_width = math.max(1, vim.api.nvim_win_get_width(winid) - textoff)
+      if text_width == nil or win_text_width < text_width then
+        text_width = win_text_width
+      end
+    end
+  end
+
+  return text_width or M.visible_window_width(bufnr)
+end
+
 --- Release sub-extmarks (ns_id2) attached to extmark_id before reuse or deletion.
 --- @param bufnr integer
 --- @param extmark_id integer

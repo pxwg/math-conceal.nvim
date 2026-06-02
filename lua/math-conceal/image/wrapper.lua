@@ -116,14 +116,6 @@ function M.build_context_document(bufnr, buf_dir, source_root, effective_root, p
   return build_header_text(config, main, maybe_rewrite, preamble_include_line)
 end
 
---- Returns the column width of the window displaying bufnr (falls back to current window).
---- @param bufnr integer
---- @return integer
-local function get_win_cols(bufnr)
-  local winid = vim.fn.bufwinid(bufnr)
-  return vim.api.nvim_win_get_width(winid ~= -1 and winid or 0)
-end
-
 --- Returns available window width in Typst points.
 --- Typst page width = 可用宽度（不含终端 padding）; terminal padding is added by extmark layer.
 --- @param bufnr integer
@@ -132,7 +124,7 @@ local function current_window_width_pt(bufnr)
   local config = require("math-conceal.image").config
   local baseline_pt = config.math_baseline_pt or 11
   local pad_cols = config.block_padding_cols or 4
-  local win_cols = get_win_cols(bufnr)
+  local win_cols = state.visible_window_width(bufnr)
   local usable_cols = math.max(8, win_cols - 2 * pad_cols)
   if state._cell_px_w and state._cell_px_h then
     local cell_w_pt = baseline_pt * (state._cell_px_w / state._cell_px_h)

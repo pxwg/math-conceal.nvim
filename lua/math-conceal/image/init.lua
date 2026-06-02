@@ -52,7 +52,38 @@ local function handle_vim_resized()
   end
 end
 
+local function handle_win_resized()
+  local affected_buffers = {}
+  local windows = vim.v.event and vim.v.event.windows or nil
+  if type(windows) ~= "table" or vim.tbl_isempty(windows) then
+    windows = { vim.api.nvim_get_current_win() }
+  end
+
+  for _, winid in ipairs(windows) do
+    if type(winid) == "number" and vim.api.nvim_win_is_valid(winid) then
+      affected_buffers[vim.api.nvim_win_get_buf(winid)] = true
+    end
+  end
+
+  if vim.tbl_isempty(affected_buffers) then
+    for _, winid in ipairs(vim.api.nvim_list_wins()) do
+      if vim.api.nvim_win_is_valid(winid) then
+        affected_buffers[vim.api.nvim_win_get_buf(winid)] = true
+      end
+    end
+  end
+
+  local runtime = require("math-conceal.image.machine.runtime")
+  for bufnr in pairs(affected_buffers) do
+    if M._enabled_buffers[bufnr] == true and M.is_supported_bufnr(bufnr) and M.is_render_allowed(bufnr) then
+      runtime.schedule_visible_overlay_refresh(bufnr, { immediate = true })
+      runtime.schedule_full_render(bufnr)
+    end
+  end
+end
+
 M._handle_vim_resized = handle_vim_resized
+M._handle_win_resized = handle_win_resized
 
 -- ── Typst prelude / styling ────────────────────────────────────────────────────
 
@@ -935,10 +966,16 @@ function M.setup(cfg)
     end,
   })
 
-  vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
+  vim.api.nvim_create_autocmd("VimResized", {
     group = augroup,
     desc = "refresh cell pixel size on terminal resize",
     callback = handle_vim_resized,
+  })
+
+  vim.api.nvim_create_autocmd("WinResized", {
+    group = augroup,
+    desc = "refresh image conceal when window dimensions change",
+    callback = handle_win_resized,
   })
 
   vim.api.nvim_create_autocmd("VimLeavePre", {

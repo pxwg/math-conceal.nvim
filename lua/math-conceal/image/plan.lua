@@ -718,8 +718,8 @@ local function stable_preview_to_keep(bs)
 end
 
 local function preview_left_pad_cols(bufnr, range)
-  local winid = vim.fn.bufwinid(bufnr)
-  if winid == -1 then
+  local winid = state.active_window_for_bufnr(bufnr)
+  if winid == nil then
     local line = (vim.api.nvim_buf_get_lines(bufnr, range[1], range[1] + 1, false) or { "" })[1] or ""
     local prefix = string.sub(line, 1, range[2])
     return vim.fn.strdisplaywidth(prefix)
@@ -733,8 +733,8 @@ local function preview_left_pad_cols(bufnr, range)
 end
 
 local function get_range_screen_rect(bufnr, range)
-  local winid = vim.fn.bufwinid(bufnr)
-  if winid == -1 then
+  local winid = state.active_window_for_bufnr(bufnr)
+  if winid == nil then
     return nil
   end
 
@@ -866,7 +866,7 @@ function M.render_buf(bufnr)
     project_scope_id = project_scope.project_scope_id,
     render_context_hash = full_render_context_hash(main, project_scope),
     buffer_version = vim.api.nvim_buf_get_changedtick(bufnr),
-    layout_version = vim.o.columns,
+    layout_version = state.visible_window_width(bufnr),
     scanned_nodes = scan.scanned_nodes,
     binding_dirty_ranges = scan.binding_dirty_ranges,
     render_viewport = scan.render_viewport,
@@ -909,8 +909,8 @@ local function active_progressive_typst_parent_key(bufnr)
     return nil
   end
 
-  local winid = vim.fn.bufwinid(bufnr)
-  if winid == -1 or not vim.api.nvim_win_is_valid(winid) then
+  local winid = state.active_window_for_bufnr(bufnr)
+  if winid == nil or not vim.api.nvim_win_is_valid(winid) then
     return nil
   end
 
@@ -1146,8 +1146,8 @@ local function rect_intersection_area(a, b)
 end
 
 local function get_cursor_anchor_screenpos(bufnr)
-  local src_winid = vim.fn.bufwinid(bufnr)
-  if src_winid == -1 then
+  local src_winid = state.active_window_for_bufnr(bufnr)
+  if src_winid == nil then
     return nil
   end
 
@@ -1804,8 +1804,8 @@ function M.render_live_typst_preview(bufnr)
     return
   end
 
-  local winid = vim.fn.bufwinid(bufnr)
-  if winid == -1 then
+  local winid = state.active_window_for_bufnr(bufnr)
+  if winid == nil then
     M.clear_live_typst_preview(bufnr)
     return
   end
