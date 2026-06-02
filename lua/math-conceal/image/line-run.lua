@@ -113,6 +113,13 @@ local function add_range(geo, range)
   end
 end
 
+local function has_entries(t)
+  for _ in pairs(t or {}) do
+    return true
+  end
+  return false
+end
+
 local function line_run_geometry(bufnr, run)
   if run == nil then
     return nil
@@ -509,6 +516,134 @@ local function clear_line_runs_in_range(bufnr, start_row, end_row)
   return cleared
 end
 
+local function line_end_col(bufnr, row)
+  local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+  return #(line or "")
+end
+
+local function slice_lines(lines, first, last)
+  local out = {}
+  if type(lines) ~= "table" or first == nil or last == nil or first > last then
+    return out
+  end
+  for idx = first, math.min(last, #lines) do
+    out[#out + 1] = lines[idx]
+  end
+  return out
+end
+
+local function set_block_landing_extmark(bufnr, row, virt_text, virt_lines)
+  local opts = {
+    virt_text = virt_text,
+    virt_text_pos = "overlay",
+    conceal = "",
+    end_col = line_end_col(bufnr, row),
+    end_row = row,
+  }
+  if #virt_lines > 0 then
+    opts.virt_lines = virt_lines
+    opts.virt_lines_overflow = "trunc"
+  end
+  return vim.api.nvim_buf_set_extmark(bufnr, state.ns_id2, row, 0, opts)
+end
+
+local function sorted_block_extmark_ids(bufnr, block_extmark_ids)
+  local ids = {}
+  for extmark_id in pairs(block_extmark_ids or {}) do
+    local range = extmark_range(bufnr, state.ns_id, extmark_id)
+    if range ~= nil then
+      ids[#ids + 1] = {
+        id = extmark_id,
+        range = range,
+      }
+    end
+  end
+  table.sort(ids, function(a, b)
+    if a.range.start_row == b.range.start_row then
+      return a.range.end_row < b.range.end_row
+    end
+    return a.range.start_row < b.range.start_row
+  end)
+  return ids
+end
+
+local function create_block_landing_run(bufnr, run_id, block_extmark_ids)
+  local bs = state.get_buf_state(bufnr)
+  local conceal_ids = {}
+  local sub_ids = {}
+  local any_display = false
+
+  bs.line_run_by_extmark = bs.line_run_by_extmark or {}
+  bs.line_run_by_row = bs.line_run_by_row or {}
+
+  for _, entry in ipairs(sorted_block_extmark_ids(bufnr, block_extmark_ids)) do
+    local extmark_id = entry.id
+    local range = entry.range
+    local mm = bs.multiline_marks and bs.multiline_marks[extmark_id] or nil
+    local display_lines = mm and mm.line_run_display_lines or nil
+    if type(display_lines) == "table" and #display_lines > 0 then
+      any_display = true
+      local has_end_landing = range.end_row > range.start_row and #display_lines > 1
+      local start_virt_lines = has_end_landing and slice_lines(display_lines, 2, #display_lines - 1)
+        or slice_lines(display_lines, 2, #display_lines)
+
+      local start_id = set_block_landing_extmark(bufnr, range.start_row, display_lines[1], start_virt_lines)
+      sub_ids[#sub_ids + 1] = start_id
+
+      local end_id = nil
+      if has_end_landing then
+        end_id = set_block_landing_extmark(bufnr, range.end_row, display_lines[#display_lines], {})
+        sub_ids[#sub_ids + 1] = end_id
+      end
+
+      local block_tail_ids = {}
+      for run_row = range.start_row, range.end_row do
+        local is_landing_row = run_row == range.start_row or (has_end_landing and run_row == range.end_row)
+        if not is_landing_row then
+          local conceal_id = vim.api.nvim_buf_set_extmark(bufnr, state.ns_id2, run_row, 0, {
+            conceal_lines = "",
+            end_row = run_row,
+          })
+          conceal_ids[run_row] = conceal_id
+          block_tail_ids[#block_tail_ids + 1] = conceal_id
+        end
+        bs.line_run_by_row[run_row] = run_id
+      end
+
+      if end_id ~= nil then
+        block_tail_ids[#block_tail_ids + 1] = end_id
+      end
+
+      if mm then
+        mm.carrier_id = start_id
+        mm.tail_ids = block_tail_ids
+        mm.sub_ids = { start_id, end_id }
+        mm.line_run_id = run_id
+      end
+      bs.line_run_by_extmark[extmark_id] = run_id
+    end
+  end
+
+  if not any_display then
+    for _, sub_id in ipairs(sub_ids) do
+      pcall(vim.api.nvim_buf_del_extmark, bufnr, state.ns_id2, sub_id)
+    end
+    for _, conceal_id in pairs(conceal_ids) do
+      pcall(vim.api.nvim_buf_del_extmark, bufnr, state.ns_id2, conceal_id)
+    end
+    return false
+  end
+
+  bs.line_run_marks[run_id] = {
+    mode = "block_landing",
+    conceal_ids = conceal_ids,
+    sub_ids = sub_ids,
+    extmark_ids = block_extmark_ids,
+    block_extmark_ids = block_extmark_ids,
+  }
+  return true
+end
+
 local function choose_line_run_anchor(bufnr, start_row, end_row, opts)
   local line_count = vim.api.nvim_buf_line_count(bufnr)
   local anchor_rows = opts and opts.anchor_rows or nil
@@ -632,6 +767,13 @@ function M.refresh_for_row(bufnr, row, opts)
   bs.inline_line_marks = bs.inline_line_marks or {}
   bs.next_line_run_id = (bs.next_line_run_id or 0) + 1
   local run_id = bs.next_line_run_id
+
+  if has_entries(block_extmark_ids) and not has_entries(inline_rows) then
+    if create_block_landing_run(bufnr, run_id, block_extmark_ids) then
+      return true, start_row, end_row
+    end
+    return false, start_row, end_row
+  end
 
   local carrier_id = vim.api.nvim_buf_set_extmark(bufnr, state.ns_id2, anchor_row, 0, {
     virt_lines = display_lines,
