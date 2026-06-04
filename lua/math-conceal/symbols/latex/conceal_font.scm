@@ -82,52 +82,60 @@
       "}" @right_paren
     ])
   (#any-of? @tex_font_name
-    "\\mathnormal" "\\mathrm" "\\mathit" "\\mathbf" "\\mathsf" "\\mathtt" "\\mathcal" "\\mathscr"
-    "\\mathbb" "\\mathfrak" "\\bm" "\\symup" "\\symit" "\\symbf" "\\symsf" "\\symtt" "\\symbfup"
-    "\\symbfit" "\\symsfup" "\\symsfit" "\\symbfsf" "\\symbfsfup" "\\symbfsfit" "\\symcal"
-    "\\symbfcal" "\\symscr" "\\symbfscr" "\\symbb" "\\symbbit" "\\symfrak" "\\symbffrak" "\\mathup"
-    "\\mathbfup" "\\mathbfit" "\\mathsfup" "\\mathsfit" "\\mathbfsf" "\\mathbfsfup" "\\mathbfsfit"
-    "\\mathbfcal" "\\mathbfscr" "\\mathbbit" "\\mathbffrak")
+    "\\acute" "\\bar" "\\breve" "\\check" "\\ddddot" "\\dddot" "\\ddot" "\\dot" "\\grave" "\\hat"
+    "\\tilde" "\\vec" "\\mathnormal" "\\mathrm" "\\mathit" "\\mathbf" "\\mathsf" "\\mathtt"
+    "\\mathcal" "\\mathscr" "\\mathbb" "\\mathfrak" "\\bm" "\\symup" "\\symit" "\\symbf" "\\symsf"
+    "\\symtt" "\\symbfup" "\\symbfit" "\\symsfup" "\\symsfit" "\\symbfsf" "\\symbfsfup"
+    "\\symbfsfit" "\\symcal" "\\symbfcal" "\\symscr" "\\symbfscr" "\\symbb" "\\symbbit" "\\symfrak"
+    "\\symbffrak" "\\mathup" "\\mathbfup" "\\mathbfit" "\\mathsfup" "\\mathsfit" "\\mathbfsf"
+    "\\mathbfsfup" "\\mathbfsfit" "\\mathbfcal" "\\mathbfscr" "\\mathbbit" "\\mathbffrak")
   (#has-ancestor? @tex_font_name displayed_equation inline_formula math_environment)
   (#not-has-ancestor? @tex_font_name text_mode)
   (#set! @left_paren conceal "")
   (#set! @right_paren conceal "")
   (#set! @tex_font_name conceal ""))
 
-; some commands are alias from unicode-math but also work with pdflatex. Conceal only with latin letters
+; some commands are alias from unicode-math but also work with pdflatex. Conceal only with latin letters or digits
+; conceal letters, digits and greek letters commands
 (generic_command
   command: (command_name) @tex_font_name
   arg: (curly_group
     "{" @left_paren
-    (text
-      word: (word) @font_letter)
-    "}" @right_paren)
-  (#has-ancestor? @tex_font_name displayed_equation inline_formula math_environment)
-  (#not-has-ancestor? @tex_font_name text_mode)
-  (#any-of? @tex_font_name
-    "\\mathrm" "\\mathit" "\\mathbf" "\\mathsf" "\\mathtt" "\\mathcal" "\\mathscr" "\\mathbb"
-    "\\mathfrak" "\\mathup" "\\mathbfup" "\\mathbfit" "\\mathsfup" "\\mathsfit" "\\mathbfsf"
-    "\\mathbfsfup" "\\mathbfsfit" "\\mathbfcal" "\\mathbfscr" "\\mathbbit" "\\mathbffrak")
-  (#set! @left_paren conceal "")
-  (#set! @right_paren conceal "")
-  (#set! @tex_font_name conceal "")
-  ; Regex removed - Rust hash table will filter valid font letters
-  (#set-font! @font_letter @tex_font_name))
-
-; conceal letters and greek letters commands
-(generic_command
-  command: (command_name) @tex_font_name
-  arg: (curly_group
-    "{" @left_paren
-    (_) @font_letter
+    [
+      (_) @font_letter
+      (text
+        word: (word) @font_letter)
+    ]
     "}" @right_paren)
   (#any-of? @tex_font_name
-    "\\bar" "\\widetilde" "\\hat" "\\dot" "\\ddot" "\\bm" "\\symup" "\\symit" "\\symbf" "\\symsf"
+    "\\acute" "\\bar" "\\breve" "\\check" "\\ddddot" "\\dddot" "\\ddot" "\\dot" "\\grave" "\\hat"
+    "\\tilde" "\\vec" "\\mathnormal" "\\mathrm" "\\mathit" "\\mathbf" "\\mathsf" "\\mathtt"
+    "\\mathcal" "\\mathscr" "\\mathbb" "\\mathfrak" "\\bm" "\\symup" "\\symit" "\\symbf" "\\symsf"
     "\\symtt" "\\symbfup" "\\symbfit" "\\symsfup" "\\symsfit" "\\symbfsf" "\\symbfsfup"
     "\\symbfsfit" "\\symcal" "\\symbfcal" "\\symscr" "\\symbfscr" "\\symbb" "\\symbbit" "\\symfrak"
-    "\\symbffrak")
+    "\\symbffrak" "\\mathup" "\\mathbfup" "\\mathbfit" "\\mathsfup" "\\mathsfit" "\\mathbfsf"
+    "\\mathbfsfup" "\\mathbfsfit" "\\mathbfcal" "\\mathbfscr" "\\mathbbit" "\\mathbffrak")
+  (#has-ancestor? @tex_font_name displayed_equation inline_formula math_environment)
+  (#not-has-ancestor? @tex_font_name text_mode)
   (#set! @left_paren conceal "")
   (#set! @right_paren conceal "")
   (#set! @tex_font_name conceal "")
-  ; Regex removed - Rust hash table will filter valid characters/greek letters
+  ; Regex removed - Rust hash table will filter valid characters/greek letters and digits
   (#set-font! @font_letter @tex_font_name))
+
+; digits or number only in math mode
+(generic_command
+  command: (command_name) @tex_font_name
+  arg: (curly_group
+    "{"
+    [
+      (_) @font_digit
+      (text
+        word: (word) @font_digit)
+    ]
+    "}")
+  (#lua-match? @font_digit "^%d+$")
+  (#has-ancestor? @tex_font_name displayed_equation inline_formula math_environment)
+  (#not-has-ancestor? @tex_font_name text_mode)
+  (#set-font! @font_digit @tex_font_name)
+  (#set! priority 101))

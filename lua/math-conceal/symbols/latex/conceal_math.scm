@@ -162,10 +162,102 @@
       "{" @left_paren_cmd
       "}" @right_paren_cmd
     ])
-  (#has-ancestor? @tex_math_command math_environment inline_formula displayed_equation)
+  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
+  (#not-has-ancestor? @tex_math_command text_mode)
   (#set-conceal! @tex_math_command "conceal")
   (#set! @left_paren_cmd conceal "(")
   (#set! @right_paren_cmd conceal ")"))
+
+; conceal when argument not in table(long word or other symbol)
+(generic_command
+  command: (command_name) @tex_math_command
+  arg: (curly_group
+    "{" @open_paren
+    (_) @content
+    "}" @close_paren)
+  (#eq? @tex_math_command "\\overleftarrow")
+  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
+  (#not-has-ancestor? @tex_math_command text_mode)
+  ; U+20D6 COMBINING LEFT ARROW ABOVE
+  (#set! @open_paren conceal "⃖")
+  (#set! @close_paren conceal "")
+  (#set! @tex_math_command conceal ""))
+
+(generic_command
+  command: (command_name) @tex_math_command
+  arg: (curly_group
+    "{" @open_paren
+    (_) @content
+    "}" @close_paren)
+  (#eq? @tex_math_command "\\overline")
+  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
+  (#not-has-ancestor? @tex_math_command text_mode)
+  ; U+0305 COMBINING OVERLINE
+  (#set! @open_paren conceal "̅")
+  (#set! @close_paren conceal "")
+  (#set! @tex_math_command conceal ""))
+
+(generic_command
+  command: (command_name) @tex_math_command
+  arg: (curly_group
+    "{" @open_paren
+    (_) @content
+    "}" @close_paren)
+  (#eq? @tex_math_command "\\overrightarrow")
+  (#has-ancestor? @tex_math_command math_environment inline_formula displayed_equation)
+  (#not-has-ancestor? @tex_math_command text_mode)
+  ; U+20D7 COMBINING RIGHT ARROW ABOVE
+  (#set! @open_paren conceal "⃗")
+  (#set! @close_paren conceal "")
+  (#set! @tex_math_command conceal ""))
+
+(generic_command
+  command: (command_name) @tex_math_command
+  arg: (curly_group
+    "{" @open_paren
+    (_) @content
+    "}" @close_paren)
+  (#eq? @tex_math_command "\\widehat")
+  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
+  (#not-has-ancestor? @tex_math_command text_mode)
+  ; U+0302 COMBINING CIRCUMFLEX ACCENT
+  (#set! @open_paren conceal "̂")
+  (#set! @close_paren conceal "")
+  (#set! @tex_math_command conceal ""))
+
+(generic_command
+  command: (command_name) @tex_math_command
+  arg: (curly_group
+    "{" @open_paren
+    (_) @content
+    "}" @close_paren)
+  (#eq? @tex_math_command "\\widetilde")
+  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
+  (#not-has-ancestor? @tex_math_command text_mode)
+  ; U+0303 COMBINING TILDE
+  (#set! @open_paren conceal "̃")
+  (#set! @close_paren conceal "")
+  (#set! @tex_math_command conceal ""))
+
+((generic_command
+  command: (command_name) @tex_math_command .)
+  (#eq? @tex_math_command "\\tilde")
+  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
+  (#not-has-ancestor? @tex_math_command text_mode)
+  (#set! @tex_math_command conceal "∼"))
+
+(generic_command
+  command: (command_name) @tex_math_command
+  arg: (curly_group
+    "{" @left_1
+    (_) @content
+    "}" @right_1)
+  (#eq? @tex_math_command "\\abs")
+  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
+  (#not-has-ancestor? @tex_math_command text_mode)
+  (#set! @left_1 conceal "￨")
+  (#set! @right_1 conceal "￨")
+  (#set! @tex_math_command conceal ""))
 
 ((math_environment
   (begin
