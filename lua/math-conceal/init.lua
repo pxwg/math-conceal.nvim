@@ -31,6 +31,7 @@ local M = {
       ["@content"] = { link = "@conceal", default = true },
       ["@first_letter"] = { link = "@conceal", default = true },
       ["@font_letter"] = { link = "@conceal", default = true },
+      ["@font_digit"] = { link = "@conceal", default = true },
       ["@frac"] = { link = "@conceal", default = true },
       ["@func"] = { link = "@conceal", default = true },
       ["@func_name"] = { link = "@conceal", default = true },
