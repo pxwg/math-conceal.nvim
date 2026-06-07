@@ -14,6 +14,7 @@ local cache_by_type = {
   escape = raw_data.escape,
   conceal = raw_data.conceal,
   greek = raw_data.greek,
+  greek_font = {},
 }
 local cache_full_string = {}
 
@@ -31,24 +32,25 @@ local function init()
     end
   end
 
-  -- Greek letters
-  for key, symbol in pairs(raw_data.greek or {}) do
-    -- 1. Like conceal
-    cache_by_type.greek[key] = symbol
-    cache_full_string["\\" .. key] = symbol
-    cache_full_string[key] = symbol
-
-    -- 2. Like font
+  -- Greek letters with font style (like font)
+  for key, symbol in pairs(raw_data.greek_font or {}) do
     local type_name, char = key:match("^(.*):(.*)$")
     if type_name and char then
-      if not cache_by_type.greek[type_name] then
-        cache_by_type.greek[type_name] = {}
+      if not cache_by_type.greek_font[type_name] then
+        cache_by_type.greek_font[type_name] = {}
       end
-      cache_by_type.greek[type_name][char] = symbol
+      cache_by_type.greek_font[type_name][char] = symbol
       local full_tex = "\\" .. type_name .. "{" .. char .. "}"
       cache_full_string[full_tex] = symbol
     end
   end
+
+  -- Greek letters (simple conceal)
+  for key, symbol in pairs(raw_data.greek or {}) do
+    cache_full_string["\\" .. key] = symbol
+    cache_full_string[key] = symbol
+  end
+
 
   -- Sub/Sup
   for key, symbol in pairs(raw_data.sub or {}) do
@@ -81,7 +83,7 @@ end
 init()
 
 --- @param text string: The LaTeX math symbol to convert
---- @param pattern '"escape"'|'"conceal"'|'"font"'|'"greek"'|'"sub"'|'"sup"' Valid values from PatternType enum
+--- @param pattern '"escape"'|'"conceal"'|'"font"'|'"greek"'|'"greek_font"'|'"sub"'|'"sup"' Valid values from PatternType enum
 --- @param type_name? string: Type of concealment (e.g., "cal", "frak", "bold", etc.)
 --- @return string: The converted Unicode symbol or the original text if not found
 function M.lookup_math_symbol(text, pattern, type_name)
@@ -90,19 +92,20 @@ function M.lookup_math_symbol(text, pattern, type_name)
     return cache_by_type[pattern][text] or text
   end
 
-  -- Greek letters
+  -- Greek letters (simple conceal)
   if pattern == "greek" then
-    if type_name then
-      local font_group = cache_by_type.greek[type_name]
-      return (font_group and font_group[text]) or text
-    else
-      return cache_by_type.greek[text] or text
-    end
+    return cache_by_type.greek[text] or text
   end
 
   local category = cache_by_type[pattern]
   if not category then
     return text
+  end
+
+  -- Greek letters with font style
+  if pattern == "greek_font" then
+    local greek_font_group = category[type_name or ""]
+    return (greek_font_group and greek_font_group[text]) or text
   end
 
   if pattern == "font" then

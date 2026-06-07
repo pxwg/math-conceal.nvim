@@ -1,10 +1,25 @@
-; math conceals - regex removed, Rust hash table will filter
+; Due to the fact that some math environments work as generic, it is necessary
+; to keep the concealment of math commands enabled for all modes
+(generic_command
+  command: (command_name) @cmd_escape
+  (#set-escape! @cmd_escape "escape"))
+
 (generic_command
   command: (command_name) @tex_math_command
-  (#has-ancestor? @tex_math_command
-    math_environment inline_formula displayed_equation generic_command)
-  (#not-has-ancestor? @tex_math_command label_definition text_mode)
+  (#not-lua-match? @tex_math_command "^\\text")
   (#set-conceal! @tex_math_command "conceal"))
+
+(generic_command
+  command: (command_name) @conceal
+  (#not-has-ancestor? @conceal math_environment inline_formula displayed_equation)
+  (#lua-match? @conceal "^\\text")
+  (#set-conceal! @conceal "conceal"))
+
+(generic_command
+  command: (command_name) @conceal
+  (#has-ancestor? @conceal text_mode)
+  (#lua-match? @conceal "^\\text")
+  (#set-conceal! @conceal "conceal"))
 
 ; FRAC FUNCTIONS
 ; convert from
@@ -29,8 +44,6 @@
       "{" @left_2
       "}" @right_2
     ])
-  (#has-ancestor? @frac displayed_equation inline_formula math_environment)
-  (#not-has-ancestor? @frac text_mode)
   (#any-of? @frac "\\frac" "\\dfrac" "\\tfrac" "\\cfrac")
   (#set! @frac conceal "")
   (#set! @left_1 conceal "(")
@@ -145,8 +158,6 @@
     ]
     .
     "}" @right_2)
-  (#has-ancestor? @frac displayed_equation inline_formula math_environment)
-  (#not-has-ancestor? @frac text_mode)
   (#any-of? @frac "\\frac" "\\dfrac" "\\tfrac" "\\cfrac")
   (#set! @frac conceal "")
   (#set! @left_1 conceal "")
@@ -162,8 +173,6 @@
       "{" @left_paren_cmd
       "}" @right_paren_cmd
     ])
-  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
-  (#not-has-ancestor? @tex_math_command text_mode)
   (#set-conceal! @tex_math_command "conceal")
   (#set! @left_paren_cmd conceal "(")
   (#set! @right_paren_cmd conceal ")"))
@@ -176,8 +185,6 @@
     (_) @content
     "}" @close_paren)
   (#eq? @tex_math_command "\\overleftarrow")
-  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
-  (#not-has-ancestor? @tex_math_command text_mode)
   ; U+20D6 COMBINING LEFT ARROW ABOVE
   (#set! @open_paren conceal "⃖")
   (#set! @close_paren conceal "")
@@ -190,8 +197,6 @@
     (_) @content
     "}" @close_paren)
   (#eq? @tex_math_command "\\overline")
-  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
-  (#not-has-ancestor? @tex_math_command text_mode)
   ; U+0305 COMBINING OVERLINE
   (#set! @open_paren conceal "̅")
   (#set! @close_paren conceal "")
@@ -204,8 +209,6 @@
     (_) @content
     "}" @close_paren)
   (#eq? @tex_math_command "\\overrightarrow")
-  (#has-ancestor? @tex_math_command math_environment inline_formula displayed_equation)
-  (#not-has-ancestor? @tex_math_command text_mode)
   ; U+20D7 COMBINING RIGHT ARROW ABOVE
   (#set! @open_paren conceal "⃗")
   (#set! @close_paren conceal "")
@@ -218,8 +221,6 @@
     (_) @content
     "}" @close_paren)
   (#eq? @tex_math_command "\\widehat")
-  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
-  (#not-has-ancestor? @tex_math_command text_mode)
   ; U+0302 COMBINING CIRCUMFLEX ACCENT
   (#set! @open_paren conceal "̂")
   (#set! @close_paren conceal "")
@@ -232,8 +233,6 @@
     (_) @content
     "}" @close_paren)
   (#eq? @tex_math_command "\\widetilde")
-  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
-  (#not-has-ancestor? @tex_math_command text_mode)
   ; U+0303 COMBINING TILDE
   (#set! @open_paren conceal "̃")
   (#set! @close_paren conceal "")
@@ -242,8 +241,6 @@
 ((generic_command
   command: (command_name) @tex_math_command .)
   (#eq? @tex_math_command "\\tilde")
-  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
-  (#not-has-ancestor? @tex_math_command text_mode)
   (#set! @tex_math_command conceal "∼"))
 
 (generic_command
@@ -253,24 +250,37 @@
     (_) @content
     "}" @right_1)
   (#eq? @tex_math_command "\\abs")
-  (#has-ancestor? @tex_math_command displayed_equation inline_formula math_environment)
-  (#not-has-ancestor? @tex_math_command text_mode)
   (#set! @left_1 conceal "￨")
   (#set! @right_1 conceal "￨")
   (#set! @tex_math_command conceal ""))
 
 ((math_environment
-  (begin
-    (curly_group_text
-      (text) @_env)) @_line)
-  (#any-of? @_env "equation" "equation*")
+  [
+    (begin
+      (curly_group_text
+        (text) @_env))
+    (end
+      (curly_group_text
+        (text) @_env))
+  ] @_line)
+  (#any-of? @_env
+    "math" "displaymath" "displaymath*" "equation" "equation*" "multline" "multline*" "eqnarray"
+    "eqnarray*" "align" "align*" "gather" "gather*" "flalign" "flalign*")
   (#set! @_line conceal ""))
 
-((math_environment
-  (end
-    (curly_group_text
-      (text) @_env)) @_line)
-  (#any-of? @_env "equation" "equation*")
+; non standart math_environment
+(generic_environment
+  [
+    (begin
+      (curly_group_text
+        (text) @_env))
+    (end
+      (curly_group_text
+        (text) @_env))
+  ] @_line
+  (#any-of? @_env
+    "dgroup" "dgroup*" "dmath" "dmath*" "dseries" "dseries*" "empheq" "multsubequations"
+    "subequations" "termlist" "termlist*")
   (#set! @_line conceal ""))
 
 ; TODO: Add it as a config key

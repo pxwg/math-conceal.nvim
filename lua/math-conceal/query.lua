@@ -78,6 +78,7 @@ local conceal_directives = {
   ["set-sup!"] = true,
   ["set-escape!"] = true,
   ["set-greek!"] = true,
+  ["set-greek_font!"] = true,
 }
 
 local function find_directive_end(code, start)
@@ -244,6 +245,7 @@ local conceal_config = {
   sup = { pattern = "sup", directive_name = "set-sup!", handler_key = "sup" },
   escape = { pattern = "escape", directive_name = "set-escape!", handler_key = "escape" },
   greek = { pattern = "greek", directive_name = "set-greek!", handler_key = "greek" },
+  greek_font = { pattern = "greek_font", directive_name = "set-greek_font!", handler_key = "greek_font" },
 }
 
 -- Function to easily register new conceal types
@@ -268,10 +270,8 @@ local function register_conceal_type(name, pattern, directive_name)
       return
     end
 
-    -- Call lookup function
     local result = cached_lookup(node_text, pattern, value)
 
-    -- Only set concealment if found a symbol (result != original text)
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}
       metadata[capture_id][key or "conceal"] = result
@@ -297,10 +297,8 @@ local handler_dispatch = {
       return
     end
 
-    -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, "font", function_name_text)
 
-    -- Only set concealment if Rust found a symbol (result != original text)
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}
       metadata[capture_id]["conceal"] = result
@@ -319,10 +317,8 @@ local handler_dispatch = {
       return
     end
 
-    -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, "conceal", value)
 
-    -- Only set concealment if Rust found a symbol (result != original text)
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}
       metadata[capture_id][key] = result
@@ -341,10 +337,8 @@ local handler_dispatch = {
       return
     end
 
-    -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, "sub", value)
 
-    -- Only set concealment if Rust found a symbol (result != original text)
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}
       metadata[capture_id]["conceal"] = result
@@ -363,10 +357,8 @@ local handler_dispatch = {
       return
     end
 
-    -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, "sup", value)
 
-    -- Only set concealment if Rust found a symbol (result != original text)
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}
       metadata[capture_id]["conceal"] = result
@@ -385,10 +377,8 @@ local handler_dispatch = {
       return
     end
 
-    -- Call Rust to check if this symbol should be concealed
     local result = cached_lookup(node_text, "escape", value)
 
-    -- Only set concealment if Rust found a symbol (result != original text)
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}
       metadata[capture_id]["conceal"] = result
@@ -397,7 +387,6 @@ local handler_dispatch = {
 
   greek = function(match, _, source, predicate, metadata)
     local capture_id = predicate[2]
-    local type_name = predicate[3]  -- optional, e.g., "mbf", "mit", "text"
     if not capture_id or not match[capture_id] then
       return
     end
@@ -408,14 +397,29 @@ local handler_dispatch = {
       return
     end
 
-    local result
-    if type_name then
-      -- Like font: lookup with type_name
-      result = cached_lookup(node_text, "greek", type_name)
-    else
-      -- Like conceal: direct lookup
-      result = cached_lookup(node_text, "greek", nil)
+    local result = cached_lookup(node_text, "greek", nil)
+
+    if result ~= node_text then
+      metadata[capture_id] = metadata[capture_id] or {}
+      metadata[capture_id]["conceal"] = result
     end
+  end,
+
+  greek_font = function(match, _, source, predicate, metadata)
+    local capture_id, function_name_id = predicate[2], predicate[3]
+    if not capture_id or not match[capture_id] then
+      return
+    end
+
+    local node = get_capture_node(match[capture_id])
+    local function_name_node = get_capture_node(match[function_name_id])
+    local function_name_text = safe_get_node_text(function_name_node, source) or "cal"
+    local node_text = get_capture_text(node, source)
+    if not node_text then
+      return
+    end
+
+    local result = cached_lookup(node_text, "greek_font", function_name_text)
 
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}

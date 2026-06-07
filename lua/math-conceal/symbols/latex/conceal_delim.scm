@@ -1,3 +1,5 @@
+; Due to the fact that some math environments work as generic, it is necessary
+; to keep the concealment of math commands enabled for all modes
 (curly_group
   [
     "{"
@@ -79,8 +81,6 @@
 ((text
   word: (delimiter) @conceal)
   (#eq? @conceal "&")
-  (#has-ancestor? @conceal math_environment inline_formula displayed_equation)
-  (#not-has-ancestor? @conceal label_definition text_mode)
   (#set! conceal ""))
 
 (math_delimiter

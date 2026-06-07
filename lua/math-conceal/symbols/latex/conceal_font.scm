@@ -1,3 +1,5 @@
+; Due to the fact that some math environments work as generic, it is necessary
+; to keep the concealment of math commands enabled for all modes
 (generic_command
   command: (command_name) @tex_font_name
   arg: (curly_group
@@ -53,7 +55,6 @@
       "{" @left_paren
       "}" @right_paren
     ])
-  (#has-ancestor? @tex_font_name displayed_equation inline_formula math_environment)
   (#set! @left_paren conceal "")
   (#set! @right_paren conceal "")
   (#set! @tex_font_name conceal ""))
@@ -68,7 +69,6 @@
       "{" @left_paren
       "}" @right_paren
     ])
-  (#has-ancestor? @tex_font_name math_environment)
   (#set! @left_paren conceal "")
   (#set! @right_paren conceal "")
   (#set! @tex_font_name conceal ""))
@@ -89,8 +89,6 @@
     "\\symbfsfit" "\\symcal" "\\symbfcal" "\\symscr" "\\symbfscr" "\\symbb" "\\symbbit" "\\symfrak"
     "\\symbffrak" "\\mathup" "\\mathbfup" "\\mathbfit" "\\mathsfup" "\\mathsfit" "\\mathbfsf"
     "\\mathbfsfup" "\\mathbfsfit" "\\mathbfcal" "\\mathbfscr" "\\mathbbit" "\\mathbffrak")
-  (#has-ancestor? @tex_font_name displayed_equation inline_formula math_environment)
-  (#not-has-ancestor? @tex_font_name text_mode)
   (#set! @left_paren conceal "")
   (#set! @right_paren conceal "")
   (#set! @tex_font_name conceal ""))
@@ -115,12 +113,9 @@
     "\\symbfsfit" "\\symcal" "\\symbfcal" "\\symscr" "\\symbfscr" "\\symbb" "\\symbbit" "\\symfrak"
     "\\symbffrak" "\\mathup" "\\mathbfup" "\\mathbfit" "\\mathsfup" "\\mathsfit" "\\mathbfsf"
     "\\mathbfsfup" "\\mathbfsfit" "\\mathbfcal" "\\mathbfscr" "\\mathbbit" "\\mathbffrak")
-  (#has-ancestor? @tex_font_name displayed_equation inline_formula math_environment)
-  (#not-has-ancestor? @tex_font_name text_mode)
   (#set! @left_paren conceal "")
   (#set! @right_paren conceal "")
   (#set! @tex_font_name conceal "")
-  ; Regex removed - Rust hash table will filter valid characters/greek letters and digits
   (#set-font! @font_letter @tex_font_name))
 
 ; digits or number only in math mode
@@ -135,7 +130,5 @@
     ]
     "}")
   (#lua-match? @font_digit "^%d+$")
-  (#has-ancestor? @tex_font_name displayed_equation inline_formula math_environment)
-  (#not-has-ancestor? @tex_font_name text_mode)
   (#set-font! @font_digit @tex_font_name)
   (#set! priority 101))
