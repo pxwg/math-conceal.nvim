@@ -2,7 +2,8 @@
 ; to keep the concealment of math commands enabled for all modes
 (generic_command
   command: (command_name) @cmd_escape
-  (#set-escape! @cmd_escape "escape"))
+  (#set-escape! @cmd_escape "latex")
+	(#set! priority 125))
 
 (generic_command
   command: (command_name) @tex_math_command

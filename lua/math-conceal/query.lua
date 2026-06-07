@@ -365,25 +365,26 @@ local handler_dispatch = {
     end
   end,
 
-  escape = function(match, _, source, predicate, metadata)
-    local capture_id, key, value = predicate[2], predicate[3], predicate[4]
-    if not capture_id or not key or not match[capture_id] then
-      return
-    end
+escape = function(match, _, source, predicate, metadata)
+  local capture_id = predicate[2]
+  local type_name = predicate[3]
+  if not capture_id or not match[capture_id] then
+    return
+  end
 
-    local node = get_capture_node(match[capture_id])
-    local node_text = get_capture_text(node, source)
-    if not node_text then
-      return
-    end
+  local node = get_capture_node(match[capture_id])
+  local node_text = get_capture_text(node, source)
+  if not node_text then
+    return
+  end
 
-    local result = cached_lookup(node_text, "escape", value)
+  local result = cached_lookup(node_text, "escape", type_name)
 
-    if result ~= node_text then
-      metadata[capture_id] = metadata[capture_id] or {}
-      metadata[capture_id]["conceal"] = result
-    end
-  end,
+  if result ~= node_text then
+    metadata[capture_id] = metadata[capture_id] or {}
+    metadata[capture_id]["conceal"] = result
+  end
+end,
 
   greek = function(match, _, source, predicate, metadata)
     local capture_id = predicate[2]
