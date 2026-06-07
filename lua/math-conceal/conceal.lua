@@ -11,8 +11,9 @@ local cache_by_type = {
   font = {},
   sub = {},
   sup = {},
-  escape = {},
+  escape = raw_data.escape,
   conceal = raw_data.conceal,
+  greek = raw_data.greek,
 }
 local cache_full_string = {}
 
@@ -25,6 +26,25 @@ local function init()
         cache_by_type.font[type_name] = {}
       end
       cache_by_type.font[type_name][char] = symbol
+      local full_tex = "\\" .. type_name .. "{" .. char .. "}"
+      cache_full_string[full_tex] = symbol
+    end
+  end
+
+  -- Greek letters
+  for key, symbol in pairs(raw_data.greek or {}) do
+    -- 1. Like conceal
+    cache_by_type.greek[key] = symbol
+    cache_full_string["\\" .. key] = symbol
+    cache_full_string[key] = symbol
+
+    -- 2. Like font
+    local type_name, char = key:match("^(.*):(.*)$")
+    if type_name and char then
+      if not cache_by_type.greek[type_name] then
+        cache_by_type.greek[type_name] = {}
+      end
+      cache_by_type.greek[type_name][char] = symbol
       local full_tex = "\\" .. type_name .. "{" .. char .. "}"
       cache_full_string[full_tex] = symbol
     end
@@ -47,10 +67,8 @@ local function init()
 
   -- Escape
   for key, symbol in pairs(raw_data.escape or {}) do
-    local type_name, char = key:match("^(.*):(.*)$")
-    if type_name == "escape" then
-      cache_by_type.escape[char] = symbol
-    end
+    cache_full_string["\\" .. key] = symbol
+    cache_full_string[key] = symbol
   end
 
   -- Conceal
@@ -63,13 +81,23 @@ end
 init()
 
 --- @param text string: The LaTeX math symbol to convert
---- @param pattern '"escape"'|'"conceal"'|'"font"'|'"sub"'|'"sup"' Valid values from PatternType enum
+--- @param pattern '"escape"'|'"conceal"'|'"font"'|'"greek"'|'"sub"'|'"sup"' Valid values from PatternType enum
 --- @param type_name? string: Type of concealment (e.g., "cal", "frak", "bold", etc.)
 --- @return string: The converted Unicode symbol or the original text if not found
 function M.lookup_math_symbol(text, pattern, type_name)
   -- Fast path for common case
-  if not pattern or pattern == "conceal" then
-    return cache_by_type.conceal[text] or text
+  if not pattern or pattern == "conceal" or pattern == "escape" then
+    return cache_by_type[pattern][text] or text
+  end
+
+  -- Greek letters
+  if pattern == "greek" then
+    if type_name then
+      local font_group = cache_by_type.greek[type_name]
+      return (font_group and font_group[text]) or text
+    else
+      return cache_by_type.greek[text] or text
+    end
   end
 
   local category = cache_by_type[pattern]
@@ -81,7 +109,7 @@ function M.lookup_math_symbol(text, pattern, type_name)
     local font_group = category[type_name or ""]
     return (font_group and font_group[text]) or text
   else
-    -- sub, sup, escape
+    -- sub, sup
     return category[text] or text
   end
 end
