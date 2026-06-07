@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use typst::foundations::{Scope, Symbol, Value as TypstValue};
+use typst::foundations::{Binding, Scope, Symbol, Value as TypstValue};
 use typst::{Library, LibraryExt};
 
 fn main() {
@@ -20,23 +20,39 @@ fn main() {
 
     let mut math_symbols: BTreeMap<String, String> = BTreeMap::new();
     let mut other_symbols: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+    let mut deprecated_symbols: HashSet<String> = HashSet::new();
 
     // Collect symbols from all modules
     for (mod_name, binding) in global_scope.iter() {
         let value = binding.read();
         if let TypstValue::Module(module) = value {
             let mut module_symbols = BTreeMap::new();
-            extract_from_scope(module.scope(), &mut module_symbols);
+            let mut module_deprecated = HashSet::new();
+            extract_from_scope(module.scope(), &mut module_symbols, &mut module_deprecated, Some(&binding));
 
             if mod_name == "math" {
                 math_symbols = module_symbols;
+                deprecated_symbols = module_deprecated;
             } else {
                 other_symbols.insert(mod_name.to_string(), module_symbols);
+                deprecated_symbols.extend(module_deprecated);
             }
         }
     }
 
-    // Remove duplicates within downloaded data: remove from other sections keys that exist in math
+    // Remove deprecated symbols from math_symbols
+    for sym in &deprecated_symbols {
+        math_symbols.remove(sym);
+    }
+
+    // Remove deprecated symbols from other sections
+    for (_, module_map) in &mut other_symbols {
+        for sym in &deprecated_symbols {
+            module_map.remove(sym);
+        }
+    }
+
+    // Remove duplicates within downloaded data
     for (_, module_map) in &mut other_symbols {
         let mut to_remove = Vec::new();
         for key in module_map.keys() {
@@ -114,11 +130,32 @@ fn main() {
     file.write_all(serialized.as_bytes()).expect("Failed to write to output file");
 }
 
-fn extract_from_scope(scope: &Scope, map: &mut BTreeMap<String, String>) {
+fn extract_from_scope(scope: &Scope,
+    map: &mut BTreeMap<String, String>,
+    deprecated: &mut HashSet<String>,
+    parent_binding: Option<&Binding>
+) {
     for (name, binding) in scope.iter() {
         let value = binding.read();
+
+        // Check if this binding or its parent is deprecated
+        let is_deprecated = parent_binding
+            .and_then(|p| p.deprecation())
+            .is_some()
+            || binding.deprecation().is_some();
+
         if let TypstValue::Symbol(sym) = value {
-            walk_symbol(name, sym, map);
+            if is_deprecated {
+                deprecated.insert(name.to_string());
+                for variant_name in sym.modifiers() {
+                    let full_variant_name = format!("{}.{}", name, variant_name);
+                    deprecated.insert(full_variant_name);
+                }
+            } else {
+                walk_symbol(name, sym, map);
+            }
+        } else if let TypstValue::Module(module) = value {
+            extract_from_scope(module.scope(), map, deprecated, Some(&binding));
         }
     }
 }
