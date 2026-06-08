@@ -170,6 +170,7 @@ local M = {}
 --- @field slot_order string[]
 --- @field next_slot_id integer
 --- @field shape_epoch integer
+--- @field manager_rev integer
 --- @field render_context_hash string|nil
 --- @field context_id string|nil
 --- @field context_rev integer

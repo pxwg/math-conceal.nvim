@@ -58,37 +58,55 @@ local function formula_cursor_ui_can_batch(bufnr, main)
   return true
 end
 
-local function cursor_line_range(bufnr)
+local function cursor_context(bufnr)
   local winid = state.active_window_for_bufnr(bufnr)
   if winid == nil then
-    return nil, nil
+    return nil
   end
 
   local ok_cursor, cursor = pcall(vim.api.nvim_win_get_cursor, winid)
   if not ok_cursor or cursor == nil then
-    return nil, nil
+    return nil
   end
 
   local row = cursor[1] - 1
+  local col = cursor[2]
   local mode = vim.api.nvim_get_mode().mode or ""
+  local lo, hi = row, row
   if mode == "v" or mode == "V" or mode == "\22" then
     local visual_row = vim.fn.getpos("v")[2] - 1
-    return math.min(row, visual_row), math.max(row, visual_row)
+    lo, hi = math.min(row, visual_row), math.max(row, visual_row)
   end
-  return row, row
+  return {
+    row = row,
+    col = col,
+    mode = mode,
+    lo = lo,
+    hi = hi,
+  }
 end
 
 local function sync_cursor_ui_now(bufnr)
   local plan = require("math-conceal.image.plan")
   local ok_main, main = pcall(require, "math-conceal.image")
   if ok_main and formula_cursor_ui_can_batch(bufnr, main) then
-    local lo, hi = cursor_line_range(bufnr)
+    local cursor = cursor_context(bufnr)
     local defer_opts = { defer_line_run_reconcile = true }
-    M.sync_hover(bufnr, defer_opts)
+    local hover_changed = M.sync_hover(bufnr, defer_opts) == true
     plan.sync_progressive_render(bufnr)
-    M.render_live_preview(bufnr, defer_opts)
-    if lo ~= nil then
-      require("math-conceal.image.extmark").reconcile_cursor_line_runs(bufnr, lo, hi)
+    local preview_may_change = cursor == nil
+    if cursor ~= nil then
+      local ok_manager, manager = pcall(require, "math-conceal.image.formula.manager")
+      if ok_manager then
+        preview_may_change =
+          manager.get(bufnr):sync_from_machine({ read_model = false }):cursor_preview_may_change(cursor.row)
+      end
+    end
+    if hover_changed or preview_may_change then
+      M.render_live_preview(bufnr, defer_opts)
+    end
+    if hover_changed and cursor ~= nil then
+      require("math-conceal.image.extmark").reconcile_cursor_line_runs(bufnr, cursor.lo, cursor.hi)
     end
     return
   end
@@ -837,10 +855,9 @@ function M.sync_hover(bufnr, opts)
   opts = opts or {}
   local ok_main, main = pcall(require, "math-conceal.image")
   if ok_main and uses_formula_manager(bufnr, main) then
-    require("math-conceal.image.formula.manager").sync_cursor_conceal(bufnr, opts)
-    return
+    return require("math-conceal.image.formula.manager").sync_cursor_conceal(bufnr, opts)
   end
-  require("math-conceal.image.plan").hide_extmarks_at_cursor(bufnr)
+  return require("math-conceal.image.plan").hide_extmarks_at_cursor(bufnr)
 end
 
 function M.sync_cursor_ui(bufnr)

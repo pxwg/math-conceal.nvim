@@ -147,6 +147,13 @@ local function ensure_slot_registry(buf)
   buf.slot_order = buf.slot_order or {}
   buf.next_slot_id = buf.next_slot_id or 1
   buf.shape_epoch = buf.shape_epoch or 0
+  buf.manager_rev = buf.manager_rev or 0
+end
+
+local function bump_manager_rev(buf)
+  if buf ~= nil then
+    buf.manager_rev = (buf.manager_rev or 0) + 1
+  end
 end
 
 local function ensure_buffer(state, bufnr, project_scope_id)
@@ -165,6 +172,7 @@ local function ensure_buffer(state, bufnr, project_scope_id)
       slot_order = {},
       next_slot_id = 1,
       shape_epoch = 0,
+      manager_rev = 0,
       render_context_hash = nil,
       context_id = nil,
       context_rev = 1,
@@ -1034,6 +1042,7 @@ local function reduce_nodes_scanned(state, ev)
 
   buf.nodes = next_nodes
   buf.node_order = next_order
+  bump_manager_rev(buf)
 
   for _, node_id in ipairs(next_order) do
     local node = next_nodes[node_id]
@@ -1081,6 +1090,7 @@ local function reduce_full_render_requested(state, ev)
   end
   if not has_dirty then
     abandon_idle_request(new_state, buf, effects)
+    bump_manager_rev(buf)
     return new_state, effects
   end
 
@@ -1147,6 +1157,7 @@ local function reduce_full_render_requested(state, ev)
     },
   }
 
+  bump_manager_rev(buf)
   return new_state, effects
 end
 
@@ -1263,6 +1274,7 @@ local function reduce_formula_renders_requested(state, ev)
     }
   end
 
+  bump_manager_rev(buf)
   return new_state, effects
 end
 
@@ -1332,6 +1344,7 @@ local function reduce_overlay_page_ready(state, ev)
   overlay.source_rows = ev.source_rows
   overlay.status = "ready"
   node.status = "ready"
+  bump_manager_rev(buf)
 
   effects[#effects + 1] = {
     kind = "commit_overlay",
@@ -1359,6 +1372,8 @@ local function reduce_overlay_resources_allocated(state, ev)
   if ev.binding_display_range ~= nil then
     record_overlay_binding(overlay, ev.binding_buffer_version, ev.binding_layout_version, ev.binding_display_range)
   end
+  local buf = new_state.buffers[overlay.owner_bufnr]
+  bump_manager_rev(buf)
   return new_state, {}
 end
 
@@ -1390,6 +1405,7 @@ local function reduce_overlay_commit_succeeded(state, ev)
   node.last_buffer_version = overlay.buffer_version
   node.last_layout_version = overlay.layout_version
   mark_slot_committed(buf, node, overlay)
+  bump_manager_rev(buf)
 
   if old_visible_id ~= nil and old_visible_id ~= overlay.overlay_id then
     local old_overlay = new_state.overlays[old_visible_id]
@@ -1421,6 +1437,7 @@ local function reduce_buffer_layout_changed(state, ev)
   end
 
   buf.layout_version = ev.new_layout_version
+  bump_manager_rev(buf)
   ensure_slot_registry(buf)
   for _, node_id in ipairs(buf.node_order or {}) do
     local node = buf.nodes[node_id]
@@ -1466,6 +1483,7 @@ local function reduce_request_abandoned(state, ev)
 
   local buf = new_state.buffers[ev.bufnr]
   if buf ~= nil then
+    bump_manager_rev(buf)
     if buf.active_request_id == ev.request_id then
       buf.active_request_id = nil
     end
@@ -1566,6 +1584,7 @@ local function reduce_overlay_pages_batch_ready(state, ev)
       overlay.source_rows = entry.source_rows
       overlay.status = "ready"
       node.status = "ready"
+      bump_manager_rev(buf)
 
       effects[#effects + 1] = {
         kind = "commit_overlay",
@@ -1621,6 +1640,7 @@ local function reduce_overlay_render_failed(state, ev)
   if node.status ~= "orphaned" and node.status ~= "deleted_confirmed" then
     node.status = node.visible_overlay_id ~= nil and "stale" or "pending"
   end
+  bump_manager_rev(buf)
 
   ensure_slot_registry(buf)
   local slot = node.slot_id and buf.slots[node.slot_id] or nil
@@ -1658,6 +1678,7 @@ local function reduce_overlay_commits_batch_succeeded(state, ev)
         node.last_buffer_version = overlay.buffer_version
         node.last_layout_version = overlay.layout_version
         mark_slot_committed(buf, node, overlay)
+        bump_manager_rev(buf)
 
         if old_visible_id ~= nil and old_visible_id ~= overlay.overlay_id then
           local old_overlay = new_state.overlays[old_visible_id]
@@ -1726,6 +1747,7 @@ local function reduce_overlay_bindings_batch_succeeded(state, ev)
         then
           overlay.extmark_id = entry.extmark_id or overlay.extmark_id
           record_overlay_binding(overlay, entry.buffer_version, entry.layout_version, entry.display_range)
+          bump_manager_rev(buf)
         end
       end
     end
@@ -1761,6 +1783,7 @@ local function reduce_visible_overlay_lost(state, ev)
   if node.status ~= "orphaned" and node.status ~= "deleted_confirmed" then
     node.status = node.candidate_overlay_id ~= nil and "stale" or "pending"
   end
+  bump_manager_rev(buf)
 
   ensure_slot_registry(buf)
   local slot = node.slot_id and buf.slots[node.slot_id] or nil
@@ -1800,6 +1823,7 @@ local function reduce_node_deleted_confirmed(state, ev)
   node.candidate_overlay_id = nil
   node.visible_overlay_id = nil
   tombstone_slot(buf, node.slot_id, true)
+  bump_manager_rev(buf)
 
   if old_visible_id ~= nil then
     local overlay = new_state.overlays[old_visible_id]

@@ -70,6 +70,8 @@ function Manager.new(bufnr)
     last_lo = nil,
     last_hi = nil,
     preview_placement_id = nil,
+    synced_manager_rev = nil,
+    read_model_manager_rev = nil,
   }, Manager)
 end
 
@@ -132,18 +134,31 @@ end
 
 function Manager:sync_from_machine(opts)
   opts = opts or {}
+  local sync_read_model = opts.read_model ~= false
   local machine_state, buf = machine_buffer(self.bufnr)
-  self:reset_indexes()
   if machine_state == nil or buf == nil then
+    self:reset_indexes()
     for _, placement in pairs(self.placements) do
       placement:close({ release = false })
     end
     self.placements = {}
     self.by_node_id = {}
     self.read_items = {}
+    self.synced_manager_rev = nil
+    self.read_model_manager_rev = nil
     return self
   end
 
+  local manager_rev = buf.manager_rev or 0
+  if self.synced_manager_rev == manager_rev then
+    if sync_read_model and self.read_model_manager_rev ~= manager_rev then
+      self:sync_read_model()
+      self.read_model_manager_rev = manager_rev
+    end
+    return self
+  end
+
+  self:reset_indexes()
   self.context_id = buf.context_id
   self.context_rev = buf.context_rev
   local seen = {}
@@ -175,8 +190,12 @@ function Manager:sync_from_machine(opts)
     self.placements[entry.placement.placement_id] = nil
   end
 
-  if opts.read_model ~= false then
+  self.synced_manager_rev = manager_rev
+  if sync_read_model then
     self:sync_read_model()
+    self.read_model_manager_rev = manager_rev
+  else
+    self.read_model_manager_rev = nil
   end
   return self
 end
@@ -529,6 +548,7 @@ function Manager:restore_all_hidden()
   for extmark_id in pairs(bs.currently_hidden_extmark_ids or {}) do
     to_restore[#to_restore + 1] = extmark_id
   end
+  local changed = #to_restore > 0
   for _, extmark_id in ipairs(to_restore) do
     local placement = self.extmark_index[extmark_id]
     if placement ~= nil then
@@ -542,6 +562,7 @@ function Manager:restore_all_hidden()
   self.last_mode = nil
   self.last_lo = nil
   self.last_hi = nil
+  return changed
 end
 
 function Manager:sync_cursor_conceal(opts)
@@ -557,7 +578,7 @@ function Manager:sync_cursor_conceal(opts)
     or not main.is_render_allowed(self.bufnr)
     or not vim.api.nvim_buf_is_valid(self.bufnr)
   then
-    self:restore_all_hidden()
+    local changed = self:restore_all_hidden()
     bs.currently_hidden_extmark_ids = {}
     hover.last_cursor_row = nil
     hover.last_cursor_col = nil
@@ -565,12 +586,12 @@ function Manager:sync_cursor_conceal(opts)
     hover.last_lo = nil
     hover.last_hi = nil
     hover.invalidated = false
-    return true
+    return changed
   end
 
   local mode = vim.api.nvim_get_mode().mode
   if cursor_visibility.presentation_keeps_conceal(self.bufnr, mode) then
-    self:restore_all_hidden()
+    local changed = self:restore_all_hidden()
     bs.currently_hidden_extmark_ids = {}
     hover.last_cursor_row = nil
     hover.last_cursor_col = nil
@@ -579,11 +600,11 @@ function Manager:sync_cursor_conceal(opts)
     hover.last_hi = nil
     hover.invalidated = false
     require("math-conceal.image.presentation").keep_cursor_out_of_protected_range(self.bufnr)
-    return true
+    return changed
   end
 
   if main.config.conceal_in_normal and mode:find("n", 1, true) ~= nil then
-    self:restore_all_hidden()
+    local changed = self:restore_all_hidden()
     bs.currently_hidden_extmark_ids = {}
     hover.last_cursor_row = nil
     hover.last_cursor_col = nil
@@ -591,7 +612,7 @@ function Manager:sync_cursor_conceal(opts)
     hover.last_lo = nil
     hover.last_hi = nil
     hover.invalidated = false
-    return true
+    return changed
   end
 
   local cursor = vim.api.nvim_win_get_cursor(0)
@@ -611,7 +632,7 @@ function Manager:sync_cursor_conceal(opts)
     and hover.last_cursor_col == cursor_col
     and not hover.invalidated
   then
-    return true
+    return false
   end
 
   local should_hide = {}
@@ -627,6 +648,7 @@ function Manager:sync_cursor_conceal(opts)
   end
 
   local new_hidden = {}
+  local changed_hidden = false
   for extmark_id in pairs(bs.currently_hidden_extmark_ids or {}) do
     if should_hide[extmark_id] ~= nil then
       new_hidden[extmark_id] = true
@@ -634,6 +656,9 @@ function Manager:sync_cursor_conceal(opts)
       local placement = self.extmark_index[extmark_id]
       if placement ~= nil then
         placement:show({ defer_line_run_reconcile = true })
+        changed_hidden = true
+      else
+        changed_hidden = true
       end
     end
   end
@@ -644,11 +669,12 @@ function Manager:sync_cursor_conceal(opts)
       and placement:hide({ defer_line_run_reconcile = true })
     then
       new_hidden[extmark_id] = true
+      changed_hidden = true
     end
   end
 
   bs.currently_hidden_extmark_ids = new_hidden
-  if opts.defer_line_run_reconcile ~= true then
+  if changed_hidden and opts.defer_line_run_reconcile ~= true then
     require("math-conceal.image.extmark").reconcile_cursor_line_runs(self.bufnr, lo, hi)
   end
   hover.last_cursor_row = cursor_row
@@ -657,7 +683,14 @@ function Manager:sync_cursor_conceal(opts)
   hover.last_lo = lo
   hover.last_hi = hi
   hover.invalidated = false
-  return true
+  return changed_hidden
+end
+
+function Manager:cursor_preview_may_change(row)
+  if self.preview_placement_id ~= nil then
+    return true
+  end
+  return next(self:placements_for_row_cached(row)) ~= nil
 end
 
 function Manager:sync_cursor_preview(opts)
