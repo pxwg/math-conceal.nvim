@@ -14,6 +14,35 @@ use std::path::PathBuf;
 use typst::foundations::{Binding, Scope, Symbol, Value as TypstValue};
 use typst::{Library, LibraryExt};
 
+/// Characters that are considered "filterable" (non-printable, zero-width, etc.)
+/// If a string consists ONLY of these characters, the entire key is removed.
+fn is_filterable_char(c: char) -> bool {
+    match c as u32 {
+        // C0 control characters (0x00-0x1F) except tab (0x09) and newline (0x0A)
+        0x00..=0x08 | 0x0B | 0x0E..=0x1F | 0x7F => true,
+        // C1 control characters (0x80-0x9F)
+        0x80..=0x9F => true,
+        // Soft hyphen (U+00AD)
+        0xAD => true,
+        // Zero-width and invisible characters (ZWJ, ZWNJ, ZWS, etc.)
+        0x200B | 0x200C | 0x200D | 0x200E | 0x200F | 0x2060 | 0xFEFF => true,
+        // Directional formatting characters
+        0x061C | 0x202A..=0x202E => true,
+        // Variation selectors - keep them (they are meaningful)
+        // 0xFE00..=0xFE0F => false,
+        // 0xE0100..=0xE01EF => false,
+        _ => false,
+    }
+}
+
+/// Returns true if the string consists ONLY of filterable characters
+fn is_only_filterable(s: &str) -> bool {
+    if s.is_empty() {
+        return true;
+    }
+    s.chars().all(|c| is_filterable_char(c))
+}
+
 fn main() {
     let lib = Library::default();
     let global_scope = lib.global.scope();
@@ -76,7 +105,36 @@ fn main() {
         }
     }
 
-    // Load custom symbols
+    // Filter entire keys whose values consist ONLY of filterable characters
+    fn filter_keys_by_value(value: &mut Value) {
+        match value {
+            Value::Object(map) => {
+                let mut to_remove = Vec::new();
+                for (key, val) in map.iter_mut() {
+                    if let Value::String(s) = val {
+                        // If the string consists ONLY of filterable characters, remove the key
+                        if is_only_filterable(s) {
+                            to_remove.push(key.clone());
+                        }
+                    } else {
+                        filter_keys_by_value(val);
+                    }
+                }
+                for key in to_remove {
+                    map.remove(&key);
+                }
+            }
+            Value::Array(arr) => {
+                for val in arr {
+                    filter_keys_by_value(val);
+                }
+            }
+            _ => {}
+        }
+    }
+    filter_keys_by_value(&mut output_json);
+
+    // Load custom symbols from file
     let custom_path = PathBuf::from("scripts/symbols_typst_custom.json");
     if custom_path.exists() {
         let file = File::open(&custom_path).expect("Failed to open custom JSON file");
@@ -103,7 +161,7 @@ fn main() {
                 }
             }
 
-            // Now add/replace custom sections
+            // Add/replace custom sections
             for (section_name, custom_section) in custom_obj {
                 if let Some(custom_map) = custom_section.as_object() {
                     if !output_json.as_object().unwrap().contains_key(section_name) {
@@ -113,7 +171,13 @@ fn main() {
                     if let Some(output_map) = output_json[section_name].as_object_mut() {
                         for (k, v) in custom_map {
                             if let Some(s) = v.as_str() {
-                                output_map.insert(k.clone(), json!(s));
+                                // Custom symbols should be added as-is
+                                // But if they consist ONLY of filterable chars, skip them
+                                if !is_only_filterable(s) {
+                                    output_map.insert(k.clone(), json!(s));
+                                }
+                            } else {
+                                output_map.insert(k.clone(), v.clone());
                             }
                         }
                     }
@@ -123,6 +187,9 @@ fn main() {
             }
         }
     }
+
+    // Final filtering after adding custom symbols
+    filter_keys_by_value(&mut output_json);
 
     let output_path = "lua/math-conceal/conceal/math_symbols_typst.json";
     let mut file = File::create(output_path).expect("Failed to create output file");
@@ -138,7 +205,7 @@ fn extract_from_scope(scope: &Scope,
     for (name, binding) in scope.iter() {
         let value = binding.read();
 
-        // Check if this binding or its parent is deprecated
+        // Check if this binding or its parent is marked as deprecated
         let is_deprecated = parent_binding
             .and_then(|p| p.deprecation())
             .is_some()
@@ -162,6 +229,7 @@ fn extract_from_scope(scope: &Scope,
 
 fn walk_symbol(name: &str, sym: &Symbol, map: &mut BTreeMap<String, String>) {
     let char_str = sym.get().to_string();
+    // Store as-is, filtering happens later based on content
     map.insert(name.to_string(), char_str);
 
     for variant_name in sym.modifiers() {
