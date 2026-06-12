@@ -69,6 +69,6 @@ jobs:
         with:
           commit_message: "chore: update symbols to typst ${{ steps.update_process.outputs.version }}"
           branch: main
-          file_pattern: 'lua/ queries/ crates/ scripts/'
+          file_pattern: 'lua/ scripts/'
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
