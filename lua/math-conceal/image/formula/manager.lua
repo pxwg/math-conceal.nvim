@@ -52,6 +52,21 @@ local function remove_from_row_index(row_items, target)
   end
 end
 
+local function row_set_matches_range(rows, lo, hi)
+  rows = rows or {}
+  for row = lo, hi do
+    if rows[row] ~= true then
+      return false
+    end
+  end
+  for row in pairs(rows) do
+    if type(row) ~= "number" or row < lo or row > hi then
+      return false
+    end
+  end
+  return true
+end
+
 function Manager.new(bufnr)
   return setmetatable({
     bufnr = bufnr,
@@ -108,6 +123,16 @@ function Manager:reset_indexes()
   self.row_index = {}
 end
 
+local function index_range(row_index, placement, range)
+  if placement == nil or range == nil then
+    return
+  end
+  for row = range[1], range[3] do
+    row_index[row] = row_index[row] or {}
+    row_index[row][placement.placement_id] = placement
+  end
+end
+
 function Manager:reindex_placement(placement)
   if placement == nil then
     return
@@ -124,12 +149,8 @@ function Manager:reindex_placement(placement)
   if placement.image_id ~= nil then
     self.by_image_id[placement.image_id] = placement
   end
-  if placement.source_range ~= nil then
-    for row = placement.source_range[1], placement.source_range[3] do
-      self.row_index[row] = self.row_index[row] or {}
-      self.row_index[row][placement.placement_id] = placement
-    end
-  end
+  index_range(self.row_index, placement, placement.source_range)
+  index_range(self.row_index, placement, placement.display_range)
 end
 
 function Manager:sync_from_machine(opts)
@@ -630,6 +651,7 @@ function Manager:sync_cursor_conceal(opts)
     and hover.last_lo == lo
     and hover.last_hi == hi
     and hover.last_cursor_col == cursor_col
+    and row_set_matches_range(bs.inline_line_suppressed_rows, lo, hi)
     and not hover.invalidated
   then
     return false
@@ -674,7 +696,7 @@ function Manager:sync_cursor_conceal(opts)
   end
 
   bs.currently_hidden_extmark_ids = new_hidden
-  if changed_hidden and opts.defer_line_run_reconcile ~= true then
+  if opts.defer_line_run_reconcile ~= true then
     require("math-conceal.image.extmark").reconcile_cursor_line_runs(self.bufnr, lo, hi)
   end
   hover.last_cursor_row = cursor_row

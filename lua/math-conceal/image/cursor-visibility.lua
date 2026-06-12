@@ -152,6 +152,11 @@ function M.should_unconceal_item_for_row(item, row, cursor_row, cursor_col, mode
   local source_kind = sem.source_kind or item.node_type
   local math_like = source_kind == "math" or source_kind == "latex"
   local sr, _, er, _ = effective_range[1], effective_range[2], effective_range[3], effective_range[4]
+  local display_range = item.display_range ~= nil and clamp_range_to_buffer(item.bufnr, item.display_range) or nil
+
+  if math_like and sem.display_kind == "block" and display_range ~= nil then
+    return M.cursor_engages_inline_item(display_range, cursor_row, cursor_col, mode)
+  end
 
   if sr == er and math_like then
     if row ~= cursor_row then
@@ -164,8 +169,8 @@ function M.should_unconceal_item_for_row(item, row, cursor_row, cursor_col, mode
       end
     end
     local trigger_range = effective_range
-    if sem.render_whole_line and item.display_range ~= nil then
-      trigger_range = clamp_range_to_buffer(item.bufnr, item.display_range) or effective_range
+    if sem.render_whole_line and display_range ~= nil then
+      trigger_range = display_range
     end
     return M.cursor_engages_inline_item(trigger_range, cursor_row, cursor_col, mode)
   end

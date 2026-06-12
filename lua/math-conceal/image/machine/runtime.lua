@@ -105,7 +105,7 @@ local function sync_cursor_ui_now(bufnr)
     if hover_changed or preview_may_change then
       M.render_live_preview(bufnr, defer_opts)
     end
-    if hover_changed and cursor ~= nil then
+    if cursor ~= nil then
       require("math-conceal.image.extmark").reconcile_cursor_line_runs(bufnr, cursor.lo, cursor.hi)
     end
     return
