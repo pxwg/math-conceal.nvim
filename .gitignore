@@ -3,7 +3,9 @@ build/
 tree_builder.log
 release/
 target/
+.math-conceal.image/
 test/
 **_zhihu.md
 **.so
 **.dylib
+.codex/skills/
