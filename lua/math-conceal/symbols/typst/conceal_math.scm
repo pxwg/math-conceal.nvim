@@ -1,76 +1,130 @@
-; Typst math conceals
-; Based on Typst math mode syntax tree structure
-; Math function calls with special symbols
-(call
-  item: (ident) @typ_math_symbol
-  (#any-of? @typ_math_symbol "root" "sum" "product" "integral" "sqrt")
-  ; (#has-ancestor? @func math formula)
-  (#set! priority 99)
+((escape) @cmd_escape
+  (#set-escape! @cmd_escape "typst"))
+
+([
+  (ident)
+  (field)
+] @typ_math_symbol
+  (#not-has-parent? @typ_math_symbol field call)
+  (#has-ancestor? @typ_math_symbol math)
   (#set-conceal! @typ_math_symbol "conceal"))
 
-(((ident) @typ_math_symbol
-  (#any-of? @typ_math_symbol "root" "sum" "product" "integral"))
-  ; (#has-ancestor? @conceal math formula)
-  ; (#set! @conceal "m"))
-  (#set! priority 99)
-  (#set-conceal! @typ_math_symbol "conceal"))
+((shorthand) @symbol
+  (#has-ancestor? @symbol math)
+  (#set-conceal! @symbol "conceal"))
 
-; Escape sequences - regex removed, Rust will filter
-((escape) @typ_math_symbol
-  (#set! priority 102)
-  (#set-escape! @typ_math_symbol "conceal"))
+((shorthand) @typ_symbol
+  (#any-of? @typ_symbol "..." "--" "---" "-?" "~")
+  (#not-has-ancestor? @typ_symbol math)
+  (#set-conceal! @typ_symbol "conceal"))
 
-; Special symbols in math mode
-((symbol) @symbol
-  (#any-of? @symbol "+" "-" "*" "/" "=" "<" ">" "(" ")" "[" "]" "{" "}")
-  (#has-ancestor? @symbol math formula)
-  (#set! priority 90))
+((symbol) @typ_symbol
+  (#any-of? @typ_symbol "'")
+  (#has-ancestor? @typ_symbol math)
+  (#set-conceal! @typ_symbol "conceal"))
 
-; Conceal "frac" and replace with opening parenthesis
-((call
-  item: (ident) @_frac_name
-  (#eq? @_frac_name "frac"))
-  (#set! conceal "" @_frac_name)
-  (#set! priority 1000))
+; conceal brackets and comma in tables, grid etc.
+([
+  "," @punctuation.delimiter
+  (content
+    "[" @left_1
+    "]" @right_1)
+] @content
+  (#has-ancestor? @content call)
+  (#has-parent? @content group)
+  (#set! @punctuation.delimiter conceal " ")
+  (#set! @left_1 conceal "")
+  (#set! @right_1 conceal ""))
 
-; Replace comma with division slash
-((call
-  item: (ident) @_func_name
-  (#eq? @_func_name "frac")
-  (_)
-  "," @punctuation.comma
-  (_))
-  (#set! conceal "/")
-  (#set! priority 105))
+([
+  (ident)
+  (field)
+] @typ_symbol
+  (#any-of? @typ_symbol "dif" "partial")
+  (#not-has-parent? @typ_symbol field call)
+  (#has-ancestor? @typ_symbol math)
+  (#set-conceal! @typ_symbol "conceal"))
 
-; Conceal "abs" function name
 (call
-  item: (ident) @abs_name
-  (#eq? @abs_name "abs")
-  (#set! conceal "")
-  (#set! priority 100))
-
-; Conceal parentheses for abs function
-(call
-  item: (ident) @func_name
+  item: (ident) @typ_symbol
   "(" @left_paren
   (_)
   ")" @right_paren
-  (#eq? @func_name "abs")
-  (#set! conceal "|" @left_paren)
-  (#set! conceal "|" @right_paren)
-  (#set! priority 90))
+  (#any-of? @typ_symbol "dif")
+  (#has-ancestor? @typ_symbol math formula)
+  (#set! @typ_symbol conceal "𝚍"))
 
-; Math operators and symbols - regex removed, Rust will filter
-((ident) @typ_math_symbol
-  (#has-ancestor? @typ_math_symbol math formula)
-  ; (#not-has-ancestor? @typ_math_symbol call)
-  (#set! priority 101)
-  (#set-conceal! @typ_math_symbol "conceal"))
+(fraction
+  "/" @frac
+  (#set! @frac conceal "∕"))
 
-; Math operators and symbols with modifiers - regex removed, Rust will filter
-((field) @typ_math_symbol
-  (#set! priority 103)
-  (#has-ancestor? @typ_math_symbol math formula)
-  ; (#not-has-ancestor? @typ_math_symbol call)
-  (#set-conceal! @typ_math_symbol "conceal"))
+; Conceal "frac" and replace with opening parenthesis
+; only for simple expression frac(expression_1,expression_2)
+; to expression_1/expression_2
+; or for long_expression frac((long_expression_1),(long_expression_2))
+; to (long_expression_1)/(long_expression_2)
+; Replace only first comma with division slash
+; frac(content,content,style: str)
+; use `⧸` BIG SOLIDUS U+29F8
+(call
+  item: (ident) @_frac_name
+  (#eq? @_frac_name "frac")
+  "(" @left_paren
+  .
+  [
+    (formula
+      .
+      (letter) .)
+    (formula
+      .
+      (number) .)
+    (formula
+      .
+      (attach) .)
+    (formula
+      .
+      (group) .)
+  ]
+  .
+  "," @punctuation.comma
+  .
+  [
+    (formula
+      .
+      (letter) .)
+    (formula
+      .
+      (number) .)
+    (formula
+      .
+      (attach) .)
+    (formula
+      .
+      (group) .)
+  ]
+  .
+  (","
+    .
+    (tagged))?
+  ")" @right_paren
+  (#set! @punctuation.comma conceal "")
+  (#set! @left_paren conceal "")
+  (#set! @right_paren conceal "")
+  (#set! @_frac_name conceal ""))
+
+; Conceal style for all frac functions
+; from frac(content,content,style: str) to frac(content,content)
+(call
+  item: (ident) @_func_name
+  (#eq? @_func_name "frac")
+  (_)
+  .
+  ","
+  .
+  (_)
+  .
+  "," @punctuation.comma
+  .
+  (tagged) @_tagged
+  (#set! @punctuation.comma conceal "")
+  (#set! @_tagged conceal ""))
