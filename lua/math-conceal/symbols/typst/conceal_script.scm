@@ -1,84 +1,259 @@
 ; Typst script style conceals
+; Replace simple letter by italic symbols. Must before sub- superscript rulers!
+((letter) @typ_math_symbol
+  (#match? @typ_math_symbol "^[a-hj-zA-Z]$")
+  (#not-has-parent? @typ_math_symbol field call)
+  (#has-ancestor? @typ_math_symbol math)
+  (#set-conceal! @typ_math_symbol "conceal"))
+
+((letter) @typ_symbol
+  (#any-of? @typ_symbol "i")
+  (#not-has-parent? @typ_symbol field call)
+  (#has-ancestor? @typ_symbol math)
+  (#set-conceal! @typ_symbol "conceal"))
+
 ; Superscript and subscript conceals
-; A_a -> A(concealed sub:a)
+; Conceal the opening parenthesis of the subscript group while the formula has no space
+; A_(xxx) -> A_xxx
+(attach
+  (_)
+  "^"
+  sup: (group
+    "(" @open_paren
+    (formula
+      .
+      [
+        (apply)
+        (attach
+          sup: (_) @sup_letter .)
+        (attach
+          sub: (_) .)
+        (fac)
+        (field)
+        (group)
+        (ident)
+        (letter)
+        (number)
+        (root)
+        (string)
+        (symbol)
+      ] .)
+    ")" @close_paren) @sup_object
+  (#match? @sup_object "^[(]\\S+[)]$")
+  (#match? @sup_letter
+    "^([0-9]|[a-pr-zABDEG-PRT-W]|[*+=()\\-]|alpha|beta|gamma|delta|epsilon|theta|iota|phi|chi|prime|prime.double|prime.triple|prime.quad|prime.rev|prime.rev.double|prime.rev.triple|prime.double.rev|prime.triple.rev)$")
+  (#has-ancestor? @sup_object math formula)
+  (#set! @open_paren conceal "")
+  (#set! @close_paren conceal ""))
+
+(attach
+  (_)
+  "_"
+  sub: (group
+    "(" @open_paren
+    (formula
+      .
+      [
+        (apply)
+        (attach
+          sub: (_) @sub_letter .)
+        (attach
+          sup: (_) .)
+        (fac)
+        (field)
+        (group)
+        (ident)
+        (letter)
+        (number)
+        (root)
+        (string)
+        (symbol)
+      ] .)
+    ")" @close_paren) @sub_object
+  (#match? @sub_object "^[(]\\S+[)]$")
+  (#match? @sub_letter "^([0-9]|[aehijklmnoprstuvx]|[+()=\\-]|beta|gamma|rho|phi|chi)$")
+  (#has-ancestor? @sub_object math formula)
+  (#set! @close_paren conceal "")
+  (#set! @open_paren conceal ""))
+
+; Sup conceal only limited call like:
+; fonts
+(attach
+  (_)
+  "^"
+  sup: (group
+    "(" @open_paren
+    (formula
+      .
+      (call
+        item: [
+          (ident)
+          (field)
+        ] @typ_font_name) .)
+    ")" @close_paren) @sup_object
+  (#match? @sup_object "^[(]\\S+[)]$")
+  (#any-of? @typ_font_name
+    "bb" "bold" "cal" "frak" "italic" "mono" "sans" "scr" "serif" "upright" "acute" "acute.double"
+    "arrow" "arrow.l" "arrow.l.r" "breve" "caron" "circle" "dash" "diaer" "dot" "dot.double"
+    "dot.quad" "dot.triple" "grave" "harpoon" "harpoon.lt" "hat" "macron" "overline" "tilde")
+  (#not-has-parent? @typ_font_name field)
+  (#has-ancestor? @sup_object math formula)
+  (#set! @open_paren conceal "")
+  (#set! @close_paren conceal ""))
+
+; Sub conceal only limited call like:
+; fonts
+(attach
+  (_)
+  "_"
+  sub: (group
+    "(" @open_paren
+    (formula
+      .
+      (call
+        item: [
+          (ident)
+          (field)
+        ] @typ_font_name) .)
+    ")" @close_paren) @sub_object
+  (#match? @sub_object "^[(]\\S+[)]$")
+  (#any-of? @typ_font_name
+    "bb" "bold" "cal" "frak" "italic" "mono" "sans" "scr" "serif" "upright" "acute" "acute.double"
+    "arrow" "arrow.l" "arrow.l.r" "breve" "caron" "circle" "dash" "diaer" "dot" "dot.double"
+    "dot.quad" "dot.triple" "grave" "harpoon" "harpoon.lt" "hat" "macron" "overline" "tilde")
+  (#not-has-parent? @typ_font_name field)
+  (#has-ancestor? @sub_object math formula)
+  (#set! @close_paren conceal "")
+  (#set! @open_paren conceal ""))
+
+; A^a -> Aᵃ
 (attach
   (_)
   "^" @sup_symbol
-  sup: (_) @sup_object
-  (#has-ancestor? @sup_object math formula)
-  (#match? @sup_object "^[0-9a-z]$")
-  (#set! priority 98)
+  sup: [
+    (_) @sup_digit
+    (_) @sup_letter
+  ]
+  (#has-ancestor? @sup_symbol math formula)
+  (#match? @sup_digit "^([0-9]|[*+=()\\-])$")
+  (#match? @sup_letter
+    "^([a-pr-zABDEG-PRT-W]|alpha|beta|gamma|delta|epsilon|theta|iota|phi|chi|prime|prime.double|prime.triple|prime.quad|prime.rev|prime.rev.double|prime.rev.triple|prime.double.rev|prime.triple.rev)$")
   (#set! @sup_symbol conceal "")
-  (#set-sup! @sup_object "sup"))
+  (#set-sup! @sup_digit "sup")
+  (#set-sup! @sup_letter "sup"))
 
-; Subscript conceals
+; A^"a" -> Aᵃ
+(attach
+  (_)
+  "^" @_sup_symbol
+  sup: (string) @sup_string
+  (#has-ancestor? @_sup_symbol math formula)
+  (#match? @sup_string "^\"([0-9]|[*+=()\\-]|[a-pr-zABDEG-PRT-W])\"$")
+  (#set! @_sup_symbol conceal "")
+  (#set-sup! @sup_string "sup")
+  (#set! priority 101))
+
+; A_a -> Aₐ
 (attach
   (_)
   "_" @sub_symbol
-  sub: (_) @sub_object
-  (#has-ancestor? @sub_object math formula)
-  (#match? @sub_object "^[0-9aehijklmnoprstuvx]$")
+  sub: [
+    (_) @sub_digit
+    (_) @sub_letter
+  ]
+  (#has-ancestor? @sub_symbol math formula)
+  (#match? @sub_digit "^([0-9]|[+()=\\-])$")
+  (#match? @sub_letter "^([aehijklmnoprstuvx]|beta|gamma|rho|phi|chi)$")
   (#set! @sub_symbol conceal "")
-  (#set-sub! @sub_object "sub"))
+  (#set-sub! @sub_digit "sub")
+  (#set-sub! @sub_letter "sub"))
 
-; Capture and conceal the opening parenthesis of the sub/supscript group
-; For superscript with parentheses - hide both ^ and parentheses when content matches criteria
-; Concealed symbol with lua_func: concealing the subscript and superscript symbols
-; A_(a) -> A(concealed sub:a)
-  (formula
-    (attach
-      (_)
-      "^" @sup_symbol
-      sup: (group
-        "(" @open_paren
-        (formula) @sup_letter
-        ")" @close_paren)
-      (#match? @sup_letter "^[a-z0-9]$")
-      (#has-ancestor? @sup_letter math formula)
-      (#set! @open_paren conceal "")
-      (#set! @close_paren conceal "")
-      (#set! @sup_symbol conceal "")
-      (#set-sup! @sup_letter)))
+; A_"a" -> Aₐ
+(attach
+  (_)
+  "_" @_sub_symbol
+  sub: (string) @sub_string
+  (#has-ancestor? @_sub_symbol math formula)
+  (#match? @sub_string "^\"([0-9]|[+()=\\-]|[aehijklmnoprstuvx])\"$")
+  (#set! @_sub_symbol conceal "")
+  (#set-sub! @sub_string "sub")
+  (#set! priority 101))
 
-  (formula
-    (attach
-      (_)
-      "_" @sub_symbol
-      sub: (group
-        "(" @open_paren
-        (formula) @sub_object
-        ")" @close_paren)
-      (#match? @sub_object "^[aehijklmnoprstuvx1234567890]$")
-      (#has-ancestor? @sub_object math formula)
-      (#set! @open_paren conceal "")
-      (#set! @close_paren conceal "")
-      (#set! @sub_symbol conceal "")
-      (#set-sub! @sub_object)))
+; A^(a) -> Aᵃ
+(attach
+  (_)
+  "^" @sup_symbol
+  sup: (group
+    "(" @open_paren
+    [
+      (_) @sup_digit
+      (_) @sup_letter
+    ]
+    ")" @close_paren) @content
+  (#match? @sup_digit "^([0-9]|[*+=()\\-])$")
+  (#match? @sup_letter
+    "^([a-pr-zABDEG-PRT-W]|alpha|beta|gamma|delta|epsilon|theta|iota|phi|chi|prime|prime.double|prime.triple|prime.quad|prime.rev|prime.rev.double|prime.rev.triple|prime.double.rev|prime.triple.rev)$")
+  (#match? @content "^[(]\\S+[)]$")
+  (#has-ancestor? @sup_symbol math formula)
+  (#set! @open_paren conceal "")
+  (#set! @close_paren conceal "")
+  (#set! @sup_symbol conceal "")
+  (#set-sup! @sup_digit "sup")
+  (#set-sup! @sup_letter "sup"))
 
-; Conceal the opening parenthesis of the subscript group while the formula has no space
-; A_(xxx) -> A_xxx
-  (formula
-    (attach
-      (_)
-      "^" @sup_symbol
-      sup: (group
-        "(" @open_paren
-        (_) @sup_object
-        ")" @close_paren)
-      (#match? @sup_object "^[A-Za-z0-9]+$")
-      (#has-ancestor? @sup_object math formula)
-      (#set! @open_paren conceal "")
-      (#set! @close_paren conceal "")))
+; A^("a") -> Aᵃ
+(attach
+  (_)
+  "^" @_sup_symbol
+  sup: (group
+    "(" @_open_paren
+    (formula
+      (string) @sup_string .)
+    ")" @_close_paren) @content
+  (#match? @sup_string "^\"([0-9]|[*+=()\\-]|[a-pr-zABDEG-PRT-W])\"$")
+  (#match? @content "^[(]\\S+[)]$")
+  (#has-ancestor? @_sup_symbol math formula)
+  (#set! @_open_paren conceal "")
+  (#set! @_close_paren conceal "")
+  (#set! @_sup_symbol conceal "")
+  (#set-sup! @sup_string "sup")
+  (#set! priority 101))
 
-  (formula
-    (attach
-      (_)
-      "_" @sub_symbol
-      sub: (group
-        "(" @open_paren
-        (_) @sub_object
-        ")" @close_paren)
-      (#match? @sub_object "^[A-Za-z1-9]+$")
-      (#has-ancestor? @sub_object math formula)
-      (#set! @close_paren conceal "")
-      (#set! @open_paren conceal "")))
+; A_(a) -> Aₐ
+(attach
+  (_)
+  "_" @sub_symbol
+  sub: (group
+    "(" @open_paren
+    [
+      (_) @sub_digit
+      (_) @sub_letter
+    ]
+    ")" @close_paren) @content
+  (#match? @sub_digit "^([0-9]|[+()=\\-])$")
+  (#match? @sub_letter "^([aehijklmnoprstuvx]|beta|gamma|rho|phi|chi)$")
+  (#match? @content "^[(]\\S+[)]$")
+  (#has-ancestor? @sub_symbol math formula)
+  (#set! @open_paren conceal "")
+  (#set! @close_paren conceal "")
+  (#set! @sub_symbol conceal "")
+  (#set-sub! @sub_digit "sub")
+  (#set-sub! @sub_letter "sub"))
+
+; A_("a") -> Aₐ
+(attach
+  (_)
+  "_" @_sub_symbol
+  sub: (group
+    "(" @_open_paren
+    (formula
+      (string) @sub_string .)
+    ")" @_close_paren) @content
+  (#match? @sub_string "^\"([0-9]|[+()=\\-]|[aehijklmnoprstuvx])\"$")
+  (#match? @content "^[(]\\S+[)]$")
+  (#has-ancestor? @_sub_symbol math formula)
+  (#set! @_open_paren conceal "")
+  (#set! @_close_paren conceal "")
+  (#set! @_sub_symbol conceal "")
+  (#set-sub! @sub_string "sub")
+  (#set! priority 101))
