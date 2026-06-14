@@ -1,5 +1,5 @@
 {
-  "total_count": 54,
+  "total_count": 59,
   "languages": {
     "latex": [
       "@_env",
@@ -24,9 +24,11 @@
       "@right_brace",
       "@right_paren",
       "@right_paren_cmd",
+      "@sub_digit",
       "@sub_letter",
       "@sub_object",
       "@sub_symbol",
+      "@sup_digit",
       "@sup_letter",
       "@sup_object",
       "@sup_symbol",
@@ -58,10 +60,15 @@
       "@right_content",
       "@right_paren",
       "@second_letter",
+      "@sub_digit",
+      "@sub_letter",
       "@sub_object",
+      "@sub_string",
       "@sub_symbol",
+      "@sup_digit",
       "@sup_letter",
       "@sup_object",
+      "@sup_string",
       "@sup_symbol",
       "@symbol",
       "@typ_font_name",
@@ -73,7 +80,8 @@
       "@typ_math_delim",
       "@typ_math_font",
       "@typ_math_symbol",
-      "@typ_phy_symbol"
+      "@typ_phy_symbol",
+      "@typ_symbol"
     ]
   },
   "all_highlight_groups": [
@@ -110,11 +118,15 @@
     "@right_paren",
     "@right_paren_cmd",
     "@second_letter",
+    "@sub_digit",
     "@sub_letter",
     "@sub_object",
+    "@sub_string",
     "@sub_symbol",
+    "@sup_digit",
     "@sup_letter",
     "@sup_object",
+    "@sup_string",
     "@sup_symbol",
     "@symbol",
     "@tex_font_name",
@@ -129,6 +141,7 @@
     "@typ_math_delim",
     "@typ_math_font",
     "@typ_math_symbol",
-    "@typ_phy_symbol"
+    "@typ_phy_symbol",
+    "@typ_symbol"
   ]
 }
