@@ -79,6 +79,7 @@ local conceal_directives = {
   ["set-escape!"] = true,
   ["set-greek!"] = true,
   ["set-greek_font!"] = true,
+  ["set-sym-conceal!"] = true,
 }
 
 local function find_directive_end(code, start)
@@ -246,6 +247,7 @@ local conceal_config = {
   escape = { pattern = "escape", directive_name = "set-escape!", handler_key = "escape" },
   greek = { pattern = "greek", directive_name = "set-greek!", handler_key = "greek" },
   greek_font = { pattern = "greek_font", directive_name = "set-greek_font!", handler_key = "greek_font" },
+  sym_conceal = { pattern = "conceal", directive_name = "set-sym-conceal!", handler_key = "sym_conceal" },
 }
 
 -- Function to easily register new conceal types
@@ -365,26 +367,26 @@ local handler_dispatch = {
     end
   end,
 
-escape = function(match, _, source, predicate, metadata)
-  local capture_id = predicate[2]
-  local type_name = predicate[3]
-  if not capture_id or not match[capture_id] then
-    return
-  end
+  escape = function(match, _, source, predicate, metadata)
+    local capture_id = predicate[2]
+    local type_name = predicate[3]
+    if not capture_id or not match[capture_id] then
+      return
+    end
 
-  local node = get_capture_node(match[capture_id])
-  local node_text = get_capture_text(node, source)
-  if not node_text then
-    return
-  end
+    local node = get_capture_node(match[capture_id])
+    local node_text = get_capture_text(node, source)
+    if not node_text then
+      return
+    end
 
-  local result = cached_lookup(node_text, "escape", type_name)
+    local result = cached_lookup(node_text, "escape", type_name)
 
-  if result ~= node_text then
-    metadata[capture_id] = metadata[capture_id] or {}
-    metadata[capture_id]["conceal"] = result
-  end
-end,
+    if result ~= node_text then
+      metadata[capture_id] = metadata[capture_id] or {}
+      metadata[capture_id]["conceal"] = result
+    end
+  end,
 
   greek = function(match, _, source, predicate, metadata)
     local capture_id = predicate[2]
@@ -425,6 +427,31 @@ end,
     if result ~= node_text then
       metadata[capture_id] = metadata[capture_id] or {}
       metadata[capture_id]["conceal"] = result
+    end
+  end,
+
+  sym_conceal = function(match, _, source, predicate, metadata)
+    local capture_id = predicate[2]
+    local key = predicate[3]
+    local value = predicate[4]
+    if not capture_id or not key or not match[capture_id] then
+      return
+    end
+
+    local node = get_capture_node(match[capture_id])
+    local node_text = get_capture_text(node, source)
+    if not node_text then
+      return
+    end
+
+    -- Remove #sym. prefix if present
+    local stripped_text = node_text:gsub("^#sym%.", "")
+
+    local result = cached_lookup(stripped_text, "conceal", value)
+
+    if result ~= stripped_text and result ~= node_text then
+      metadata[capture_id] = metadata[capture_id] or {}
+      metadata[capture_id][key] = result
     end
   end,
 }

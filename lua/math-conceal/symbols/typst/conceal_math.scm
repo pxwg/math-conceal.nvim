@@ -9,6 +9,13 @@
   (#has-ancestor? @typ_math_symbol math)
   (#set-conceal! @typ_math_symbol "conceal"))
 
+; #sym.<>
+((code
+  (field
+    (_))) @typ_math_symbol
+  (#match? @typ_math_symbol "^([#]sym[.])\\S+$")
+  (#set-sym-conceal! @typ_math_symbol "conceal"))
+
 ((shorthand) @symbol
   (#has-ancestor? @symbol math)
   (#set-conceal! @symbol "conceal"))
@@ -44,6 +51,16 @@
   (#not-has-parent? @typ_symbol field call)
   (#has-ancestor? @typ_symbol math)
   (#set-conceal! @typ_symbol "conceal"))
+
+(call
+  item: (ident) @cmd
+  "(" @left_brace
+  ")" @right_brace
+  (#has-ancestor? @cmd math formula)
+  (#eq? @cmd "vec")
+  (#set! @cmd conceal "")
+  (#set! @left_brace conceal "(")
+  (#set! @right_brace conceal ")"))
 
 (call
   item: (ident) @typ_symbol
