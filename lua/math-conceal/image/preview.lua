@@ -312,6 +312,20 @@ local function preview_render_key(projection, ctx, source_text, preview_source, 
   return vim.fn.sha256(table.concat(parts, "\0"))
 end
 
+local function preview_service_cache_key(projection, ctx, config)
+  local track = projection.track
+  local parts = {
+    "live-preview-service-v1",
+    projection.key,
+    track.prelude_signature or "",
+    ctx.context_id or "",
+    tostring(ctx.context_rev or 0),
+    ctx.effective_root or "",
+    tostring(state.render_ppi(config)),
+  }
+  return "preview:" .. vim.fn.sha256(table.concat(parts, "\0"))
+end
+
 local function request_id(bufnr)
   local bs = state.get_buf_state(bufnr)
   bs.next_preview_request_id = (bs.next_preview_request_id or 0) + 1
@@ -400,7 +414,7 @@ local function render_projection_preview(bufnr, projection, cursor_row, cursor_c
     type = "render_formulas",
     backend = "typst",
     request_id = req_id,
-    cache_key = "preview:" .. (ctx.context_id or "") .. ":" .. key,
+    cache_key = preview_service_cache_key(projection, ctx, image.config),
     context_id = ctx.context_id,
     context_rev = ctx.context_rev,
     context_source = ctx.context_source,
