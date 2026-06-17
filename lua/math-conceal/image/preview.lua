@@ -3,6 +3,7 @@ local display = require("math-conceal.image.display")
 local session = require("math-conceal.image.session")
 local state = require("math-conceal.image.state")
 local terminal = require("math-conceal.image.terminal")
+local track_view = require("math-conceal.image.track-view")
 local tracker = require("math-conceal.image.tracker")
 local wrapper = require("math-conceal.image.wrapper")
 
@@ -100,23 +101,28 @@ local function track_span(track)
   return (track.end_row - track.row) * 100000 + (track.end_col - track.col)
 end
 
-local function projection_at_cursor(bufnr, row, col, mode)
+local function projection_at_cursor(bufnr, row, col, mode, tracks_by_key)
   local bs = state.get_buf_state(bufnr)
   local best = nil
   for _, projection in pairs(bs.projections or {}) do
-    local track = projection.track
+    local track = track_view.for_projection(projection, {
+      by_key = tracks_by_key,
+      require_valid = true,
+    })
     if
       track ~= nil
       and track.node_type == "math"
-      and track.invalid ~= true
       and cursor_in_range(track, row, col, { include_right_edge = is_insert_like_mode(mode) })
     then
       if best == nil or track_span(track) > track_span(best.track) then
-        best = projection
+        best = { projection = projection, track = track }
       end
     end
   end
-  return best
+  if best == nil then
+    return nil, nil
+  end
+  return best.projection, best.track
 end
 
 local function range_object(track)
@@ -285,8 +291,17 @@ local function make_highlighted_preview_source(track, cursor_row, cursor_col, mo
   return prefix .. replacement .. suffix, source_text, span
 end
 
-local function preview_render_key(projection, ctx, source_text, preview_source, cursor_row, cursor_col, span, config)
-  local track = projection.track
+local function preview_render_key(
+  projection,
+  track,
+  ctx,
+  source_text,
+  preview_source,
+  cursor_row,
+  cursor_col,
+  span,
+  config
+)
   local parts = {
     "live-preview-projection-v1",
     projection.key,
@@ -312,8 +327,7 @@ local function preview_render_key(projection, ctx, source_text, preview_source, 
   return vim.fn.sha256(table.concat(parts, "\0"))
 end
 
-local function preview_service_cache_key(projection, ctx, config)
-  local track = projection.track
+local function preview_service_cache_key(projection, track, ctx, config)
   local parts = {
     "live-preview-service-v1",
     projection.key,
@@ -370,7 +384,7 @@ function M.clear(bufnr, opts)
   preview.source_range = nil
 end
 
-local function render_projection_preview(bufnr, projection, cursor_row, cursor_col, mode)
+local function render_projection_preview(bufnr, projection, track, cursor_row, cursor_col, mode)
   local image = require("math-conceal.image")
   local binding = image.get_binding(bufnr)
   if binding == nil then
@@ -378,7 +392,6 @@ local function render_projection_preview(bufnr, projection, cursor_row, cursor_c
     return
   end
 
-  local track = projection.track
   local preview_source, source_text, span = make_highlighted_preview_source(track, cursor_row, cursor_col, mode)
   if preview_source == nil or source_text == nil then
     M.clear(bufnr)
@@ -387,7 +400,7 @@ local function render_projection_preview(bufnr, projection, cursor_row, cursor_c
 
   local ctx = context.resolve(bufnr, binding, tracker.get_context(bufnr), image.config)
   local key =
-    preview_render_key(projection, ctx, source_text, preview_source, cursor_row, cursor_col, span, image.config)
+    preview_render_key(projection, track, ctx, source_text, preview_source, cursor_row, cursor_col, span, image.config)
   local bs = state.get_buf_state(bufnr)
   local preview = bs.live_preview
 
@@ -414,7 +427,7 @@ local function render_projection_preview(bufnr, projection, cursor_row, cursor_c
     type = "render_formulas",
     backend = "typst",
     request_id = req_id,
-    cache_key = preview_service_cache_key(projection, ctx, image.config),
+    cache_key = preview_service_cache_key(projection, track, ctx, image.config),
     context_id = ctx.context_id,
     context_rev = ctx.context_rev,
     context_source = ctx.context_source,
@@ -489,15 +502,24 @@ function M.sync(bufnr)
   local cursor = vim.api.nvim_win_get_cursor(winid)
   local cursor_row = cursor[1] - 1
   local cursor_col = cursor[2]
-  local projection = projection_at_cursor(bufnr, cursor_row, cursor_col, mode)
+  local tracks_by_key = track_view.by_key(bufnr, { require_valid = true })
+  local projection, track = projection_at_cursor(bufnr, cursor_row, cursor_col, mode, tracks_by_key)
   if projection ~= nil then
-    render_projection_preview(bufnr, projection, cursor_row, cursor_col, mode)
+    render_projection_preview(bufnr, projection, track, cursor_row, cursor_col, mode)
     return
   end
 
-  local preview = state.get_buf_state(bufnr).live_preview
-  if preview.visible_asset ~= nil and cursor_near_range(preview.source_range, cursor_row, cursor_col) then
-    return
+  local bs = state.get_buf_state(bufnr)
+  local preview = bs.live_preview
+  if preview.visible_asset ~= nil and preview.track_key ~= nil then
+    local preview_projection = bs.projections and bs.projections[preview.track_key] or nil
+    local preview_track = track_view.for_projection(preview_projection, {
+      by_key = tracks_by_key,
+      require_valid = true,
+    })
+    if preview_track ~= nil and cursor_near_range(range_object(preview_track), cursor_row, cursor_col) then
+      return
+    end
   end
   M.clear(bufnr)
 end
@@ -539,11 +561,12 @@ function M.refresh(bufnr)
   end
 
   local projection = bs.projections and bs.projections[preview.track_key] or nil
-  if projection == nil or projection.track == nil then
+  local track = track_view.for_projection(projection, { require_valid = true })
+  if track == nil then
     M.clear(bufnr)
     return
   end
-  display.show_preview(bufnr, preview, projection.track, preview.visible_asset)
+  display.show_preview(bufnr, preview, track, preview.visible_asset)
 end
 
 function M.handle_service_response(bufnr, resp, meta)
@@ -566,8 +589,11 @@ function M.handle_service_response(bufnr, resp, meta)
 
   preview.pending_key = nil
   local projection = bs.projections and bs.projections[meta.track_key] or nil
-  if projection == nil or projection.track == nil then
-    M.clear(bufnr)
+  local track = track_view.for_projection(projection, { require_valid = true })
+  if track == nil or tonumber(track.rev or -1) ~= tonumber(meta.track_rev or -2) then
+    if preview.visible_asset == nil then
+      M.clear(bufnr)
+    end
     return
   end
 
@@ -603,7 +629,7 @@ function M.handle_service_response(bufnr, resp, meta)
   preview.track_key = meta.track_key
   preview.source_range = meta.source_range
 
-  if not display.show_preview(bufnr, preview, projection.track, asset) then
+  if not display.show_preview(bufnr, preview, track, asset) then
     preview.visible_asset = old
     cleanup_asset(asset)
     return

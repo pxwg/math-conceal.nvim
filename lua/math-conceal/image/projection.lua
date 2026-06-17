@@ -3,6 +3,7 @@ local display = require("math-conceal.image.display")
 local session = require("math-conceal.image.session")
 local state = require("math-conceal.image.state")
 local terminal = require("math-conceal.image.terminal")
+local track_view = require("math-conceal.image.track-view")
 local tracker = require("math-conceal.image.tracker")
 local wrapper = require("math-conceal.image.wrapper")
 
@@ -169,22 +170,22 @@ local function request_id(bufnr)
   return ("image:%d:%d"):format(bufnr, bs.next_request_id)
 end
 
-local function make_node(projection, ctx, config)
-  local source, line_map = wrapper.build_slot_document(projection.track, ctx, config)
-  local key = render_key(projection.track, ctx, config)
+local function make_node(projection, track, ctx, config)
+  local source, line_map = wrapper.build_slot_document(track, ctx, config)
+  local key = render_key(track, ctx, config)
   return {
     node = {
       node_id = projection.key,
-      node_rev = projection.track.rev or 0,
+      node_rev = track.rev or 0,
       source_hash = vim.fn.sha256(source),
-      kind = projection.track.node_type or "math",
+      kind = track.node_type or "math",
       source = source,
     },
     meta = {
       projection_key = projection.key,
       render_key = key,
-      track_rev = projection.track.rev or 0,
-      prelude_signature = projection.track.prelude_signature,
+      track_rev = track.rev or 0,
+      prelude_signature = track.prelude_signature,
       context_id = ctx.context_id,
       context_rev = ctx.context_rev,
       line_map = line_map,
@@ -192,15 +193,17 @@ local function make_node(projection, ctx, config)
   }
 end
 
-local function render_affected(bufnr, binding, ctx, config, projections)
+local function render_affected(bufnr, binding, ctx, config, render_items)
   local nodes = {}
   local node_meta = {}
-  for _, projection in ipairs(projections) do
-    local key = render_key(projection.track, ctx, config)
+  for _, item in ipairs(render_items) do
+    local projection = item.projection
+    local track = item.track
+    local key = render_key(track, ctx, config)
     if
       projection.pending_key ~= key and not (projection.visible_asset and projection.visible_asset.render_key == key)
     then
-      local built = make_node(projection, ctx, config)
+      local built = make_node(projection, track, ctx, config)
       nodes[#nodes + 1] = built.node
       node_meta[built.node.node_id] = built.meta
       projection.pending_key = key
@@ -238,7 +241,8 @@ local function render_affected(bufnr, binding, ctx, config, projections)
   })
 
   if not ok then
-    for _, projection in ipairs(projections) do
+    for _, item in ipairs(render_items) do
+      local projection = item.projection
       projection.pending_key = nil
       projection.status = "failed"
       display.reveal(projection)
@@ -288,14 +292,13 @@ function M.on_tracker_repair(event)
       }
       bs.projections[key] = projection
     end
-    projection.track = track
     projection.ref.track_id = track.track_id
     projection.ref.tracker_generation = track.tracker_generation
 
     if track.invalid then
       cleanup_projection(projection)
     elseif affected[key] then
-      to_render[#to_render + 1] = projection
+      to_render[#to_render + 1] = { projection = projection, track = track }
     end
   end
 
@@ -319,17 +322,22 @@ function M.handle_service_response(bufnr, resp, meta)
     return
   end
 
-  update_diagnostics(bufnr, resp, node_meta)
+  local track = track_view.for_projection(projection)
+  if track == nil then
+    return
+  end
 
   if
     projection.pending_key ~= node_meta.render_key
     or tostring(resp.context_id or "") ~= tostring(node_meta.context_id or "")
     or tonumber(resp.context_rev or -1) ~= tonumber(node_meta.context_rev or -2)
     or tonumber(resp.node_rev or -1) ~= tonumber(node_meta.track_rev or -2)
+    or tonumber(track.rev or -1) ~= tonumber(node_meta.track_rev or -2)
   then
     return
   end
 
+  update_diagnostics(bufnr, resp, node_meta)
   projection.pending_key = nil
   if resp.status ~= "ok" or type(resp.path) ~= "string" or resp.path == "" then
     cleanup_asset(projection.visible_asset)
@@ -340,7 +348,7 @@ function M.handle_service_response(bufnr, resp, meta)
   end
 
   local image = require("math-conceal.image")
-  local cols, rows = display.cell_dimensions(projection.track, resp.width_px, resp.height_px, image.config)
+  local cols, rows = display.cell_dimensions(track, resp.width_px, resp.height_px, image.config)
   local candidate = {
     image_id = state.allocate_image_id(bufnr),
     path = resp.path,
@@ -361,10 +369,10 @@ function M.handle_service_response(bufnr, resp, meta)
   projection.visible_asset = candidate
   projection.status = "visible"
 
-  if cursor_reveals(bufnr, projection.track, image.config) then
+  if cursor_reveals(bufnr, track, image.config) then
     display.reveal(projection)
   else
-    display.show(projection, candidate, image.config)
+    display.show(projection, track, candidate, image.config)
   end
 
   cleanup_asset(old)
@@ -375,12 +383,16 @@ function M.sync_cursor(bufnr, opts)
   opts = opts or {}
   local image = require("math-conceal.image")
   local bs = state.get_buf_state(bufnr)
+  local tracks_by_key = track_view.by_key(bufnr)
   for _, projection in pairs(bs.projections or {}) do
-    if projection.visible_asset ~= nil and projection.track ~= nil and projection.status ~= "failed" then
-      if cursor_reveals(bufnr, projection.track, image.config) then
+    if projection.visible_asset ~= nil and projection.status ~= "failed" then
+      local track = track_view.for_projection(projection, { by_key = tracks_by_key })
+      if track == nil then
+        cleanup_projection(projection)
+      elseif cursor_reveals(bufnr, track, image.config) then
         display.reveal(projection)
       elseif projection.revealed then
-        display.show(projection, projection.visible_asset, image.config)
+        display.show(projection, track, projection.visible_asset, image.config)
       end
     end
   end
@@ -392,8 +404,13 @@ function M.refresh(bufnr)
   local image = require("math-conceal.image")
   local bs = state.get_buf_state(bufnr)
   for _, projection in pairs(bs.projections or {}) do
-    if projection.visible_asset ~= nil and projection.track ~= nil and not projection.revealed then
-      display.show(projection, projection.visible_asset, image.config)
+    if projection.visible_asset ~= nil and not projection.revealed then
+      local track = track_view.for_projection(projection)
+      if track == nil then
+        cleanup_projection(projection)
+      else
+        display.show(projection, track, projection.visible_asset, image.config)
+      end
     end
   end
   require("math-conceal.image.preview").refresh(bufnr)
@@ -418,6 +435,14 @@ function M.force_render(bufnr)
   }
   event.context.changed = true
   M.on_tracker_repair(event)
+end
+
+function M.current_track_for_projection(projection, opts)
+  return track_view.for_projection(projection, opts)
+end
+
+function M.current_tracks_by_key(bufnr, opts)
+  return track_view.by_key(bufnr, opts)
 end
 
 function M.detach(bufnr)

@@ -275,8 +275,7 @@ function M.clear(projection)
   M.reveal(projection)
 end
 
-function M.show(projection, asset, config)
-  local track = projection.track
+function M.show(projection, track, asset, config)
   if track == nil or asset == nil or not vim.api.nvim_buf_is_valid(projection.bufnr) then
     return false
   end
