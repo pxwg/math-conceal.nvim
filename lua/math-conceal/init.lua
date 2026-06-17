@@ -22,7 +22,12 @@ local M = {
     },
     image = {
       enabled = false,
-      filetypes = { "typst" },
+      enabled_by_default = true,
+      renderers = {
+        typst = {
+          filetypes = { "typst" },
+        },
+      },
     },
     highlights = {
       ["@_env"] = { link = "@conceal", default = true },
@@ -96,12 +101,20 @@ local M = {
 --- @field image MathConcealImageOptions?
 
 --- @class MathConcealBufferOptions
---- @field mode "edit"|"preview"|"presentation"?: Conceal cursor behavior. `edit` expands the item under the cursor; `preview` keeps ASCII/Unicode items concealed; `presentation` keeps all plugin-managed conceal collapsed and treats rendered image rows as cursor-protected, except while Visual selection reveals source for precise selection.
+--- @field mode "edit"|"preview"|"presentation"?: Conceal cursor behavior. `edit` expands the item under the cursor; `preview` keeps ASCII/Unicode items concealed; `presentation` keeps plugin-managed ASCII/Unicode conceal collapsed, except while Visual selection reveals source for precise selection.
 
 --- @class MathConcealImageOptions
---- @field enabled boolean?: Enable image conceal. Default false.
---- @field filetypes string[]?: Filetypes managed by image conceal. Default { "typst" }.
---- Other fields are passed through to `math-conceal.image`.
+--- @field enabled boolean?: Enable image renderer attachment. Default false.
+--- @field enabled_by_default boolean?: Attach matching buffers automatically. Default true.
+--- @field renderers table<string, MathConcealImageRendererOptions>?: Renderer-specific attachment configuration.
+--- Other fields are stored by `math-conceal.image` for the future renderer.
+
+--- @class MathConcealImageRendererOptions
+--- @field filetypes string[]?: Neovim filetypes that should attach this renderer.
+--- @field service_binary string?: Renderer service executable path.
+--- @field root string|fun(ctx: table): string?: Project root resolver for the renderer.
+--- @field inputs table<string, string>|fun(ctx: table): table<string, string>?: Typst-like input values.
+--- @field render_paths table?: Path filters for renderer attachment.
 
 local function plugin_root()
   local source = debug.getinfo(1, "S").source
@@ -129,9 +142,11 @@ end
 
 local function image_filetype_enabled(filetype)
   local image = M.opts.image or {}
-  for _, ft in ipairs(image.filetypes or {}) do
-    if ft == filetype then
-      return true
+  for _, renderer in pairs(image.renderers or {}) do
+    for _, ft in ipairs(renderer.filetypes or {}) do
+      if ft == filetype then
+        return true
+      end
     end
   end
   return false
@@ -144,8 +159,12 @@ local function setup_image()
 
   local image_cfg = vim.deepcopy(M.opts.image or {})
   image_cfg.enabled = nil
-  if image_cfg.service_binary == nil then
-    image_cfg.service_binary = bundled_service_binary() or "typst-concealer-service"
+
+  local service_binary = bundled_service_binary() or "typst-concealer-service"
+  for _, renderer in pairs(image_cfg.renderers or {}) do
+    if renderer.service_binary == nil then
+      renderer.service_binary = service_binary
+    end
   end
 
   require("math-conceal.image").setup(image_cfg)

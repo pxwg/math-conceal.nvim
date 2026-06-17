@@ -418,33 +418,6 @@ local function clear_buffer_window_options(buf)
   buffer_window_options[buf] = nil
 end
 
-local function guard_presentation_cursor(buf, win)
-  local ok, presentation = pcall(require, "math-conceal.image.presentation")
-  if not ok or type(presentation.keep_cursor_out_of_protected_range) ~= "function" then
-    return
-  end
-
-  local opts = nil
-  if win ~= nil then
-    opts = { winid = win }
-  end
-  presentation.keep_cursor_out_of_protected_range(buf, opts)
-end
-
-local function sync_presentation_image_state(buf)
-  local ok, runtime = pcall(require, "math-conceal.image.machine.runtime")
-  if not ok then
-    return
-  end
-
-  if type(runtime.sync_hover) == "function" then
-    pcall(runtime.sync_hover, buf)
-  end
-  if type(runtime.clear_live_preview) == "function" then
-    pcall(runtime.clear_live_preview, buf)
-  end
-end
-
 local function ensure_buffer_window_option_autocmds(buf)
   if buffer_window_option_autocmds[buf] == true or not vim.api.nvim_buf_is_valid(buf) then
     return
@@ -457,10 +430,6 @@ local function ensure_buffer_window_option_autocmds(buf)
     callback = function(args)
       local win = vim.api.nvim_get_current_win()
       apply_window_options(args.buf, win)
-      local config = get_buffer_config(args.buf)
-      if config.mode == "presentation" then
-        guard_presentation_cursor(args.buf, win)
-      end
     end,
   })
 
@@ -492,9 +461,6 @@ local function apply_buffer_window_options(buf, config)
   ensure_buffer_window_option_autocmds(buf)
   for _, win in ipairs(buf_wins(buf)) do
     apply_window_options(buf, win)
-  end
-  if config.mode == "presentation" then
-    guard_presentation_cursor(buf)
   end
 end
 
@@ -998,10 +964,6 @@ function M.setup_buffer(buf, opts)
 
   buffer_configs[buf] = config
   apply_buffer_window_options(buf, config)
-  if config.mode == "presentation" then
-    sync_presentation_image_state(buf)
-  end
-
   for _, win in ipairs(buf_wins(buf)) do
     redraw_win(win)
   end
