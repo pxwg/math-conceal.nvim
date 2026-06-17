@@ -23,6 +23,9 @@ local M = {
     image = {
       enabled = false,
       enabled_by_default = true,
+      tracker = {
+        debug = true,
+      },
       renderers = {
         typst = {
           filetypes = { "typst" },
@@ -106,8 +109,12 @@ local M = {
 --- @class MathConcealImageOptions
 --- @field enabled boolean?: Enable image renderer attachment. Default false.
 --- @field enabled_by_default boolean?: Attach matching buffers automatically. Default true.
+--- @field tracker MathConcealImageTrackerOptions?: Tracker configuration for the image path.
 --- @field renderers table<string, MathConcealImageRendererOptions>?: Renderer-specific attachment configuration.
 --- Other fields are stored by `math-conceal.image` for the future renderer.
+
+--- @class MathConcealImageTrackerOptions
+--- @field debug boolean?: Show tracker debug projection extmarks. Default true for the tracker MVP.
 
 --- @class MathConcealImageRendererOptions
 --- @field filetypes string[]?: Neovim filetypes that should attach this renderer.

@@ -1,3 +1,5 @@
+local tracker = require("math-conceal.image.tracker")
+
 local M = {}
 
 ---@class MathConcealImageAttachContext
@@ -21,8 +23,12 @@ local M = {}
 ---@field inputs table<string, string>|MathConcealImageInputsResolver
 ---@field render_paths MathConcealImageRenderPaths
 
+---@class MathConcealImageTrackerConfig
+---@field debug boolean
+
 ---@class MathConcealImageConfig
 ---@field enabled_by_default boolean
+---@field tracker MathConcealImageTrackerConfig
 ---@field renderers table<string, MathConcealImageRendererConfig>
 
 ---@class MathConcealImageBinding
@@ -38,6 +44,9 @@ local M = {}
 ---@type MathConcealImageConfig
 local defaults = {
   enabled_by_default = true,
+  tracker = {
+    debug = true,
+  },
   renderers = {
     typst = {
       filetypes = { "typst" },
@@ -197,6 +206,16 @@ local function attach_loaded_buffers()
   end
 end
 
+local function detach_tracked_buffers()
+  for bufnr, _ in pairs(M._buffers) do
+    tracker.detach(bufnr)
+  end
+end
+
+local function tracker_debug_enabled()
+  return type(M.config.tracker) == "table" and M.config.tracker.debug == true
+end
+
 ---Return the renderer kind configured for a buffer's filetype.
 ---@param bufnr integer?
 ---@return string?
@@ -243,6 +262,7 @@ function M.attach_buf(bufnr)
   local kind = M.renderer_kind_for_bufnr(bufnr)
   if kind == nil then
     M._buffers[bufnr] = nil
+    tracker.detach(bufnr)
     return false
   end
 
@@ -250,10 +270,16 @@ function M.attach_buf(bufnr)
   local ctx = buffer_context(bufnr, kind)
   if path_excluded(spec, ctx) then
     M._buffers[bufnr] = nil
+    tracker.detach(bufnr)
     return false
   end
 
-  M._buffers[bufnr] = make_binding(kind, spec, ctx)
+  local binding = make_binding(kind, spec, ctx)
+  M._buffers[bufnr] = binding
+  tracker.attach(bufnr, {
+    kind = kind,
+    debug = tracker_debug_enabled(),
+  })
   return true
 end
 
@@ -274,6 +300,7 @@ end
 function M.disable_buf(bufnr)
   bufnr = normalize_bufnr(bufnr)
   M._buffers[bufnr] = nil
+  tracker.detach(bufnr)
 end
 
 ---@param bufnr integer?
@@ -297,6 +324,7 @@ end
 ---Set up renderer registration and buffer attachment.
 ---@param cfg table?
 function M.setup(cfg)
+  detach_tracked_buffers()
   M.config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), cfg or {})
   M._buffers = {}
   build_filetype_index()
@@ -317,11 +345,26 @@ function M.setup(cfg)
     })
   end
 
+  vim.api.nvim_create_autocmd("BufReadPost", {
+    group = augroup_id,
+    desc = "reattach math-conceal image tracker after buffer reload",
+    callback = function(ev)
+      if not valid_loaded_buffer(ev.buf) then
+        return
+      end
+
+      if M._buffers[ev.buf] ~= nil or (M.config.enabled_by_default and M.is_supported_bufnr(ev.buf)) then
+        M.attach_buf(ev.buf)
+      end
+    end,
+  })
+
   vim.api.nvim_create_autocmd("BufWipeout", {
     group = augroup_id,
     desc = "clear math-conceal image renderer binding",
     callback = function(ev)
       M._buffers[ev.buf] = nil
+      tracker.detach(ev.buf)
     end,
   })
 
