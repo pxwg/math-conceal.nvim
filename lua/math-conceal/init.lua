@@ -23,12 +23,14 @@ local M = {
     image = {
       enabled = false,
       enabled_by_default = true,
+      live_preview_enabled = true,
       tracker = {
-        debug = true,
+        debug = false,
       },
       renderers = {
         typst = {
           filetypes = { "typst" },
+          live_debounce = 0,
         },
       },
     },
@@ -109,16 +111,18 @@ local M = {
 --- @class MathConcealImageOptions
 --- @field enabled boolean?: Enable image renderer attachment. Default false.
 --- @field enabled_by_default boolean?: Attach matching buffers automatically. Default true.
+--- @field live_preview_enabled boolean?: Enable cursor-following live preview. Default true.
 --- @field tracker MathConcealImageTrackerOptions?: Tracker configuration for the image path.
 --- @field renderers table<string, MathConcealImageRendererOptions>?: Renderer-specific attachment configuration.
 --- Other fields are stored by `math-conceal.image` for the future renderer.
 
 --- @class MathConcealImageTrackerOptions
---- @field debug boolean?: Show tracker debug projection extmarks. Default true for the tracker MVP.
+--- @field debug boolean?: Show tracker debug projection extmarks. Default false.
 
 --- @class MathConcealImageRendererOptions
 --- @field filetypes string[]?: Neovim filetypes that should attach this renderer.
 --- @field service_binary string?: Renderer service executable path.
+--- @field live_debounce integer?: Text-change live preview debounce in milliseconds for this renderer.
 --- @field root string|fun(ctx: table): string?: Project root resolver for the renderer.
 --- @field inputs table<string, string>|fun(ctx: table): table<string, string>?: Typst-like input values.
 --- @field render_paths table?: Path filters for renderer attachment.

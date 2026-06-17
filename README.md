@@ -186,8 +186,8 @@ cargo build --release --manifest-path service/Cargo.toml
 ```
 
 Most advanced renderer options are passed through to the migrated renderer, including
-`styling_type`, `live_preview_enabled`, `render_paths`, `get_root`, `get_inputs`,
-and `get_preamble_file`.
+`styling_type`, `live_preview_enabled`, renderer-level `live_debounce`,
+`render_paths`, `get_root`, `get_inputs`, and `get_preamble_file`.
 
 ## To-do
 

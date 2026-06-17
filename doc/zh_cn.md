@@ -134,7 +134,7 @@ require("math-conceal").setup({
 cargo build --release --manifest-path service/Cargo.toml
 ```
 
-`styling_type`、`live_preview_enabled`、`render_paths`、`get_root`、`get_inputs`、`get_preamble_file` 等高级渲染选项会透传给迁移后的管线。
+`styling_type`、`live_preview_enabled`、renderer 级 `live_debounce`、`render_paths`、`get_root`、`get_inputs`、`get_preamble_file` 等高级渲染选项会透传给迁移后的管线。
 
 ## 待办事项
 

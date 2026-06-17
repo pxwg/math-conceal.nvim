@@ -1,0 +1,441 @@
+local context = require("math-conceal.image.context")
+local display = require("math-conceal.image.display")
+local session = require("math-conceal.image.session")
+local state = require("math-conceal.image.state")
+local terminal = require("math-conceal.image.terminal")
+local tracker = require("math-conceal.image.tracker")
+local wrapper = require("math-conceal.image.wrapper")
+
+local M = {}
+
+local function normalize_bufnr(bufnr)
+  if bufnr == nil or bufnr == 0 then
+    return vim.api.nvim_get_current_buf()
+  end
+  return bufnr
+end
+
+local function render_key(track, ctx, config)
+  return vim.fn.sha256(table.concat({
+    tracker.track_ref_key(track),
+    tostring(track.rev or 0),
+    track.source_hash or "",
+    track.prelude_signature or "",
+    ctx.context_id or "",
+    tostring(ctx.context_rev or 0),
+    tostring(state.render_ppi(config)),
+    tostring(track.source_display_kind or ""),
+    tostring(track.render_whole_line == true),
+  }, "\0"))
+end
+
+local function ref_set(refs)
+  local set = {}
+  for _, ref in ipairs(refs or {}) do
+    set[tracker.track_ref_key(ref)] = true
+  end
+  return set
+end
+
+local function tracks_by_key(tracks)
+  local by_key = {}
+  for _, track in ipairs(tracks or {}) do
+    by_key[tracker.track_ref_key(track)] = track
+  end
+  return by_key
+end
+
+local function in_range(row, col, range)
+  if row < range.row or row > range.end_row then
+    return false
+  end
+  if range.row == range.end_row then
+    return col >= range.col and col <= range.end_col
+  end
+  return (row == range.row and col >= range.col)
+    or (row == range.end_row and col <= range.end_col)
+    or (row > range.row and row < range.end_row)
+end
+
+local function cursor_reveals(bufnr, track, config)
+  if track == nil then
+    return false
+  end
+  if config.conceal_in_normal == true and vim.api.nvim_get_mode().mode == "n" then
+    return false
+  end
+  local win = vim.fn.bufwinid(bufnr)
+  if win == -1 or not vim.api.nvim_win_is_valid(win) then
+    return false
+  end
+  local cursor = vim.api.nvim_win_get_cursor(win)
+  return in_range(cursor[1] - 1, cursor[2], track)
+end
+
+local function cleanup_asset(asset)
+  if asset ~= nil and asset.image_id ~= nil then
+    terminal.delete(asset.image_id)
+  end
+end
+
+local function cleanup_projection(projection)
+  display.clear(projection)
+  cleanup_asset(projection.visible_asset)
+  cleanup_asset(projection.candidate_asset)
+  projection.visible_asset = nil
+  projection.candidate_asset = nil
+  projection.status = "retired"
+end
+
+local function rebuild_quickfix(bufnr)
+  local bucket = state.render_diagnostics[bufnr] or {}
+  local items = {}
+  local node_ids = vim.tbl_keys(bucket.formula_by_node or {})
+  table.sort(node_ids)
+  for _, node_id in ipairs(node_ids) do
+    for _, item in ipairs(bucket.formula_by_node[node_id] or {}) do
+      items[#items + 1] = item
+    end
+  end
+  vim.schedule(function()
+    vim.fn.setqflist({}, "r", {
+      title = "math-conceal.image: "
+        .. (vim.api.nvim_buf_get_name(bufnr) ~= "" and vim.api.nvim_buf_get_name(bufnr) or ("buf:" .. bufnr)),
+      items = items,
+    })
+  end)
+end
+
+local function map_generated_pos(line_map, line, col)
+  if line_map == nil then
+    return nil
+  end
+  if line < line_map.gen_start or line > line_map.gen_end then
+    return nil
+  end
+  local line_offset = line - line_map.gen_start
+  return {
+    filename = vim.api.nvim_buf_get_name(line_map.bufnr),
+    lnum = line_map.src_start + line_offset,
+    col = line_map.src_start == line_map.src_end
+        and math.min(line_map.src_end_col, line_map.src_start_col + math.max(0, col - line_map.gen_start_col))
+      or col,
+  }
+end
+
+local function update_diagnostics(bufnr, resp, node_meta)
+  state.render_diagnostics[bufnr] = state.render_diagnostics[bufnr] or {}
+  local bucket = state.render_diagnostics[bufnr]
+  bucket.formula_by_node = bucket.formula_by_node or {}
+
+  local node_id = resp.node_id
+  if type(resp.diagnostics) ~= "table" or #resp.diagnostics == 0 then
+    bucket.formula_by_node[node_id] = nil
+    rebuild_quickfix(bufnr)
+    return
+  end
+
+  local items = {}
+  for _, diag in ipairs(resp.diagnostics) do
+    local line = tonumber(diag.line) or 1
+    local col = tonumber(diag.column) or 1
+    local filename = diag.file
+    local mapped = map_generated_pos(node_meta and node_meta.line_map, line, col)
+    if mapped ~= nil and (filename == nil or tostring(filename):find("/__typst_concealer__/", 1, true) ~= nil) then
+      filename = mapped.filename
+      line = mapped.lnum
+      col = mapped.col
+    elseif filename == nil or filename == "" then
+      filename = vim.api.nvim_buf_get_name(bufnr)
+    end
+
+    items[#items + 1] = {
+      filename = filename,
+      lnum = line,
+      col = col,
+      text = "[service/formula] " .. (diag.message or "render error"),
+      type = diag.severity == "warning" and "W" or "E",
+      _formula_node_id = node_id,
+    }
+  end
+
+  bucket.formula_by_node[node_id] = items
+  rebuild_quickfix(bufnr)
+end
+
+local function request_id(bufnr)
+  local bs = state.get_buf_state(bufnr)
+  bs.next_request_id = (bs.next_request_id or 0) + 1
+  return ("image:%d:%d"):format(bufnr, bs.next_request_id)
+end
+
+local function make_node(projection, ctx, config)
+  local source, line_map = wrapper.build_slot_document(projection.track, ctx, config)
+  local key = render_key(projection.track, ctx, config)
+  return {
+    node = {
+      node_id = projection.key,
+      node_rev = projection.track.rev or 0,
+      source_hash = vim.fn.sha256(source),
+      kind = projection.track.node_type or "math",
+      source = source,
+    },
+    meta = {
+      projection_key = projection.key,
+      render_key = key,
+      track_rev = projection.track.rev or 0,
+      prelude_signature = projection.track.prelude_signature,
+      context_id = ctx.context_id,
+      context_rev = ctx.context_rev,
+      line_map = line_map,
+    },
+  }
+end
+
+local function render_affected(bufnr, binding, ctx, config, projections)
+  local nodes = {}
+  local node_meta = {}
+  for _, projection in ipairs(projections) do
+    local key = render_key(projection.track, ctx, config)
+    if
+      projection.pending_key ~= key and not (projection.visible_asset and projection.visible_asset.render_key == key)
+    then
+      local built = make_node(projection, ctx, config)
+      nodes[#nodes + 1] = built.node
+      node_meta[built.node.node_id] = built.meta
+      projection.pending_key = key
+      projection.status = "pending"
+    end
+  end
+
+  if #nodes == 0 then
+    return
+  end
+
+  local req_id = request_id(bufnr)
+  local payload = {
+    type = "render_formulas",
+    backend = "typst",
+    request_id = req_id,
+    cache_key = "formula:" .. (ctx.context_id or "") .. ":" .. tostring(ctx.context_rev or 0),
+    context_id = ctx.context_id,
+    context_rev = ctx.context_rev,
+    context_source = ctx.context_source,
+    root = ctx.effective_root,
+    inputs = ctx.inputs or vim.empty_dict(),
+    output_dir = ctx.workspace.outputs_dir,
+    ppi = state.render_ppi(config),
+    worker_count = config.formula_worker_count or 2,
+    nodes = nodes,
+  }
+
+  local ok = session.render_formulas(bufnr, binding, payload, {
+    request_id = req_id,
+    context_id = ctx.context_id,
+    context_rev = ctx.context_rev,
+    node_meta = node_meta,
+    expected = #nodes,
+  })
+
+  if not ok then
+    for _, projection in ipairs(projections) do
+      projection.pending_key = nil
+      projection.status = "failed"
+      display.reveal(projection)
+    end
+  end
+end
+
+function M.on_tracker_repair(event)
+  local image = require("math-conceal.image")
+  local bufnr = event.bufnr
+  local binding = image.get_binding(bufnr)
+  if binding == nil then
+    return
+  end
+
+  local bs = state.get_buf_state(bufnr)
+  local ctx = context.resolve(bufnr, binding, event.context, image.config)
+  local by_key = tracks_by_key(event.tracks)
+  local affected = ref_set(event.affected_refs)
+  if event.initial == true and vim.tbl_isempty(affected) then
+    for key, _ in pairs(by_key) do
+      affected[key] = true
+    end
+  end
+
+  for _, ref in ipairs(event.retired_refs or {}) do
+    local key = tracker.track_ref_key(ref)
+    local projection = bs.projections[key]
+    if projection ~= nil then
+      cleanup_projection(projection)
+      bs.projections[key] = nil
+    end
+  end
+
+  local to_render = {}
+  for key, track in pairs(by_key) do
+    local projection = bs.projections[key]
+    if projection == nil then
+      projection = {
+        bufnr = bufnr,
+        key = key,
+        ref = {
+          bufnr = bufnr,
+          tracker_generation = track.tracker_generation,
+          track_id = track.track_id,
+        },
+      }
+      bs.projections[key] = projection
+    end
+    projection.track = track
+    projection.ref.track_id = track.track_id
+    projection.ref.tracker_generation = track.tracker_generation
+
+    if track.invalid then
+      cleanup_projection(projection)
+    elseif affected[key] then
+      to_render[#to_render + 1] = projection
+    elseif projection.visible_asset ~= nil and not cursor_reveals(bufnr, track, image.config) then
+      display.show(projection, projection.visible_asset, image.config)
+    end
+  end
+
+  render_affected(bufnr, binding, ctx, image.config, to_render)
+  M.sync_cursor(bufnr)
+end
+
+function M.handle_service_response(bufnr, resp, meta)
+  if meta ~= nil and meta.kind == "live_preview" then
+    require("math-conceal.image.preview").handle_service_response(bufnr, resp, meta)
+    return
+  end
+
+  if type(resp) ~= "table" or resp.type ~= "formula_rendered" then
+    return
+  end
+  local bs = state.get_buf_state(bufnr)
+  local node_meta = meta and meta.node_meta and meta.node_meta[resp.node_id] or nil
+  local projection = node_meta and bs.projections[node_meta.projection_key] or nil
+  if projection == nil then
+    return
+  end
+
+  update_diagnostics(bufnr, resp, node_meta)
+
+  if
+    projection.pending_key ~= node_meta.render_key
+    or tostring(resp.context_id or "") ~= tostring(node_meta.context_id or "")
+    or tonumber(resp.context_rev or -1) ~= tonumber(node_meta.context_rev or -2)
+    or tonumber(resp.node_rev or -1) ~= tonumber(node_meta.track_rev or -2)
+  then
+    return
+  end
+
+  projection.pending_key = nil
+  if resp.status ~= "ok" or type(resp.path) ~= "string" or resp.path == "" then
+    cleanup_asset(projection.visible_asset)
+    projection.visible_asset = nil
+    projection.status = "failed"
+    display.reveal(projection)
+    return
+  end
+
+  local image = require("math-conceal.image")
+  local cols, rows = display.cell_dimensions(projection.track, resp.width_px, resp.height_px, image.config)
+  local candidate = {
+    image_id = state.allocate_image_id(bufnr),
+    path = resp.path,
+    width_px = resp.width_px,
+    height_px = resp.height_px,
+    cols = cols,
+    rows = rows,
+    render_key = node_meta.render_key,
+  }
+
+  if not terminal.upload(candidate.path, candidate.image_id, candidate.cols, candidate.rows) then
+    projection.status = "failed"
+    display.reveal(projection)
+    return
+  end
+
+  local old = projection.visible_asset
+  projection.visible_asset = candidate
+  projection.status = "visible"
+
+  if cursor_reveals(bufnr, projection.track, image.config) then
+    display.reveal(projection)
+  else
+    display.show(projection, candidate, image.config)
+  end
+
+  cleanup_asset(old)
+end
+
+function M.sync_cursor(bufnr, opts)
+  bufnr = normalize_bufnr(bufnr)
+  opts = opts or {}
+  local image = require("math-conceal.image")
+  local bs = state.get_buf_state(bufnr)
+  for _, projection in pairs(bs.projections or {}) do
+    if projection.visible_asset ~= nil and projection.track ~= nil and projection.status ~= "failed" then
+      if cursor_reveals(bufnr, projection.track, image.config) then
+        display.reveal(projection)
+      elseif projection.revealed then
+        display.show(projection, projection.visible_asset, image.config)
+      end
+    end
+  end
+  require("math-conceal.image.preview").schedule(bufnr, { immediate = opts.preview_immediate == true })
+end
+
+function M.refresh(bufnr)
+  bufnr = normalize_bufnr(bufnr)
+  local image = require("math-conceal.image")
+  local bs = state.get_buf_state(bufnr)
+  for _, projection in pairs(bs.projections or {}) do
+    if projection.visible_asset ~= nil and projection.track ~= nil and not projection.revealed then
+      display.show(projection, projection.visible_asset, image.config)
+    end
+  end
+  require("math-conceal.image.preview").refresh(bufnr)
+end
+
+function M.force_render(bufnr)
+  bufnr = normalize_bufnr(bufnr)
+  local image = require("math-conceal.image")
+  local binding = image.get_binding(bufnr)
+  if binding == nil then
+    return
+  end
+  local tracks = tracker.get_tracks(bufnr)
+  local event = {
+    bufnr = bufnr,
+    generation = tracks[1] and tracks[1].generation or nil,
+    tracker_generation = tracks[1] and tracks[1].tracker_generation or nil,
+    tracks = tracks,
+    affected_refs = tracks,
+    retired_refs = {},
+    context = tracker.get_context(bufnr),
+  }
+  event.context.changed = true
+  M.on_tracker_repair(event)
+end
+
+function M.detach(bufnr)
+  bufnr = normalize_bufnr(bufnr)
+  local bs = state.get_buf_state(bufnr)
+  require("math-conceal.image.preview").detach(bufnr)
+  for _, projection in pairs(bs.projections or {}) do
+    cleanup_projection(projection)
+  end
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    pcall(vim.api.nvim_buf_clear_namespace, bufnr, state.display_ns, 0, -1)
+    pcall(vim.api.nvim_buf_clear_namespace, bufnr, state.aux_ns, 0, -1)
+    pcall(vim.api.nvim_buf_clear_namespace, bufnr, state.preview_ns, 0, -1)
+  end
+  session.stop(bufnr)
+  state.drop_buf(bufnr)
+end
+
+return M

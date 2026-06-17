@@ -88,6 +88,8 @@ local function track_snapshot(state, track)
     bufnr = state.bufnr,
     tracker_generation = state.generation,
     generation = state.generation,
+    anchor_ns = ns,
+    anchor_id = track.id,
     id = track.id,
     track_id = track.id,
     rev = track.rev,
@@ -101,6 +103,21 @@ local function track_snapshot(state, track)
     end_col = track.end_col,
     source = track.source,
     source_hash = track.source_hash,
+    source_rows = track.source_rows,
+    source_display_kind = track.source_display_kind,
+    render_whole_line = track.render_whole_line == true,
+    prelude_count = track.prelude_count or 0,
+    prelude_signature = track.prelude_signature,
+  }
+end
+
+local function track_ref(state, track)
+  return {
+    bufnr = state.bufnr,
+    tracker_generation = state.generation,
+    generation = state.generation,
+    track_id = track.id,
+    id = track.id,
   }
 end
 
@@ -154,6 +171,125 @@ local function refresh_debug(state)
   end
 end
 
+local function snapshots_by_key(snapshots)
+  local by_key = {}
+  for _, snapshot in ipairs(snapshots or {}) do
+    by_key[M.track_ref_key(snapshot)] = snapshot
+  end
+  return by_key
+end
+
+local function refs_from_keys(by_key, keys)
+  local refs = {}
+  table.sort(keys)
+  for _, key in ipairs(keys) do
+    local snapshot = by_key[key]
+    if snapshot ~= nil then
+      refs[#refs + 1] = {
+        bufnr = snapshot.bufnr,
+        tracker_generation = snapshot.tracker_generation,
+        generation = snapshot.generation,
+        track_id = snapshot.track_id,
+        id = snapshot.track_id,
+      }
+    end
+  end
+  return refs
+end
+
+local function changed_context_indexes(old_units, new_units)
+  old_units = old_units or {}
+  new_units = new_units or {}
+  local changed = {}
+  local max_len = math.max(#old_units, #new_units)
+  for idx = 1, max_len do
+    local old_sig = old_units[idx] and old_units[idx].signature or nil
+    local new_sig = new_units[idx] and new_units[idx].signature or nil
+    if old_sig ~= new_sig then
+      changed[#changed + 1] = idx
+    end
+  end
+  return changed
+end
+
+local function min_value(values)
+  local min = nil
+  for _, value in ipairs(values or {}) do
+    if min == nil or value < min then
+      min = value
+    end
+  end
+  return min
+end
+
+local function diff_event(state, before_snapshots, after_snapshots, old_context_units, new_context_units, opts)
+  opts = opts or {}
+  local before = snapshots_by_key(before_snapshots)
+  local after = snapshots_by_key(after_snapshots)
+  local changed_keys = {}
+  local retired_keys = {}
+  local affected = {}
+
+  for key, snapshot in pairs(after) do
+    if before[key] == nil or not vim.deep_equal(before[key], snapshot) then
+      changed_keys[#changed_keys + 1] = key
+      affected[key] = snapshot
+    end
+  end
+
+  for key, snapshot in pairs(before) do
+    if after[key] == nil then
+      retired_keys[#retired_keys + 1] = key
+      affected[key] = snapshot
+    end
+  end
+
+  local changed_units = changed_context_indexes(old_context_units, new_context_units)
+  local first_changed_context = min_value(changed_units)
+  if first_changed_context ~= nil then
+    for key, snapshot in pairs(after) do
+      if (snapshot.prelude_count or 0) >= first_changed_context then
+        affected[key] = snapshot
+      end
+    end
+  end
+
+  local affected_keys = {}
+  for key, _ in pairs(affected) do
+    affected_keys[#affected_keys + 1] = key
+  end
+
+  state.repair_tick = (state.repair_tick or 0) + 1
+
+  return {
+    bufnr = state.bufnr,
+    generation = state.generation,
+    tracker_generation = state.generation,
+    tick = state.repair_tick,
+    initial = opts.initial == true,
+    tracks = after_snapshots,
+    changed_refs = refs_from_keys(after, changed_keys),
+    retired_refs = refs_from_keys(before, retired_keys),
+    affected_refs = refs_from_keys(vim.tbl_extend("force", before, after), affected_keys),
+    context = {
+      changed = first_changed_context ~= nil,
+      signature = state.context_signature or "",
+      changed_unit_indexes = changed_units,
+      units = vim.deepcopy(state.context_units or {}),
+    },
+  }
+end
+
+local function emit_repair(state, event)
+  refresh_debug(state)
+  if type(state.on_repair) == "function" then
+    local ok, err = pcall(state.on_repair, event)
+    if not ok then
+      notify_once("repair subscriber failed: " .. tostring(err), vim.log.levels.WARN)
+    end
+  end
+end
+
 local function set_core_extmark(bufnr, track)
   vim.api.nvim_buf_set_extmark(bufnr, ns, track.row, track.col, {
     id = track.id,
@@ -182,6 +318,11 @@ local function new_track(state, node)
     end_col = node.end_col,
     source = node.source,
     source_hash = node.source_hash,
+    source_rows = node.source_rows,
+    source_display_kind = node.source_display_kind,
+    render_whole_line = node.render_whole_line == true,
+    prelude_count = node.prelude_count or 0,
+    prelude_signature = node.prelude_signature,
     node_type = node.node_type,
   }
 end
@@ -298,6 +439,11 @@ local function inherit_track(bufnr, track, node)
   track.end_col = node.end_col
   track.source = node.source
   track.source_hash = node.source_hash
+  track.source_rows = node.source_rows
+  track.source_display_kind = node.source_display_kind
+  track.render_whole_line = node.render_whole_line == true
+  track.prelude_count = node.prelude_count or 0
+  track.prelude_signature = node.prelude_signature
   track.node_type = node.node_type
   set_core_extmark(bufnr, track)
 end
@@ -322,12 +468,33 @@ local function remove_at(list, index)
 end
 
 local function scan_nodes(bufnr, state, window)
-  local ok, nodes = pcall(state.scanner.scan, bufnr, window)
+  local ok, result = pcall(state.scanner.scan, bufnr, window)
   if not ok then
-    notify_once(tostring(nodes), vim.log.levels.WARN)
+    notify_once(tostring(result), vim.log.levels.WARN)
     return nil
   end
-  return nodes
+  if type(result) == "table" and result.nodes ~= nil then
+    return result.nodes, result
+  end
+  return result, { nodes = result }
+end
+
+local function scan_all(bufnr, state)
+  if type(state.scanner.scan_all) == "function" then
+    local ok, result = pcall(state.scanner.scan_all, bufnr)
+    if ok then
+      return result
+    end
+    notify_once(tostring(result), vim.log.levels.WARN)
+    return nil
+  end
+
+  local end_row, end_col = buf_end(bufnr)
+  local nodes, result = scan_nodes(bufnr, state, { row = 0, col = 0, end_row = end_row, end_col = end_col })
+  if nodes == nil then
+    return nil
+  end
+  return result or { nodes = nodes }
 end
 
 local function reconcile_window(bufnr, state, window)
@@ -336,6 +503,30 @@ local function reconcile_window(bufnr, state, window)
   if nodes == nil then
     return false
   end
+
+  while #tracks > 0 and #nodes > 0 do
+    local pair = best_pair(bufnr, tracks, nodes)
+    local track = remove_at(tracks, pair.track_index)
+    local node = remove_at(nodes, pair.node_index)
+    inherit_track(bufnr, track, node)
+  end
+
+  for _, track in ipairs(tracks) do
+    retire(bufnr, track)
+  end
+
+  for _, node in ipairs(nodes) do
+    local track = new_track(state, node)
+    state.tracks[track.id] = track
+    set_core_extmark(bufnr, track)
+  end
+
+  return true
+end
+
+local function reconcile_all(bufnr, state, nodes)
+  local tracks = live_tracks(state)
+  nodes = vim.deepcopy(nodes or {})
 
   while #tracks > 0 and #nodes > 0 do
     local pair = best_pair(bufnr, tracks, nodes)
@@ -387,20 +578,22 @@ local function clear_namespaces(bufnr)
 end
 
 local function seed(bufnr, state)
-  local end_row, end_col = buf_end(bufnr)
-  local nodes = scan_nodes(bufnr, state, { row = 0, col = 0, end_row = end_row, end_col = end_col })
-  if nodes == nil then
+  local scan = scan_all(bufnr, state)
+  if scan == nil then
     return false
   end
 
   vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
   debug_projection.clear(bufnr)
 
-  for _, node in ipairs(nodes) do
+  for _, node in ipairs(scan.nodes or {}) do
     local track = new_track(state, node)
     state.tracks[track.id] = track
     set_core_extmark(bufnr, track)
   end
+
+  state.context_units = scan.context_units or {}
+  state.context_signature = scan.context_signature or ""
 
   return true
 end
@@ -455,6 +648,7 @@ function M.attach(bufnr, opts)
     if current.kind == kind then
       current.scanner = scanner
       current.debug_enabled = opts.debug == true
+      current.on_repair = opts.on_repair
       refresh_debug(current)
       return true
     end
@@ -475,6 +669,10 @@ function M.attach(bufnr, opts)
     damage_ranges = {},
     repair_scheduled = false,
     debug_enabled = opts.debug == true,
+    on_repair = opts.on_repair,
+    repair_tick = 0,
+    context_units = {},
+    context_signature = "",
     detached = false,
   }
 
@@ -530,7 +728,13 @@ function M.attach(bufnr, opts)
     return false
   end
 
-  refresh_debug(state)
+  local snapshots = track_snapshots(state)
+  emit_repair(
+    state,
+    diff_event(state, {}, snapshots, {}, state.context_units, {
+      initial = true,
+    })
+  )
   return true
 end
 
@@ -557,20 +761,31 @@ function M.repair(bufnr)
 
   sync_tracks(bufnr, state)
   if not has_pending_repair(state) then
-    refresh_debug(state)
+    emit_repair(
+      state,
+      diff_event(state, track_snapshots(state), track_snapshots(state), state.context_units, state.context_units)
+    )
     return true
   end
 
-  for _, window in ipairs(repair_windows(bufnr, state)) do
-    if not reconcile_window(bufnr, state, window) then
-      refresh_debug(state)
-      return false
-    end
+  local before_snapshots = track_snapshots(state)
+  local old_context_units = vim.deepcopy(state.context_units or {})
+  local scan = scan_all(bufnr, state)
+  if scan == nil then
+    refresh_debug(state)
+    return false
   end
+
+  reconcile_all(bufnr, state, scan.nodes or {})
+  state.context_units = scan.context_units or {}
+  state.context_signature = scan.context_signature or ""
 
   state.damage_ranges = {}
   sync_tracks(bufnr, state)
-  refresh_debug(state)
+  emit_repair(
+    state,
+    diff_event(state, before_snapshots, track_snapshots(state), old_context_units, state.context_units)
+  )
   return true
 end
 
@@ -605,10 +820,68 @@ function M.get_track(bufnr, track_id)
   return track_snapshot(state, track)
 end
 
+---@param bufnr integer?
+---@return table
+function M.get_context(bufnr)
+  bufnr = normalize_bufnr(bufnr)
+  local state = state_by_buf[bufnr]
+  if state == nil then
+    return {
+      changed = false,
+      signature = "",
+      units = {},
+      changed_unit_indexes = {},
+    }
+  end
+  return {
+    changed = false,
+    signature = state.context_signature or "",
+    units = vim.deepcopy(state.context_units or {}),
+    changed_unit_indexes = {},
+  }
+end
+
 ---@param ref table
 ---@return string
 function M.track_ref_key(ref)
   return table.concat({ ref.bufnr, ref.tracker_generation or ref.generation, ref.track_id or ref.id }, ":")
+end
+
+---@return integer
+function M.namespace()
+  return ns
+end
+
+---@param ref table
+---@return table?
+function M.get_anchor(ref)
+  local bufnr = normalize_bufnr(ref.bufnr)
+  local track_id = ref.track_id or ref.id
+  if track_id == nil or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+
+  local pos = vim.api.nvim_buf_get_extmark_by_id(bufnr, ns, track_id, { details = true })
+  local row, col, details = pos[1], pos[2], pos[3]
+  if row == nil then
+    return nil
+  end
+  return {
+    bufnr = bufnr,
+    ns = ns,
+    id = track_id,
+    row = row,
+    col = col,
+    end_row = details.end_row or row,
+    end_col = details.end_col or col,
+    invalid = details.invalid == true,
+  }
+end
+
+---@param ref table
+---@return table?
+function M.resolve_ref(ref)
+  return M.get_track(ref.bufnr, ref.track_id or ref.id)
 end
 
 return M

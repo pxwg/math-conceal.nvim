@@ -20,13 +20,13 @@ math-conceal-image.get_inputs	math-conceal.txt	/*math-conceal-image.get_inputs*
 math-conceal-image.get_preamble_file	math-conceal.txt	/*math-conceal-image.get_preamble_file*
 math-conceal-image.get_root	math-conceal.txt	/*math-conceal-image.get_root*
 math-conceal-image.header	math-conceal.txt	/*math-conceal-image.header*
-math-conceal-image.live_preview_debounce	math-conceal.txt	/*math-conceal-image.live_preview_debounce*
 math-conceal-image.live_preview_enabled	math-conceal.txt	/*math-conceal-image.live_preview_enabled*
 math-conceal-image.markdown_filetypes	math-conceal.txt	/*math-conceal-image.markdown_filetypes*
 math-conceal-image.math_baseline_pt	math-conceal.txt	/*math-conceal-image.math_baseline_pt*
 math-conceal-image.mitex_package	math-conceal.txt	/*math-conceal-image.mitex_package*
 math-conceal-image.ppi	math-conceal.txt	/*math-conceal-image.ppi*
 math-conceal-image.render_paths	math-conceal.txt	/*math-conceal-image.render_paths*
+math-conceal-image.renderers.live_debounce	math-conceal.txt	/*math-conceal-image.renderers.live_debounce*
 math-conceal-image.service_binary	math-conceal.txt	/*math-conceal-image.service_binary*
 math-conceal-image.styling_type	math-conceal.txt	/*math-conceal-image.styling_type*
 math-conceal-intro	math-conceal.txt	/*math-conceal-intro*

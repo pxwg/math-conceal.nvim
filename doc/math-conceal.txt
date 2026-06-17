@@ -322,12 +322,14 @@ Restrict rendering by path:
 
                                               *math-conceal-image.live_preview_enabled*
 `image.live_preview_enabled`~
-        Boolean. Enables the cursor-following live preview in insert mode.
+        Boolean. Enables the cursor-following live preview in normal, insert,
+        and visual modes.
         Default: true.
 
-                                             *math-conceal-image.live_preview_debounce*
-`image.live_preview_debounce`~
-        Delay in milliseconds for live preview updates. Default: 100.
+                                      *math-conceal-image.renderers.live_debounce*
+`image.renderers.<name>.live_debounce`~
+        Delay in milliseconds for text-change live preview updates for a
+        renderer. Cursor movement preview is immediate. Typst defaults to 0.
 
                                         *math-conceal-image.cursor_hover_throttle_ms*
 `image.cursor_hover_throttle_ms`~
