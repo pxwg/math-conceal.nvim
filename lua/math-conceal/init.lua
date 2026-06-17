@@ -32,6 +32,10 @@ local M = {
           filetypes = { "typst" },
           live_debounce = 0,
         },
+        markdown = {
+          filetypes = { "markdown" },
+          live_debounce = 0,
+        },
       },
     },
     highlights = {
@@ -123,8 +127,15 @@ local M = {
 --- @field filetypes string[]?: Neovim filetypes that should attach this renderer.
 --- @field service_binary string?: Renderer service executable path.
 --- @field live_debounce integer?: Text-change live preview debounce in milliseconds for this renderer.
+--- @field source_kind string?: Scanner source kind. Defaults to the renderer name.
+--- @field scanner string?: Scanner module key. Defaults to source_kind.
+--- @field backend string?: Rust service backend. Markdown uses the Typst backend with a MiTeX wrapper.
+--- @field wrapper string?: Render input wrapper. Markdown uses "mitex".
 --- @field root string|fun(ctx: table): string?: Project root resolver for the renderer.
 --- @field inputs table<string, string>|fun(ctx: table): table<string, string>?: Typst-like input values.
+--- @field header string?: Renderer-scoped Typst header.
+--- @field preamble_file string|fun(ctx: table): string?: Renderer-scoped Typst preamble file.
+--- @field mitex_package string?: Typst package spec for Markdown MiTeX rendering.
 --- @field render_paths table?: Path filters for renderer attachment.
 
 local function plugin_root()

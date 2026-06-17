@@ -33,10 +33,7 @@ return {
   opts = {
     conceal = { "greek", "script", "math", "font", "delim", "phy" },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
-    image = {
-      enabled = true,
-      filetypes = { "typst", "markdown" },
-    },
+    image = { enabled = true },
   },
 }
 ```
@@ -142,7 +139,6 @@ return {
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
     image = {
       enabled = false, -- set true to enable graphical equation conceal
-      filetypes = { "typst", "markdown" },
     },
   },
 }
@@ -156,8 +152,8 @@ which is a fork of [PartyWumpus/typst-concealer](https://github.com/PartyWumpus/
 This path uses kitty graphics protocol and works in terminals that support it,
 such as kitty and Ghostty.
 
-Graphical equation conceal supports Typst, Markdown math through
-[MiTeX](https://github.com/mitex-rs/mitex), and experimental LaTeX rendering.
+Graphical equation conceal supports Typst and Markdown math through
+[MiTeX](https://github.com/mitex-rs/mitex).
 Markdown math supports `$...$`, `$$...$$`, `\(...\)`, and `\[...\]` delimiters.
 
 Enable it from the same setup table:
@@ -166,13 +162,13 @@ Enable it from the same setup table:
 require("math-conceal").setup({
   image = {
     enabled = true,
-    filetypes = { "typst", "markdown" },
-    -- Optional. When omitted, math-conceal first tries the bundled release binary:
-    -- service/target/release/typst-concealer-service
-    service_binary = "typst-concealer-service",
-    backends = {
-      latex = {
-        enabled = false, -- experimental
+    renderers = {
+      typst = {
+        filetypes = { "typst" },
+      },
+      markdown = {
+        filetypes = { "markdown" },
+        mitex_package = "@preview/mitex:0.2.7",
       },
     },
   },
@@ -185,9 +181,9 @@ Build the bundled Rust service after installing or updating:
 cargo build --release --manifest-path service/Cargo.toml
 ```
 
-Most advanced renderer options are passed through to the migrated renderer, including
-`styling_type`, `live_preview_enabled`, renderer-level `live_debounce`,
-`render_paths`, `get_root`, `get_inputs`, and `get_preamble_file`.
+Renderer-specific options live under `image.renderers.<name>`, including
+`filetypes`, `service_binary`, `live_debounce`, `root`, `inputs`,
+`preamble_file`, `header`, `render_paths`, and Markdown's `mitex_package`.
 
 ## To-do
 

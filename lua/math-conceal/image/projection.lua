@@ -218,7 +218,7 @@ local function render_affected(bufnr, binding, ctx, config, render_items)
   local req_id = request_id(bufnr)
   local payload = {
     type = "render_formulas",
-    backend = "typst",
+    backend = ctx.backend or "typst",
     request_id = req_id,
     cache_key = "formula:" .. (ctx.context_id or "") .. ":" .. tostring(ctx.context_rev or 0),
     context_id = ctx.context_id,

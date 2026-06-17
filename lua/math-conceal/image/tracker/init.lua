@@ -60,6 +60,9 @@ local function resolve_scanner(kind, scanner)
   if kind == "typst" then
     return require("math-conceal.image.tracker.typst")
   end
+  if kind == "markdown" then
+    return require("math-conceal.image.tracker.markdown")
+  end
 
   return nil, "unsupported tracker kind: " .. tostring(kind)
 end
@@ -106,6 +109,7 @@ local function track_snapshot(state, track)
     source_hash = track.source_hash,
     source_rows = track.source_rows,
     source_display_kind = track.source_display_kind,
+    source_facts = vim.deepcopy(track.source_facts or {}),
     render_whole_line = track.render_whole_line == true,
     prelude_count = track.prelude_count or 0,
     prelude_signature = track.prelude_signature,
@@ -400,6 +404,7 @@ local function new_track(state, node)
     source_hash = node.source_hash,
     source_rows = node.source_rows,
     source_display_kind = node.source_display_kind,
+    source_facts = vim.deepcopy(node.source_facts or {}),
     render_whole_line = node.render_whole_line == true,
     prelude_count = node.prelude_count or 0,
     prelude_signature = node.prelude_signature,
@@ -573,6 +578,7 @@ local function inherit_track(bufnr, track, node, opts)
   track.source_hash = node.source_hash
   track.source_rows = node.source_rows
   track.source_display_kind = node.source_display_kind
+  track.source_facts = vim.deepcopy(node.source_facts or {})
   track.render_whole_line = node.render_whole_line == true
   if opts.preserve_prelude ~= true then
     track.prelude_count = node.prelude_count or 0

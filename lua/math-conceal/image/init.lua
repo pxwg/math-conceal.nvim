@@ -19,8 +19,15 @@ local M = {}
 ---@field filetypes string[]
 ---@field service_binary string
 ---@field live_debounce integer
+---@field source_kind string?
+---@field scanner string?
+---@field backend string?
+---@field wrapper string?
 ---@field root? string|MathConcealImageRootResolver
 ---@field inputs table<string, string>|string[]|MathConcealImageInputsResolver
+---@field header string?
+---@field preamble_file string|function?
+---@field mitex_package string?
 ---@field render_paths table
 
 ---@class MathConcealImageConfig
@@ -35,9 +42,7 @@ local M = {}
 ---@field do_diagnostics boolean
 ---@field conceal_in_normal boolean
 ---@field live_preview_enabled boolean
----@field header string
 ---@field block_padding_cols integer
----@field get_preamble_file function?
 
 local defaults = {
   enabled_by_default = true,
@@ -52,16 +57,37 @@ local defaults = {
   do_diagnostics = true,
   conceal_in_normal = false,
   live_preview_enabled = true,
-  header = "",
   block_padding_cols = 0,
-  get_preamble_file = nil,
   renderers = {
     typst = {
       filetypes = { "typst" },
       service_binary = "typst-concealer-service",
       live_debounce = 0,
+      source_kind = "typst",
+      scanner = "typst",
+      backend = "typst",
+      wrapper = "typst",
       root = nil,
       inputs = {},
+      header = "",
+      preamble_file = nil,
+      render_paths = {
+        exclude = {},
+      },
+    },
+    markdown = {
+      filetypes = { "markdown" },
+      service_binary = "typst-concealer-service",
+      live_debounce = 0,
+      source_kind = "markdown",
+      scanner = "markdown",
+      backend = "typst",
+      wrapper = "mitex",
+      root = nil,
+      inputs = {},
+      header = "",
+      preamble_file = nil,
+      mitex_package = "@preview/mitex:0.2.7",
       render_paths = {
         exclude = {},
       },
@@ -140,7 +166,6 @@ local function resolve_inputs(spec, ctx)
     end
   end
 
-  parse_input_list(M.config.compiler_args or {}, resolved)
   if next(resolved) == nil then
     return vim.empty_dict()
   end
@@ -153,8 +178,6 @@ local function resolve_root(spec, ctx)
     root = spec.root(ctx)
   elseif type(spec.root) == "string" then
     root = spec.root
-  elseif type(M.config.get_root) == "function" then
-    root = M.config.get_root(ctx.bufnr, ctx.path, ctx.cwd, "full")
   else
     root = default_root(ctx)
   end
@@ -243,9 +266,14 @@ local function path_excluded(spec, ctx)
 end
 
 local function make_binding(kind, spec, ctx)
+  local source_kind = spec.source_kind or spec.scanner or kind
   return {
     bufnr = ctx.bufnr,
     kind = kind,
+    source_kind = source_kind,
+    scanner = spec.scanner or source_kind,
+    backend = spec.backend or "typst",
+    wrapper = spec.wrapper or kind,
     filetype = ctx.filetype,
     path = ctx.path,
     enabled = true,
@@ -253,32 +281,14 @@ local function make_binding(kind, spec, ctx)
     live_debounce = tonumber(spec.live_debounce) or 0,
     root = resolve_root(spec, ctx),
     inputs = resolve_inputs(spec, ctx),
+    header = spec.header or "",
+    preamble_file = spec.preamble_file,
+    mitex_package = spec.mitex_package,
   }
 end
 
 local function tracker_debug_enabled()
   return type(M.config.tracker) == "table" and M.config.tracker.debug == true
-end
-
-local function normalize_compat_config(cfg)
-  cfg = vim.deepcopy(cfg or {})
-  cfg.renderers = cfg.renderers or {}
-  cfg.renderers.typst = cfg.renderers.typst or {}
-  if cfg.filetypes ~= nil and cfg.renderers.typst.filetypes == nil then
-    cfg.renderers.typst.filetypes = cfg.filetypes
-  end
-  if cfg.service_binary ~= nil and cfg.renderers.typst.service_binary == nil then
-    cfg.renderers.typst.service_binary = cfg.service_binary
-  end
-  if cfg.get_inputs ~= nil and cfg.renderers.typst.inputs == nil then
-    cfg.renderers.typst.inputs = cfg.get_inputs
-  end
-  if cfg.get_root ~= nil and cfg.renderers.typst.root == nil then
-    cfg.renderers.typst.root = function(ctx)
-      return cfg.get_root(ctx.bufnr, ctx.path, ctx.cwd, "full")
-    end
-  end
-  return cfg
 end
 
 local function attached_bufnrs()
@@ -296,7 +306,9 @@ function M.renderer_kind_for_bufnr(bufnr)
 end
 
 function M.source_kind_for_bufnr(bufnr)
-  return M.renderer_kind_for_bufnr(bufnr)
+  local kind = M.renderer_kind_for_bufnr(bufnr)
+  local spec = kind and M.config.renderers[kind] or nil
+  return spec and (spec.source_kind or spec.scanner or kind) or nil
 end
 
 function M.is_supported_bufnr(bufnr)
@@ -331,7 +343,7 @@ function M.attach_buf(bufnr)
   local binding = make_binding(kind, spec, ctx)
   M._buffers[bufnr] = binding
   tracker.attach(bufnr, {
-    kind = kind,
+    kind = binding.scanner or binding.source_kind or kind,
     debug = tracker_debug_enabled(),
     on_repair = projection.on_tracker_repair,
   })
@@ -487,7 +499,7 @@ end
 
 function M.setup(cfg)
   detach_all()
-  M.config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), normalize_compat_config(cfg))
+  M.config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), cfg or {})
   if not vim.list_contains({ "colorscheme", "simple", "none" }, M.config.styling_type) then
     error("math-conceal image styling_type must be one of colorscheme, simple, none")
   end

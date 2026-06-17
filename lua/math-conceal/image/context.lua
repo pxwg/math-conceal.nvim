@@ -36,13 +36,31 @@ local function signature(parts)
   return vim.fn.sha256(table.concat(normalized, "\0"))
 end
 
-local function resolve_preamble_include_line(bufnr, config, effective_root)
-  if type(config.get_preamble_file) ~= "function" then
-    return ""
+local function resolve_preamble_file(bufnr, binding)
+  local preamble_file = binding and binding.preamble_file or nil
+  if type(preamble_file) == "function" then
+    local ok, path = pcall(preamble_file, {
+      bufnr = bufnr,
+      kind = binding.kind,
+      source_kind = binding.source_kind,
+      filetype = binding.filetype,
+      path = vim.api.nvim_buf_get_name(bufnr),
+      cwd = vim.uv.cwd(),
+    })
+    if ok and type(path) == "string" and path ~= "" then
+      return path
+    end
+    return nil
   end
+  if type(preamble_file) == "string" and preamble_file ~= "" then
+    return preamble_file
+  end
+  return nil
+end
 
-  local ok, path = pcall(config.get_preamble_file, bufnr, vim.api.nvim_buf_get_name(bufnr), vim.uv.cwd(), "full")
-  if not ok or type(path) ~= "string" or path == "" then
+local function resolve_preamble_include_line(bufnr, binding, effective_root)
+  local path = resolve_preamble_file(bufnr, binding)
+  if type(path) ~= "string" or path == "" then
     return ""
   end
 
@@ -63,7 +81,6 @@ function M.resolve(bufnr, binding, tracker_context, config)
   local ws = workspace.for_buffer(bufnr)
   local effective_root = path_rewrite.common_ancestor(source_root, ws.root)
   local context_units = vim.deepcopy((tracker_context and tracker_context.units) or {})
-  local preamble_include_line = resolve_preamble_include_line(bufnr, config, effective_root)
 
   local ctx = {
     bufnr = bufnr,
@@ -74,18 +91,28 @@ function M.resolve(bufnr, binding, tracker_context, config)
     buf_path = vim.api.nvim_buf_get_name(bufnr),
     workspace = ws,
     inputs = binding.inputs or vim.empty_dict(),
+    backend = binding.backend or "typst",
+    wrapper = binding.wrapper or binding.kind,
+    renderer = binding.kind,
+    source_kind = binding.source_kind or binding.kind,
+    header = binding.header or "",
+    mitex_package = binding.mitex_package,
     context_units = context_units,
-    preamble_include_line = preamble_include_line,
+    preamble_include_line = resolve_preamble_include_line(bufnr, binding, effective_root),
   }
 
   ctx.context_source = wrapper.build_context_document(config, ctx)
   ctx.context_signature = signature({
     binding.kind,
+    binding.source_kind,
+    binding.backend,
+    binding.wrapper,
     ctx.buf_path,
     ctx.source_root,
     ctx.effective_root,
     ctx.inputs,
     ctx.context_source,
+    ctx.mitex_package or "",
     tracker_context and tracker_context.signature or "",
     state.render_ppi(config),
   })
@@ -96,12 +123,14 @@ function M.resolve(bufnr, binding, tracker_context, config)
   end
 
   ctx.context_id = signature({
-    "typst",
+    ctx.backend or "typst",
+    ctx.wrapper or "",
     ctx.buf_path,
     ctx.source_root,
     ctx.effective_root,
     ctx.inputs,
     ctx.context_source,
+    ctx.mitex_package or "",
     state.render_ppi(config),
   })
   ctx.context_rev = bstate.context_rev

@@ -276,6 +276,11 @@ local function make_highlighted_preview_source(track, cursor_row, cursor_col, mo
     return nil, nil, nil
   end
 
+  local source_kind = track.source_kind or (track.source_facts and track.source_facts.source_kind) or track.kind
+  if source_kind ~= nil and source_kind ~= "typst" then
+    return source_text, source_text, nil
+  end
+
   local span = get_math_symbol_span_at_cursor(track, cursor_row, cursor_col, mode)
   if span == nil then
     return source_text, source_text, nil
@@ -425,7 +430,7 @@ local function render_projection_preview(bufnr, projection, track, cursor_row, c
   local req_id = request_id(bufnr)
   local payload = {
     type = "render_formulas",
-    backend = "typst",
+    backend = ctx.backend or "typst",
     request_id = req_id,
     cache_key = preview_service_cache_key(projection, track, ctx, image.config),
     context_id = ctx.context_id,
