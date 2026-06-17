@@ -3,6 +3,7 @@ local debug_projection = require("math-conceal.image.tracker.debug")
 local M = {}
 
 local ns = vim.api.nvim_create_namespace("math-conceal.image.tracker")
+local context_ns = vim.api.nvim_create_namespace("math-conceal.image.tracker.context")
 
 ---@type table<integer, table>
 local state_by_buf = {}
@@ -222,6 +223,85 @@ local function min_value(values)
   return min
 end
 
+local function prefix_signatures(context_units)
+  local signatures = { [0] = vim.fn.sha256("") }
+  local parts = {}
+  for idx, unit in ipairs(context_units or {}) do
+    parts[#parts + 1] = unit.signature or ""
+    signatures[idx] = vim.fn.sha256(table.concat(parts, "\0"))
+  end
+  return signatures
+end
+
+local function prelude_count_for_track(context_units, track)
+  local count = 0
+  for idx, unit in ipairs(context_units or {}) do
+    if le(unit.end_row, unit.end_col, track.row, track.col) then
+      count = idx
+    else
+      break
+    end
+  end
+  return count
+end
+
+local function apply_context_to_tracks(state)
+  local prefixes = prefix_signatures(state.context_units or {})
+  for _, track in ipairs(live_tracks(state)) do
+    local prelude_count = prelude_count_for_track(state.context_units, track)
+    track.prelude_count = prelude_count
+    track.prelude_signature = prefixes[prelude_count] or prefixes[0]
+  end
+end
+
+local function set_context_extmark(bufnr, unit)
+  if unit.index == nil then
+    return
+  end
+
+  vim.api.nvim_buf_set_extmark(bufnr, context_ns, unit.row, unit.col, {
+    id = unit.index,
+    end_row = unit.end_row,
+    end_col = unit.end_col,
+    right_gravity = true,
+    end_right_gravity = false,
+    undo_restore = true,
+    invalidate = true,
+    priority = 149,
+  })
+end
+
+local function refresh_context_extmarks(bufnr, state)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, context_ns, 0, -1)
+  for idx, unit in ipairs(state.context_units or {}) do
+    unit.index = idx
+    set_context_extmark(bufnr, unit)
+  end
+end
+
+local function sync_context_units(bufnr, state)
+  local invalid = false
+  for _, unit in ipairs(state.context_units or {}) do
+    if unit.index ~= nil then
+      local pos = vim.api.nvim_buf_get_extmark_by_id(bufnr, context_ns, unit.index, { details = true })
+      local row, col, details = pos[1], pos[2], pos[3]
+      if row == nil or details.invalid == true then
+        invalid = true
+      else
+        unit.row = row
+        unit.col = col
+        unit.end_row = details.end_row or row
+        unit.end_col = details.end_col or col
+      end
+    end
+  end
+  return invalid
+end
+
 local function diff_event(state, before_snapshots, after_snapshots, old_context_units, new_context_units, opts)
   opts = opts or {}
   local before = snapshots_by_key(before_snapshots)
@@ -371,6 +451,57 @@ local function has_pending_repair(state)
   return #state.damage_ranges > 0 or has_dirty_track(state)
 end
 
+local function edit_touches_context_unit(unit, damage)
+  if damage.row == damage.end_row and damage.col == damage.end_col then
+    return le(unit.row, unit.col, damage.row, damage.col) and le(damage.row, damage.col, unit.end_row, unit.end_col)
+  end
+  return range_intersects(unit, damage)
+end
+
+local function context_units_touch_damages(context_units, damages)
+  for _, unit in ipairs(context_units or {}) do
+    for _, damage in ipairs(damages or {}) do
+      if edit_touches_context_unit(unit, damage) then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+local function same_context_unit(a, b)
+  return a ~= nil
+    and b ~= nil
+    and a.kind == b.kind
+    and a.signature == b.signature
+    and a.row == b.row
+    and a.col == b.col
+    and a.end_row == b.end_row
+    and a.end_col == b.end_col
+end
+
+local function known_context_unit(context_units, candidate)
+  for _, unit in ipairs(context_units or {}) do
+    if same_context_unit(unit, candidate) then
+      return true
+    end
+  end
+  return false
+end
+
+local function new_context_units_touch_damages(current_context_units, scanned_context_units, damages)
+  for _, unit in ipairs(scanned_context_units or {}) do
+    if not known_context_unit(current_context_units, unit) then
+      for _, damage in ipairs(damages or {}) do
+        if edit_touches_context_unit(unit, damage) then
+          return true
+        end
+      end
+    end
+  end
+  return false
+end
+
 local function expand_to_stable_neighbors(bufnr, state, damage)
   local start_row, start_col = 0, 0
   local end_row, end_col = buf_end(bufnr)
@@ -430,7 +561,8 @@ local function tracks_in_window(state, window)
   return tracks
 end
 
-local function inherit_track(bufnr, track, node)
+local function inherit_track(bufnr, track, node, opts)
+  opts = opts or {}
   track.state = "valid"
   track.invalid = false
   track.row = node.row
@@ -442,8 +574,10 @@ local function inherit_track(bufnr, track, node)
   track.source_rows = node.source_rows
   track.source_display_kind = node.source_display_kind
   track.render_whole_line = node.render_whole_line == true
-  track.prelude_count = node.prelude_count or 0
-  track.prelude_signature = node.prelude_signature
+  if opts.preserve_prelude ~= true then
+    track.prelude_count = node.prelude_count or 0
+    track.prelude_signature = node.prelude_signature
+  end
   track.node_type = node.node_type
   set_core_extmark(bufnr, track)
 end
@@ -468,7 +602,7 @@ local function remove_at(list, index)
 end
 
 local function scan_nodes(bufnr, state, window)
-  local ok, result = pcall(state.scanner.scan, bufnr, window)
+  local ok, result = pcall(state.scanner.scan, bufnr, window, state.context_units)
   if not ok then
     notify_once(tostring(result), vim.log.levels.WARN)
     return nil
@@ -477,6 +611,20 @@ local function scan_nodes(bufnr, state, window)
     return result.nodes, result
   end
   return result, { nodes = result }
+end
+
+local function scan_context(bufnr, state)
+  if type(state.scanner.scan_context) ~= "function" then
+    notify_once("scanner does not support context repair", vim.log.levels.ERROR)
+    return nil
+  end
+
+  local ok, result = pcall(state.scanner.scan_context, bufnr)
+  if not ok then
+    notify_once(tostring(result), vim.log.levels.WARN)
+    return nil
+  end
+  return result
 end
 
 local function scan_all(bufnr, state)
@@ -499,7 +647,7 @@ end
 
 local function reconcile_window(bufnr, state, window)
   local tracks = tracks_in_window(state, window)
-  local nodes = scan_nodes(bufnr, state, window)
+  local nodes, result = scan_nodes(bufnr, state, window)
   if nodes == nil then
     return false
   end
@@ -508,7 +656,7 @@ local function reconcile_window(bufnr, state, window)
     local pair = best_pair(bufnr, tracks, nodes)
     local track = remove_at(tracks, pair.track_index)
     local node = remove_at(nodes, pair.node_index)
-    inherit_track(bufnr, track, node)
+    inherit_track(bufnr, track, node, { preserve_prelude = true })
   end
 
   for _, track in ipairs(tracks) do
@@ -521,31 +669,7 @@ local function reconcile_window(bufnr, state, window)
     set_core_extmark(bufnr, track)
   end
 
-  return true
-end
-
-local function reconcile_all(bufnr, state, nodes)
-  local tracks = live_tracks(state)
-  nodes = vim.deepcopy(nodes or {})
-
-  while #tracks > 0 and #nodes > 0 do
-    local pair = best_pair(bufnr, tracks, nodes)
-    local track = remove_at(tracks, pair.track_index)
-    local node = remove_at(nodes, pair.node_index)
-    inherit_track(bufnr, track, node)
-  end
-
-  for _, track in ipairs(tracks) do
-    retire(bufnr, track)
-  end
-
-  for _, node in ipairs(nodes) do
-    local track = new_track(state, node)
-    state.tracks[track.id] = track
-    set_core_extmark(bufnr, track)
-  end
-
-  return true
+  return true, result
 end
 
 local function schedule_repair(bufnr, state)
@@ -574,6 +698,7 @@ local function clear_namespaces(bufnr)
     return
   end
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, ns, 0, -1)
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, context_ns, 0, -1)
   debug_projection.clear(bufnr)
 end
 
@@ -594,6 +719,7 @@ local function seed(bufnr, state)
 
   state.context_units = scan.context_units or {}
   state.context_signature = scan.context_signature or ""
+  refresh_context_extmarks(bufnr, state)
 
   return true
 end
@@ -761,24 +887,39 @@ function M.repair(bufnr)
 
   sync_tracks(bufnr, state)
   if not has_pending_repair(state) then
-    emit_repair(
-      state,
-      diff_event(state, track_snapshots(state), track_snapshots(state), state.context_units, state.context_units)
-    )
     return true
   end
 
+  local damages = vim.deepcopy(state.damage_ranges)
   local before_snapshots = track_snapshots(state)
   local old_context_units = vim.deepcopy(state.context_units or {})
-  local scan = scan_all(bufnr, state)
-  if scan == nil then
-    refresh_debug(state)
-    return false
+  local context_refresh_needed = context_units_touch_damages(state.context_units, damages)
+  if sync_context_units(bufnr, state) then
+    context_refresh_needed = true
   end
 
-  reconcile_all(bufnr, state, scan.nodes or {})
-  state.context_units = scan.context_units or {}
-  state.context_signature = scan.context_signature or ""
+  for _, window in ipairs(repair_windows(bufnr, state)) do
+    local ok, result = reconcile_window(bufnr, state, window)
+    if not ok then
+      refresh_debug(state)
+      return false
+    end
+    if new_context_units_touch_damages(state.context_units, result and result.context_units, damages) then
+      context_refresh_needed = true
+    end
+  end
+
+  if context_refresh_needed then
+    local context_scan = scan_context(bufnr, state)
+    if context_scan == nil then
+      refresh_debug(state)
+      return false
+    end
+    state.context_units = context_scan.units or context_scan.context_units or {}
+    state.context_signature = context_scan.signature or context_scan.context_signature or ""
+    refresh_context_extmarks(bufnr, state)
+    apply_context_to_tracks(state)
+  end
 
   state.damage_ranges = {}
   sync_tracks(bufnr, state)

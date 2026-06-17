@@ -6,6 +6,10 @@ local function lt(a_row, a_col, b_row, b_col)
   return a_row < b_row or (a_row == b_row and a_col < b_col)
 end
 
+local function le(a_row, a_col, b_row, b_col)
+  return lt(a_row, a_col, b_row, b_col) or (a_row == b_row and a_col == b_col)
+end
+
 local function range_intersects(a, b)
   return lt(a.row, a.col, b.end_row, b.end_col) and lt(b.row, b.col, a.end_row, a.end_col)
 end
@@ -71,10 +75,10 @@ local function capture_node(match, capture_id)
   return value
 end
 
-local function build_match_index(bufnr, root, parsed_query)
+local function build_match_index(bufnr, root, parsed_query, start_row, end_row)
   local index = {}
 
-  for _, match in parsed_query:iter_matches(root, bufnr, 0, -1, { all = true }) do
+  for _, match in parsed_query:iter_matches(root, bufnr, start_row or 0, end_row or -1, { all = true }) do
     local block_node = nil
     local code_node = nil
     local math_node = nil
@@ -150,6 +154,47 @@ local function collect_top_level_units(root, match_index)
   return units
 end
 
+local function has_indexed_ancestor(node, match_index)
+  local parent = node and node:parent() or nil
+  while parent ~= nil do
+    if match_index[parent:id()] ~= nil then
+      return true
+    end
+    parent = parent:parent()
+  end
+  return false
+end
+
+local function has_code_ancestor(node)
+  local parent = node and node:parent() or nil
+  while parent ~= nil do
+    if parent:type() == "code" then
+      return true
+    end
+    parent = parent:parent()
+  end
+  return false
+end
+
+local function collect_local_top_level_units(match_index)
+  local units = {}
+
+  for _, entry in pairs(match_index) do
+    if not has_indexed_ancestor(entry.node, match_index) and not has_code_ancestor(entry.node) then
+      units[#units + 1] = entry
+    end
+  end
+
+  table.sort(units, function(a, b)
+    if a.row ~= b.row or a.col ~= b.col then
+      return lt(a.row, a.col, b.row, b.col)
+    end
+    return (a.node and a.node:id() or 0) < (b.node and b.node:id() or 0)
+  end)
+
+  return units
+end
+
 local function context_kind(unit)
   if unit.node_type ~= "code" then
     return nil
@@ -208,6 +253,58 @@ local function prefix_signatures(context_units)
   return signatures
 end
 
+local function context_signature(kind, source)
+  return vim.fn.sha256(table.concat({
+    kind or "",
+    source or "",
+  }, "\0"))
+end
+
+local function context_record(bufnr, unit)
+  local source = range_source(bufnr, unit)
+  local kind = context_kind(unit)
+  return {
+    index = 0,
+    kind = kind,
+    row = unit.row,
+    col = unit.col,
+    end_row = unit.end_row,
+    end_col = unit.end_col,
+    source = source,
+    source_hash = source_hash(source),
+    signature = context_signature(kind, source),
+  }
+end
+
+local function node_record(bufnr, unit, context_units, prefixes)
+  local source = range_source(bufnr, unit)
+  local source_display_kind, render_whole_line, source_rows = source_display_facts(bufnr, unit, source)
+  local prelude_count = 0
+  for idx, context_unit in ipairs(context_units or {}) do
+    if le(context_unit.end_row, context_unit.end_col, unit.row, unit.col) then
+      prelude_count = idx
+    else
+      break
+    end
+  end
+
+  return {
+    kind = "typst",
+    node_type = "math",
+    row = unit.row,
+    col = unit.col,
+    end_row = unit.end_row,
+    end_col = unit.end_col,
+    source = source,
+    source_hash = source_hash(source),
+    source_rows = source_rows,
+    source_display_kind = source_display_kind,
+    render_whole_line = render_whole_line,
+    prelude_count = prelude_count,
+    prelude_signature = prefixes[prelude_count] or prefixes[0],
+  }
+end
+
 local function build_scan(bufnr)
   local parsed_query, query_err = get_query()
   if parsed_query == nil then
@@ -231,51 +328,13 @@ local function build_scan(bufnr)
 
   for _, unit in ipairs(units) do
     if unit.node_type == "math" then
-      local source = range_source(bufnr, unit)
-      local source_display_kind, render_whole_line, source_rows = source_display_facts(bufnr, unit, source)
-      nodes[#nodes + 1] = {
-        kind = "typst",
-        node_type = "math",
-        row = unit.row,
-        col = unit.col,
-        end_row = unit.end_row,
-        end_col = unit.end_col,
-        source = source,
-        source_hash = source_hash(source),
-        source_rows = source_rows,
-        source_display_kind = source_display_kind,
-        render_whole_line = render_whole_line,
-        prelude_count = #context_units,
-      }
+      local prefixes = prefix_signatures(context_units)
+      nodes[#nodes + 1] = node_record(bufnr, unit, context_units, prefixes)
     elseif is_context_unit(bufnr, unit) then
-      local source = range_source(bufnr, unit)
-      local kind = context_kind(unit)
-      local signature = vim.fn.sha256(table.concat({
-        kind or "",
-        tostring(unit.row),
-        tostring(unit.col),
-        tostring(unit.end_row),
-        tostring(unit.end_col),
-        source,
-      }, "\0"))
-
-      context_units[#context_units + 1] = {
-        index = #context_units + 1,
-        kind = kind,
-        row = unit.row,
-        col = unit.col,
-        end_row = unit.end_row,
-        end_col = unit.end_col,
-        source = source,
-        source_hash = source_hash(source),
-        signature = signature,
-      }
+      local record = context_record(bufnr, unit)
+      record.index = #context_units + 1
+      context_units[#context_units + 1] = record
     end
-  end
-
-  local prefixes = prefix_signatures(context_units)
-  for _, node in ipairs(nodes) do
-    node.prelude_signature = prefixes[node.prelude_count] or prefixes[0]
   end
 
   local unit_signatures = {}
@@ -287,6 +346,44 @@ local function build_scan(bufnr)
     nodes = nodes,
     context_units = context_units,
     context_signature = vim.fn.sha256(table.concat(unit_signatures, "\0")),
+  }
+end
+
+local function build_window_scan(bufnr, window, context_units)
+  local parsed_query, query_err = get_query()
+  if parsed_query == nil then
+    error("failed to parse Typst math tracker query: " .. tostring(query_err))
+  end
+
+  local parser = vim.treesitter.get_parser(bufnr, "typst")
+  local tree = parser:parse()[1]
+  if tree == nil then
+    return {
+      nodes = {},
+      context_units = {},
+    }
+  end
+
+  local root = tree:root()
+  local units =
+    collect_local_top_level_units(build_match_index(bufnr, root, parsed_query, window.row, window.end_row + 1))
+  local prefixes = prefix_signatures(context_units or {})
+  local nodes = {}
+  local local_context_units = {}
+
+  for _, unit in ipairs(units) do
+    if unit.node_type == "math" and range_intersects(unit, window) then
+      nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
+    elseif is_context_unit(bufnr, unit) and range_intersects(unit, window) then
+      local record = context_record(bufnr, unit)
+      record.index = #local_context_units + 1
+      local_context_units[#local_context_units + 1] = record
+    end
+  end
+
+  return {
+    nodes = nodes,
+    context_units = local_context_units,
   }
 end
 
@@ -309,16 +406,8 @@ end
 ---@param bufnr integer
 ---@param window {row: integer, col: integer, end_row: integer, end_col: integer}
 ---@return table
-function M.scan(bufnr, window)
-  local scan = build_scan(bufnr)
-  local nodes = {}
-  for _, node in ipairs(scan.nodes) do
-    if range_intersects(node, window) then
-      nodes[#nodes + 1] = node
-    end
-  end
-  scan.nodes = nodes
-  return scan
+function M.scan(bufnr, window, context_units)
+  return build_window_scan(bufnr, window, context_units)
 end
 
 return M

@@ -296,8 +296,6 @@ function M.on_tracker_repair(event)
       cleanup_projection(projection)
     elseif affected[key] then
       to_render[#to_render + 1] = projection
-    elseif projection.visible_asset ~= nil and not cursor_reveals(bufnr, track, image.config) then
-      display.show(projection, projection.visible_asset, image.config)
     end
   end
 
