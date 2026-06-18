@@ -23,6 +23,10 @@ local function placeholder_row(row, cols)
   return table.concat(line)
 end
 
+function M.placeholder_row(row, cols)
+  return placeholder_row(row, cols)
+end
+
 local function line_len(bufnr, row)
   local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
   return #line

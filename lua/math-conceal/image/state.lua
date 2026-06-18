@@ -35,6 +35,7 @@ function M.get_buf_state(bufnr)
     M.buffers[bufnr] = {
       projections = {},
       projections_by_track_id = {},
+      display_assets = {},
       live_preview = {
         extmark_id = nil,
         visible_asset = nil,

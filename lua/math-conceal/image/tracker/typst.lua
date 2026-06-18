@@ -14,6 +14,10 @@ local function range_intersects(a, b)
   return lt(a.row, a.col, b.end_row, b.end_col) and lt(b.row, b.col, a.end_row, a.end_col)
 end
 
+local function is_blank(text)
+  return (text or ""):match("^%s*$") ~= nil
+end
+
 local function source_hash(source)
   return vim.fn.sha256(source or "")
 end
@@ -229,18 +233,28 @@ end
 
 local function source_display_facts(bufnr, unit, source)
   local source_rows = unit.end_row - unit.row + 1
-  if source_rows > 1 then
-    return "block", false, source_rows
-  end
+  local source_facts = {
+    source_kind = "typst",
+    break_line = source_rows > 1,
+  }
 
-  local line = vim.api.nvim_buf_get_lines(bufnr, unit.row, unit.row + 1, false)[1] or ""
-  local trimmed = line:match("^%s*(.-)%s*$") or ""
   local is_display_math = source:match("^%$%s+") ~= nil and source:match("%s+%$$") ~= nil
   if is_display_math then
-    return "block", trimmed ~= source, source_rows
+    local start_line = vim.api.nvim_buf_get_lines(bufnr, unit.row, unit.row + 1, false)[1] or ""
+    local end_line = vim.api.nvim_buf_get_lines(bufnr, unit.end_row, unit.end_row + 1, false)[1] or ""
+    local prefix = start_line:sub(1, unit.col)
+    local suffix = end_line:sub(unit.end_col + 1)
+    local isolated = is_blank(prefix) and is_blank(suffix)
+    source_facts.display_kind = "block"
+    source_facts.inline = false
+    source_facts.isolated = isolated
+    return "block", isolated, source_rows, source_facts
   end
 
-  return "inline", false, source_rows
+  source_facts.display_kind = "inline"
+  source_facts.inline = true
+  source_facts.isolated = false
+  return "inline", false, source_rows, source_facts
 end
 
 local function prefix_signatures(context_units)
@@ -278,7 +292,7 @@ end
 
 local function node_record(bufnr, unit, context_units, prefixes)
   local source = range_source(bufnr, unit)
-  local source_display_kind, render_whole_line, source_rows = source_display_facts(bufnr, unit, source)
+  local source_display_kind, render_whole_line, source_rows, source_facts = source_display_facts(bufnr, unit, source)
   local prelude_count = 0
   for idx, context_unit in ipairs(context_units or {}) do
     if le(context_unit.end_row, context_unit.end_col, unit.row, unit.col) then
@@ -299,6 +313,7 @@ local function node_record(bufnr, unit, context_units, prefixes)
     source_hash = source_hash(source),
     source_rows = source_rows,
     source_display_kind = source_display_kind,
+    source_facts = source_facts,
     render_whole_line = render_whole_line,
     prelude_count = prelude_count,
     prelude_signature = prefixes[prelude_count] or prefixes[0],

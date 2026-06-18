@@ -1,5 +1,6 @@
 local context = require("math-conceal.image.context")
 local display = require("math-conceal.image.display")
+local formula_display = require("math-conceal.image.formula-display")
 local session = require("math-conceal.image.session")
 local state = require("math-conceal.image.state")
 local terminal = require("math-conceal.image.terminal")
@@ -46,6 +47,10 @@ local function tracks_by_key(tracks)
   return by_key
 end
 
+local function uses_formula_display(binding)
+  return binding ~= nil and (binding.kind == "typst" or binding.source_kind == "typst" or binding.scanner == "typst")
+end
+
 local function in_range(row, col, range)
   if row < range.row or row > range.end_row then
     return false
@@ -79,8 +84,33 @@ local function cleanup_asset(asset)
   end
 end
 
+local function set_display_asset(projection, asset, source_reveal)
+  local bs = state.get_buf_state(projection.bufnr)
+  bs.display_assets = bs.display_assets or {}
+  bs.display_assets[projection.key] = {
+    asset = asset,
+    source_reveal = source_reveal == true,
+  }
+end
+
+local function clear_display_asset(projection)
+  local bs = state.get_buf_state(projection.bufnr)
+  if bs.display_assets ~= nil then
+    bs.display_assets[projection.key] = nil
+  end
+end
+
+local function repair_formula_display(bufnr, refs)
+  local image = require("math-conceal.image")
+  local binding = image.get_binding(bufnr)
+  if uses_formula_display(binding) then
+    formula_display.repair_tracks(bufnr, refs, image.config)
+  end
+end
+
 local function cleanup_projection(projection)
   display.clear(projection)
+  clear_display_asset(projection)
   cleanup_asset(projection.visible_asset)
   cleanup_asset(projection.candidate_asset)
   projection.visible_asset = nil
@@ -241,11 +271,20 @@ local function render_affected(bufnr, binding, ctx, config, render_items)
   })
 
   if not ok then
+    local failed_refs = {}
     for _, item in ipairs(render_items) do
       local projection = item.projection
       projection.pending_key = nil
       projection.status = "failed"
-      display.reveal(projection)
+      if uses_formula_display(binding) then
+        set_display_asset(projection, nil, true)
+        failed_refs[#failed_refs + 1] = projection.ref
+      else
+        display.reveal(projection)
+      end
+    end
+    if #failed_refs > 0 then
+      formula_display.repair_tracks(bufnr, failed_refs, config)
     end
   end
 end
@@ -303,6 +342,9 @@ function M.on_tracker_repair(event)
   end
 
   render_affected(bufnr, binding, ctx, image.config, to_render)
+  if uses_formula_display(binding) then
+    formula_display.on_tracker_repair(event, image.config)
+  end
   M.sync_cursor(bufnr)
 end
 
@@ -343,7 +385,13 @@ function M.handle_service_response(bufnr, resp, meta)
     cleanup_asset(projection.visible_asset)
     projection.visible_asset = nil
     projection.status = "failed"
-    display.reveal(projection)
+    local image = require("math-conceal.image")
+    if uses_formula_display(image.get_binding(bufnr)) then
+      set_display_asset(projection, nil, true)
+      repair_formula_display(bufnr, { projection.ref })
+    else
+      display.reveal(projection)
+    end
     return
   end
 
@@ -360,8 +408,15 @@ function M.handle_service_response(bufnr, resp, meta)
   }
 
   if not terminal.upload(candidate.path, candidate.image_id, candidate.cols, candidate.rows) then
+    cleanup_asset(projection.visible_asset)
+    projection.visible_asset = nil
     projection.status = "failed"
-    display.reveal(projection)
+    if uses_formula_display(image.get_binding(bufnr)) then
+      set_display_asset(projection, nil, true)
+      repair_formula_display(bufnr, { projection.ref })
+    else
+      display.reveal(projection)
+    end
     return
   end
 
@@ -369,7 +424,10 @@ function M.handle_service_response(bufnr, resp, meta)
   projection.visible_asset = candidate
   projection.status = "visible"
 
-  if cursor_reveals(bufnr, track, image.config) then
+  if uses_formula_display(image.get_binding(bufnr)) then
+    set_display_asset(projection, candidate, false)
+    formula_display.repair_tracks(bufnr, { projection.ref }, image.config)
+  elseif cursor_reveals(bufnr, track, image.config) then
     display.reveal(projection)
   else
     display.show(projection, track, candidate, image.config)
@@ -382,6 +440,13 @@ function M.sync_cursor(bufnr, opts)
   bufnr = normalize_bufnr(bufnr)
   opts = opts or {}
   local image = require("math-conceal.image")
+  local binding = image.get_binding(bufnr)
+  if uses_formula_display(binding) then
+    formula_display.sync_cursor(bufnr, image.config)
+    require("math-conceal.image.preview").schedule(bufnr, { immediate = opts.preview_immediate == true })
+    return
+  end
+
   local bs = state.get_buf_state(bufnr)
   local tracks_by_key = track_view.by_key(bufnr)
   for _, projection in pairs(bs.projections or {}) do
@@ -402,6 +467,13 @@ end
 function M.refresh(bufnr)
   bufnr = normalize_bufnr(bufnr)
   local image = require("math-conceal.image")
+  local binding = image.get_binding(bufnr)
+  if uses_formula_display(binding) then
+    formula_display.refresh(bufnr, image.config)
+    require("math-conceal.image.preview").refresh(bufnr)
+    return
+  end
+
   local bs = state.get_buf_state(bufnr)
   for _, projection in pairs(bs.projections or {}) do
     if projection.visible_asset ~= nil and not projection.revealed then
@@ -449,6 +521,7 @@ function M.detach(bufnr)
   bufnr = normalize_bufnr(bufnr)
   local bs = state.get_buf_state(bufnr)
   require("math-conceal.image.preview").detach(bufnr)
+  formula_display.detach(bufnr)
   for _, projection in pairs(bs.projections or {}) do
     cleanup_projection(projection)
   end

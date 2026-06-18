@@ -1133,6 +1133,30 @@ function M.namespace()
   return ns
 end
 
+function M.line_count(bufnr)
+  bufnr = normalize_bufnr(bufnr)
+  if not valid_loaded_buffer(bufnr) then
+    return 0
+  end
+  return vim.api.nvim_buf_line_count(bufnr)
+end
+
+function M.source_line(bufnr, row)
+  bufnr = normalize_bufnr(bufnr)
+  if not valid_loaded_buffer(bufnr) then
+    return ""
+  end
+  return vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
+end
+
+function M.source_lines(bufnr, start_row, end_row)
+  bufnr = normalize_bufnr(bufnr)
+  if not valid_loaded_buffer(bufnr) then
+    return {}
+  end
+  return vim.api.nvim_buf_get_lines(bufnr, start_row, end_row + 1, false)
+end
+
 ---@param ref table
 ---@return table?
 function M.get_anchor(ref)
@@ -1163,6 +1187,18 @@ end
 ---@return table?
 function M.resolve_ref(ref)
   return M.get_track(ref.bufnr, ref.track_id or ref.id)
+end
+
+function M.view(ref, opts)
+  opts = opts or {}
+  local track = M.resolve_ref(ref)
+  if track == nil then
+    return nil
+  end
+  if opts.require_valid == true and (track.invalid == true or track.state ~= "valid") then
+    return nil
+  end
+  return track
 end
 
 return M
