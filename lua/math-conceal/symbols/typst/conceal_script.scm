@@ -1,16 +1,23 @@
 ; Typst script style conceals
 ; Replace simple letter by italic symbols. Must before sub- superscript rulers!
 ((letter) @typ_math_symbol
-  (#match? @typ_math_symbol "^[a-hj-zA-Z]$")
+  (#match? @typ_math_symbol "^[a-zA-Z]$")
   (#not-has-parent? @typ_math_symbol field call)
   (#has-ancestor? @typ_math_symbol math)
   (#set-conceal! @typ_math_symbol "conceal"))
 
-((letter) @typ_symbol
+;conceal only singe `i`
+((attach
+  .
+  (letter) @typ_symbol)
   (#any-of? @typ_symbol "i")
-  (#not-has-parent? @typ_symbol field call)
-  (#has-ancestor? @typ_symbol math)
-  (#set-conceal! @typ_symbol "conceal"))
+  (#set! @typ_symbol conceal "ⅈ"))
+
+((formula
+  .
+  (letter) @typ_symbol .)
+  (#any-of? @typ_symbol "i")
+  (#set! @typ_symbol conceal "ⅈ"))
 
 ; Superscript and subscript conceals
 ; Conceal the opening parenthesis of the subscript group while the formula has no space

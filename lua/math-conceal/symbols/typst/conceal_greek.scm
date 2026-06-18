@@ -10,6 +10,14 @@
   item: [
     (ident)
     (field)
+  ] @typ_greek_symbol
+  (#has-ancestor? @typ_greek_symbol math)
+  (#set-greek! @typ_greek_symbol "greek"))
+
+(call
+  item: [
+    (ident)
+    (field)
   ] @typ_font_name
   "(" @left_paren
   (formula) @typ_greek_symbol

@@ -106,18 +106,13 @@
   (#set-conceal! @typ_math_delim "conceal"))
 
 ((symbol) @typ_math_delim
-  (#any-of? @typ_math_delim "|" "||")
+  (#any-of? @typ_math_delim "|" "||" "|]")
   (#has-ancestor? @typ_math_delim math)
   (#set-conceal! @typ_math_delim "conceal"))
 
 ; `(` and `)` alias for all brackets
 ("(" @typ_math_delim
   (#any-of? @typ_math_delim "[|")
-  (#has-ancestor? @typ_math_delim math)
-  (#set-conceal! @typ_math_delim "conceal"))
-
-(")" @typ_math_delim
-  (#any-of? @typ_math_delim "|]")
   (#has-ancestor? @typ_math_delim math)
   (#set-conceal! @typ_math_delim "conceal"))
 
