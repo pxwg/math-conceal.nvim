@@ -344,6 +344,8 @@ function M.on_tracker_repair(event)
   render_affected(bufnr, binding, ctx, image.config, to_render)
   if uses_formula_display(binding) then
     formula_display.on_tracker_repair(event, image.config)
+    require("math-conceal.image.preview").schedule(bufnr, { immediate = true })
+    return
   end
   M.sync_cursor(bufnr)
 end

@@ -138,16 +138,35 @@ local function row_revealed(equation)
   return not node_revealable(equation)
 end
 
+local function view_from_snapshot(bufnr, snapshot)
+  if
+    snapshot == nil
+    or snapshot.invalid == true
+    or snapshot.state ~= "valid"
+    or snapshot.kind ~= "typst"
+    or (snapshot.track_id or snapshot.id) == nil
+  then
+    return nil
+  end
+
+  local ref = ref_from_snapshot(snapshot)
+  local key = tracker.track_ref_key(ref)
+  local view = {}
+  for field, value in pairs(snapshot) do
+    view[field] = value
+  end
+  view.ref = ref
+  view.key = key
+  view.equation = classify_equation(view)
+  view.asset = display_asset_for_key(bufnr, key)
+  return view
+end
+
 local function resolve_views(bufnr, snapshots)
   local views = {}
   for _, snapshot in ipairs(snapshots or tracker.get_tracks(bufnr)) do
-    local ref = ref_from_snapshot(snapshot)
-    local view = tracker.view(ref, { require_valid = true })
-    if view ~= nil and view.kind == "typst" then
-      view.ref = ref
-      view.key = tracker.track_ref_key(ref)
-      view.equation = classify_equation(view)
-      view.asset = display_asset_for_key(bufnr, view.key)
+    local view = view_from_snapshot(bufnr, snapshot)
+    if view ~= nil then
       views[#views + 1] = view
     end
   end
