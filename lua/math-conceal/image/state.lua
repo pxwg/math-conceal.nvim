@@ -42,6 +42,7 @@ function M.get_buf_state(bufnr)
         render_key = nil,
         track_key = nil,
         source_range = nil,
+        handoff_key = nil,
         vertical = "above",
         timer = nil,
       },

@@ -134,37 +134,57 @@ local function range_object(track)
   }
 end
 
-local function line_len(bufnr, row)
-  local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
-  return #line
+local function track_contains_range(track, start_row, start_col, end_row, end_col)
+  if track == nil then
+    return false
+  end
+  local start_ok = start_row > track.row or (start_row == track.row and start_col >= track.col)
+  local end_ok = end_row < track.end_row or (end_row == track.end_row and end_col <= track.end_col)
+  return start_ok and end_ok and (start_row < end_row or start_col <= end_col)
 end
 
-local function get_text_slice(bufnr, start_row, start_col, end_row, end_col)
-  if not vim.api.nvim_buf_is_valid(bufnr) then
-    return ""
+local function track_relative_col(track, row, col)
+  if row == track.row then
+    return col - track.col
   end
-  local line_count = vim.api.nvim_buf_line_count(bufnr)
-  if line_count <= 0 then
-    return ""
-  end
-  start_row = math.max(0, math.min(start_row, line_count - 1))
-  end_row = math.max(start_row, math.min(end_row, line_count - 1))
-  start_col = math.max(0, math.min(start_col, line_len(bufnr, start_row)))
-  end_col = math.max(0, math.min(end_col, line_len(bufnr, end_row)))
-  if start_row == end_row and end_col < start_col then
-    end_col = start_col
+  return col
+end
+
+local function track_source_slice(track, start_row, start_col, end_row, end_col)
+  local source = track and track.source or ""
+  if source == "" or not track_contains_range(track, start_row, start_col, end_row, end_col) then
+    return nil
   end
 
-  local ok, result = pcall(vim.api.nvim_buf_get_text, bufnr, start_row, start_col, end_row, end_col, {})
-  if not ok or type(result) ~= "table" then
-    return ""
+  local lines = vim.split(source, "\n", { plain = true })
+  local start_idx = start_row - track.row + 1
+  local end_idx = end_row - track.row + 1
+  if start_idx < 1 or end_idx > #lines or start_idx > end_idx then
+    return nil
   end
-  return table.concat(result, "\n")
+
+  local rel_start_col = math.max(0, track_relative_col(track, start_row, start_col))
+  local rel_end_col = math.max(0, track_relative_col(track, end_row, end_col))
+  if start_idx == end_idx then
+    local line = lines[start_idx] or ""
+    rel_start_col = math.min(rel_start_col, #line)
+    rel_end_col = math.max(rel_start_col, math.min(rel_end_col, #line))
+    return line:sub(rel_start_col + 1, rel_end_col)
+  end
+
+  local out = {}
+  local first = lines[start_idx] or ""
+  local last = lines[end_idx] or ""
+  out[#out + 1] = first:sub(math.min(rel_start_col, #first) + 1)
+  for idx = start_idx + 1, end_idx - 1 do
+    out[#out + 1] = lines[idx] or ""
+  end
+  out[#out + 1] = last:sub(1, math.min(rel_end_col, #last))
+  return table.concat(out, "\n")
 end
 
 local function get_math_symbol_span_at_pos(track, row, col)
-  local line = vim.api.nvim_buf_get_lines(track.bufnr, row, row + 1, false)[1] or ""
-  if line == "" then
+  if not cursor_in_range(track, row, col, { include_right_edge = false }) then
     return nil
   end
 
@@ -180,8 +200,7 @@ local function get_math_symbol_span_at_pos(track, row, col)
   end
 
   local root = tree:root()
-  local end_col = math.min(#line, col + 1)
-  local node = root:named_descendant_for_range(row, col, row, end_col)
+  local node = root:named_descendant_for_range(row, col, row, col + 1)
   if node == nil then
     return nil
   end
@@ -219,8 +238,8 @@ local function get_math_symbol_span_at_pos(track, row, col)
     return nil
   end
 
-  local text = get_text_slice(track.bufnr, sr, sc, er, ec)
-  if text == "" or text:match("^%s+$") then
+  local text = track_source_slice(track, sr, sc, er, ec)
+  if text == nil or text == "" or text:match("^%s+$") then
     return nil
   end
 
@@ -229,7 +248,6 @@ local function get_math_symbol_span_at_pos(track, row, col)
     start_col = sc,
     end_row = er,
     end_col = ec,
-    text = text,
   }
 end
 
@@ -238,18 +256,13 @@ local function get_math_symbol_span_at_cursor(track, row, col, mode)
     return nil
   end
 
-  local line = vim.api.nvim_buf_get_lines(track.bufnr, row, row + 1, false)[1] or ""
-  if line == "" then
-    return nil
-  end
-
   local candidates = {}
-  if col >= 0 and col < #line then
+  if cursor_in_range(track, row, col, { include_right_edge = false }) then
     candidates[#candidates + 1] = col
   end
   if is_insert_like_mode(mode) and col > 0 then
     local left_col = col - 1
-    if left_col >= 0 and left_col < #line then
+    if cursor_in_range(track, row, left_col, { include_right_edge = false }) then
       candidates[#candidates + 1] = left_col
     end
   end
@@ -268,10 +281,7 @@ local function make_highlighted_preview_source(track, cursor_row, cursor_col, mo
     return nil, nil, nil
   end
 
-  local source_text = get_text_slice(track.bufnr, track.row, track.col, track.end_row, track.end_col)
-  if source_text == "" then
-    source_text = track.source or ""
-  end
+  local source_text = track.source or ""
   if source_text == "" then
     return nil, nil, nil
   end
@@ -290,9 +300,14 @@ local function make_highlighted_preview_source(track, cursor_row, cursor_col, mo
     return source_text, source_text, nil
   end
 
-  local prefix = get_text_slice(track.bufnr, track.row, track.col, span.start_row, span.start_col)
-  local suffix = get_text_slice(track.bufnr, span.end_row, span.end_col, track.end_row, track.end_col)
-  local replacement = "#text(red)[$" .. span.text .. "$];"
+  local prefix = track_source_slice(track, track.row, track.col, span.start_row, span.start_col)
+  local highlighted = track_source_slice(track, span.start_row, span.start_col, span.end_row, span.end_col)
+  local suffix = track_source_slice(track, span.end_row, span.end_col, track.end_row, track.end_col)
+  if prefix == nil or highlighted == nil or suffix == nil then
+    return source_text, source_text, nil
+  end
+
+  local replacement = "#text(red)[$" .. highlighted .. "$];"
   return prefix .. replacement .. suffix, source_text, span
 end
 
@@ -357,6 +372,91 @@ local function cleanup_asset(asset)
   end
 end
 
+local function clear_visible_preview(preview, bufnr)
+  display.clear_preview(preview, bufnr)
+  cleanup_asset(preview.visible_asset)
+  preview.visible_asset = nil
+  preview.render_key = nil
+  preview.track_key = nil
+  preview.source_range = nil
+  preview.handoff_key = nil
+end
+
+local function replace_preview_asset(bufnr, preview, track, asset, opts)
+  opts = opts or {}
+  local old = preview.visible_asset
+  local old_render_key = preview.render_key
+  local old_track_key = preview.track_key
+  local old_source_range = preview.source_range
+  local old_handoff_key = preview.handoff_key
+
+  preview.visible_asset = asset
+  preview.render_key = opts.render_key
+  preview.track_key = opts.track_key
+  preview.source_range = opts.source_range
+  preview.handoff_key = opts.handoff_key
+
+  if not display.show_preview(bufnr, preview, track, asset) then
+    preview.visible_asset = old
+    preview.render_key = old_render_key
+    preview.track_key = old_track_key
+    preview.source_range = old_source_range
+    preview.handoff_key = old_handoff_key
+    cleanup_asset(asset)
+    return false
+  end
+
+  cleanup_asset(old)
+  return true
+end
+
+-- Keep the preview surface non-blank when the cursor reveals a rendered formula:
+-- clone the projection's current asset into the preview window until the live
+-- highlighted render is ready to replace it.
+local function seed_continuity_preview(bufnr, preview, projection, track, preview_key)
+  if projection == nil or projection.visible_asset == nil then
+    if preview.visible_asset ~= nil and (projection == nil or preview.track_key ~= projection.key) then
+      clear_visible_preview(preview, bufnr)
+    end
+    return false
+  end
+  if preview.visible_asset ~= nil and preview.track_key == projection.key then
+    return true
+  end
+
+  local source_asset = projection.visible_asset
+  local cols, rows = display.preview_cell_dimensions(source_asset.width_px, source_asset.height_px)
+  local asset = {
+    image_id = state.allocate_image_id(bufnr),
+    path = source_asset.path,
+    width_px = source_asset.width_px,
+    height_px = source_asset.height_px,
+    cols = cols,
+    rows = rows,
+    render_key = "handoff:" .. tostring(preview_key),
+    source_render_key = source_asset.render_key,
+  }
+
+  if not terminal.upload(asset.path, asset.image_id, asset.cols, asset.rows) then
+    cleanup_asset(asset)
+    if preview.visible_asset ~= nil and preview.track_key ~= projection.key then
+      clear_visible_preview(preview, bufnr)
+    end
+    return false
+  end
+
+  local replaced = replace_preview_asset(bufnr, preview, track, asset, {
+    render_key = nil,
+    handoff_key = preview_key,
+    track_key = projection.key,
+    source_range = range_object(track),
+  })
+  if not replaced and preview.visible_asset ~= nil and preview.track_key ~= projection.key then
+    clear_visible_preview(preview, bufnr)
+  end
+  return replaced
+end
+
 local function close_timer(preview)
   if preview.timer ~= nil then
     preview.timer:stop()
@@ -380,13 +480,8 @@ function M.clear(bufnr, opts)
     close_timer(preview)
   end
   session.cancel_live_preview(bufnr)
-  display.clear_preview(preview, bufnr)
-  cleanup_asset(preview.visible_asset)
-  preview.visible_asset = nil
+  clear_visible_preview(preview, bufnr)
   preview.pending_key = nil
-  preview.render_key = nil
-  preview.track_key = nil
-  preview.source_range = nil
 end
 
 local function render_projection_preview(bufnr, projection, track, cursor_row, cursor_col, mode)
@@ -395,6 +490,14 @@ local function render_projection_preview(bufnr, projection, track, cursor_row, c
   if binding == nil then
     M.clear(bufnr)
     return
+  end
+
+  local bs = state.get_buf_state(bufnr)
+  local preview = bs.live_preview
+  local attempted_continuity = false
+  if preview.visible_asset == nil or preview.track_key ~= projection.key then
+    attempted_continuity = true
+    seed_continuity_preview(bufnr, preview, projection, track, nil)
   end
 
   local preview_source, source_text, span = make_highlighted_preview_source(track, cursor_row, cursor_col, mode)
@@ -406,18 +509,23 @@ local function render_projection_preview(bufnr, projection, track, cursor_row, c
   local ctx = context.resolve(bufnr, binding, tracker.get_context(bufnr), image.config)
   local key =
     preview_render_key(projection, track, ctx, source_text, preview_source, cursor_row, cursor_col, span, image.config)
-  local bs = state.get_buf_state(bufnr)
-  local preview = bs.live_preview
 
   if preview.render_key == key and preview.visible_asset ~= nil then
     display.show_preview(bufnr, preview, track, preview.visible_asset)
     return
   end
   if preview.pending_key == key then
-    if preview.visible_asset ~= nil then
+    if preview.visible_asset ~= nil and preview.track_key == projection.key then
       display.show_preview(bufnr, preview, track, preview.visible_asset)
+    else
+      seed_continuity_preview(bufnr, preview, projection, track, key)
     end
     return
+  end
+
+  local has_current_preview = preview.visible_asset ~= nil and preview.track_key == projection.key
+  if not has_current_preview and not attempted_continuity then
+    seed_continuity_preview(bufnr, preview, projection, track, key)
   end
 
   local preview_track = vim.deepcopy(track)
@@ -475,7 +583,7 @@ local function render_projection_preview(bufnr, projection, track, cursor_row, c
     if preview.visible_asset == nil then
       M.clear(bufnr)
     end
-  elseif preview.visible_asset ~= nil then
+  elseif preview.visible_asset ~= nil and preview.track_key == projection.key then
     display.show_preview(bufnr, preview, track, preview.visible_asset)
   end
 end
@@ -628,18 +736,12 @@ function M.handle_service_response(bufnr, resp, meta)
     return
   end
 
-  local old = preview.visible_asset
-  preview.visible_asset = asset
-  preview.render_key = meta.preview_key
-  preview.track_key = meta.track_key
-  preview.source_range = meta.source_range
-
-  if not display.show_preview(bufnr, preview, track, asset) then
-    preview.visible_asset = old
-    cleanup_asset(asset)
-    return
-  end
-  cleanup_asset(old)
+  replace_preview_asset(bufnr, preview, track, asset, {
+    render_key = meta.preview_key,
+    handoff_key = nil,
+    track_key = meta.track_key,
+    source_range = meta.source_range,
+  })
 end
 
 function M.detach(bufnr)
