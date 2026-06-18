@@ -31,26 +31,26 @@ local function le(a_row, a_col, b_row, b_col)
   return lt(a_row, a_col, b_row, b_col) or (a_row == b_row and a_col == b_col)
 end
 
-local function edit_end(start_row, start_col, row_delta, end_col)
-  if row_delta == 0 then
-    return start_row, start_col + end_col
-  end
-  return start_row + row_delta, end_col
-end
-
 local function range_intersects(a, b)
   return lt(a.row, a.col, b.end_row, b.end_col) and lt(b.row, b.col, a.end_row, a.end_col)
 end
 
-local function point_in_range(row, col, range)
-  return lt(range.row, range.col, row, col) and lt(row, col, range.end_row, range.end_col)
+local function range_touches(a, b)
+  return le(a.row, a.col, b.end_row, b.end_col) and le(b.row, b.col, a.end_row, a.end_col)
 end
 
-local function edit_touches_track(track, row, col, end_row, end_col)
-  if row == end_row and col == end_col then
-    return point_in_range(row, col, track)
+local function range_union(a, b)
+  local row, col = a.row, a.col
+  if lt(b.row, b.col, row, col) then
+    row, col = b.row, b.col
   end
-  return range_intersects(track, { row = row, col = col, end_row = end_row, end_col = end_col })
+
+  local end_row, end_col = a.end_row, a.end_col
+  if lt(end_row, end_col, b.end_row, b.end_col) then
+    end_row, end_col = b.end_row, b.end_col
+  end
+
+  return { row = row, col = col, end_row = end_row, end_col = end_col }
 end
 
 local function resolve_scanner(kind, scanner)
@@ -110,19 +110,6 @@ local function materialize_damage(bufnr, damage)
   })
 end
 
-local function materialize_pending_damage(bufnr, state)
-  local pending = state.pending_damage_ranges or {}
-  if #pending == 0 then
-    return false
-  end
-
-  for _, damage in ipairs(pending) do
-    materialize_damage(bufnr, damage)
-  end
-  state.pending_damage_ranges = {}
-  return true
-end
-
 local function current_damage_ranges(bufnr)
   local ranges = {}
   local marks = vim.api.nvim_buf_get_extmarks(bufnr, damage_ns, 0, -1, { details = true })
@@ -142,6 +129,21 @@ end
 
 local function clear_damage(bufnr)
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, damage_ns, 0, -1)
+end
+
+local function line_damage_from_on_lines(bufnr, firstline, new_lastline)
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  if line_count <= 0 then
+    return { row = 0, col = 0, end_row = 0, end_col = 0 }
+  end
+
+  local row = math.max(0, math.min(firstline or 0, line_count - 1))
+  if new_lastline ~= nil and new_lastline > (firstline or 0) then
+    local end_row = math.max(row, math.min(new_lastline - 1, line_count - 1))
+    return { row = row, col = 0, end_row = end_row, end_col = line_len(bufnr, end_row) }
+  end
+
+  return { row = row, col = 0, end_row = row, end_col = 0 }
 end
 
 local function byte_at(bufnr, row, col)
@@ -484,6 +486,16 @@ local function retire(bufnr, track)
   pcall(vim.api.nvim_buf_del_extmark, bufnr, ns, track.id)
 end
 
+local function mark_track_dirty_once(track)
+  if track.state == "retired" then
+    return
+  end
+  if track.state ~= "dirty" then
+    track.rev = track.rev + 1
+  end
+  track.state = "dirty"
+end
+
 local function sync_track(bufnr, track)
   if track.state == "retired" then
     return
@@ -492,7 +504,7 @@ local function sync_track(bufnr, track)
   local pos = vim.api.nvim_buf_get_extmark_by_id(bufnr, ns, track.id, { details = true })
   local row, col, details = pos[1], pos[2], pos[3]
   if row == nil then
-    track.state = "dirty"
+    mark_track_dirty_once(track)
     track.invalid = true
     return
   end
@@ -502,6 +514,9 @@ local function sync_track(bufnr, track)
   track.end_row = details.end_row or row
   track.end_col = details.end_col or col
   track.invalid = details.invalid == true
+  if track.invalid then
+    mark_track_dirty_once(track)
+  end
 end
 
 local function sync_tracks(bufnr, state)
@@ -521,6 +536,72 @@ end
 
 local function has_repair_geometry(damage_ranges, state)
   return #damage_ranges > 0 or has_dirty_track(state)
+end
+
+local function track_range(track)
+  return { row = track.row, col = track.col, end_row = track.end_row, end_col = track.end_col }
+end
+
+local function merge_touching_ranges(ranges)
+  table.sort(ranges, function(a, b)
+    if a.row ~= b.row or a.col ~= b.col then
+      return lt(a.row, a.col, b.row, b.col)
+    end
+    return lt(a.end_row, a.end_col, b.end_row, b.end_col)
+  end)
+
+  local merged = {}
+  for _, range in ipairs(ranges) do
+    local prev = merged[#merged]
+    if prev ~= nil and range_touches(prev, range) then
+      merged[#merged] = range_union(prev, range)
+    else
+      merged[#merged + 1] = vim.deepcopy(range)
+    end
+  end
+  return merged
+end
+
+local function expand_damage_through_touching_tracks(state, damage_ranges)
+  local affected = vim.deepcopy(damage_ranges or {})
+  local included = {}
+
+  for _, track in ipairs(dirty_tracks(state)) do
+    if track.state ~= "retired" then
+      included[track.id] = true
+      affected[#affected + 1] = track_range(track)
+    end
+  end
+
+  affected = merge_touching_ranges(affected)
+  local changed = true
+  while changed do
+    changed = false
+    for _, track in ipairs(live_tracks(state)) do
+      if not included[track.id] then
+        local current = track_range(track)
+        local touches = track.invalid == true
+        if not touches then
+          for _, damage in ipairs(affected) do
+            if range_touches(current, damage) then
+              touches = true
+              break
+            end
+          end
+        end
+
+        if touches then
+          included[track.id] = true
+          mark_track_dirty_once(track)
+          affected[#affected + 1] = current
+          affected = merge_touching_ranges(affected)
+          changed = true
+        end
+      end
+    end
+  end
+
+  return affected
 end
 
 local function edit_touches_context_unit(unit, damage)
@@ -611,10 +692,6 @@ end
 
 local function repair_windows(bufnr, state, damage_ranges)
   local damages = vim.deepcopy(damage_ranges or {})
-
-  for _, track in ipairs(dirty_tracks(state)) do
-    damages[#damages + 1] = { row = track.row, col = track.col, end_row = track.end_row, end_col = track.end_col }
-  end
 
   local windows = {}
   for _, damage in ipairs(damages) do
@@ -867,7 +944,6 @@ function M.attach(bufnr, opts)
     generation = generation,
     next_track_id = 1,
     tracks = {},
-    pending_damage_ranges = {},
     repair_scheduled = false,
     debug_enabled = opts.debug == true,
     on_repair = opts.on_repair,
@@ -886,36 +962,13 @@ function M.attach(bufnr, opts)
   end
 
   local attached = vim.api.nvim_buf_attach(bufnr, false, {
-    on_bytes = function(_, changed_buf, _, row, col, _, old_end_row, old_end_col, _, new_end_row, new_end_col)
+    on_lines = function(_, changed_buf, _, firstline, _, new_lastline)
       if state_by_buf[changed_buf] ~= state then
         return true
       end
 
-      local old_row, old_col = edit_end(row, col, old_end_row, old_end_col)
-      local new_row, new_col = edit_end(row, col, new_end_row, new_end_col)
-
-      -- on_bytes runs before Neovim maps extmarks for this edit. Raw damage is
-      -- only constructor data for on_lines; repair must consume damage extmarks.
-      for _, track in pairs(state.tracks) do
-        if track.state ~= "retired" and edit_touches_track(track, row, col, old_row, old_col) then
-          track.state = "dirty"
-          track.rev = track.rev + 1
-        end
-      end
-
-      state.pending_damage_ranges[#state.pending_damage_ranges + 1] =
-        { row = row, col = col, end_row = new_row, end_col = new_col }
-    end,
-    on_lines = function(_, changed_buf)
-      if state_by_buf[changed_buf] ~= state then
-        return true
-      end
-
-      local had_damage = materialize_pending_damage(changed_buf, state)
-      sync_tracks(changed_buf, state)
-      if had_damage or has_dirty_track(state) then
-        schedule_repair(changed_buf, state)
-      end
+      materialize_damage(changed_buf, line_damage_from_on_lines(changed_buf, firstline, new_lastline))
+      schedule_repair(changed_buf, state)
     end,
     on_reload = function(_, reloaded_buf)
       if state_by_buf[reloaded_buf] == state then
@@ -975,7 +1028,7 @@ function M.repair(bufnr)
 
   -- Repair consumes only current repair geometry: core track extmarks plus damage extmarks.
   sync_tracks(bufnr, state)
-  local damage_ranges = current_damage_ranges(bufnr)
+  local damage_ranges = expand_damage_through_touching_tracks(state, current_damage_ranges(bufnr))
   if not has_repair_geometry(damage_ranges, state) then
     return true
   end
