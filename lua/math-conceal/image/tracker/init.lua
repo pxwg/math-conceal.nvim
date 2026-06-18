@@ -4,6 +4,7 @@ local M = {}
 
 local ns = vim.api.nvim_create_namespace("math-conceal.image.tracker")
 local context_ns = vim.api.nvim_create_namespace("math-conceal.image.tracker.context")
+local damage_ns = vim.api.nvim_create_namespace("math-conceal.image.tracker.damage")
 
 ---@type table<integer, table>
 local state_by_buf = {}
@@ -71,10 +72,76 @@ local function notify_once(message, level)
   vim.notify_once("math-conceal image tracker: " .. message, level or vim.log.levels.WARN)
 end
 
+local function line_len(bufnr, row)
+  local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
+  return #line
+end
+
 local function buf_end(bufnr)
   local last = vim.api.nvim_buf_line_count(bufnr) - 1
-  local line = vim.api.nvim_buf_get_lines(bufnr, last, last + 1, false)[1] or ""
-  return last, #line
+  return last, line_len(bufnr, last)
+end
+
+local function clamp_range(bufnr, row, col, end_row, end_col)
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  if line_count <= 0 then
+    return 0, 0, 0, 0
+  end
+
+  row = math.max(0, math.min(row, line_count - 1))
+  end_row = math.max(row, math.min(end_row, line_count - 1))
+  col = math.max(0, math.min(col, line_len(bufnr, row)))
+  end_col = math.max(0, math.min(end_col, line_len(bufnr, end_row)))
+  if row == end_row and end_col < col then
+    end_col = col
+  end
+  return row, col, end_row, end_col
+end
+
+local function materialize_damage(bufnr, damage)
+  local row, col, end_row, end_col = clamp_range(bufnr, damage.row, damage.col, damage.end_row, damage.end_col)
+  vim.api.nvim_buf_set_extmark(bufnr, damage_ns, row, col, {
+    end_row = end_row,
+    end_col = end_col,
+    right_gravity = false,
+    end_right_gravity = true,
+    undo_restore = false,
+    priority = 140,
+  })
+end
+
+local function materialize_pending_damage(bufnr, state)
+  local pending = state.pending_damage_ranges or {}
+  if #pending == 0 then
+    return false
+  end
+
+  for _, damage in ipairs(pending) do
+    materialize_damage(bufnr, damage)
+  end
+  state.pending_damage_ranges = {}
+  return true
+end
+
+local function current_damage_ranges(bufnr)
+  local ranges = {}
+  local marks = vim.api.nvim_buf_get_extmarks(bufnr, damage_ns, 0, -1, { details = true })
+  for _, mark in ipairs(marks) do
+    local row, col, details = mark[2], mark[3], mark[4] or {}
+    if row ~= nil and details.invalid ~= true then
+      ranges[#ranges + 1] = {
+        row = row,
+        col = col,
+        end_row = details.end_row or row,
+        end_col = details.end_col or col,
+      }
+    end
+  end
+  return ranges
+end
+
+local function clear_damage(bufnr)
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, damage_ns, 0, -1)
 end
 
 local function byte_at(bufnr, row, col)
@@ -452,8 +519,8 @@ local function has_dirty_track(state)
   return false
 end
 
-local function has_pending_repair(state)
-  return #state.damage_ranges > 0 or has_dirty_track(state)
+local function has_repair_geometry(damage_ranges, state)
+  return #damage_ranges > 0 or has_dirty_track(state)
 end
 
 local function edit_touches_context_unit(unit, damage)
@@ -542,8 +609,8 @@ local function merge_windows(windows)
   return merged
 end
 
-local function repair_windows(bufnr, state)
-  local damages = vim.deepcopy(state.damage_ranges)
+local function repair_windows(bufnr, state, damage_ranges)
+  local damages = vim.deepcopy(damage_ranges or {})
 
   for _, track in ipairs(dirty_tracks(state)) do
     damages[#damages + 1] = { row = track.row, col = track.col, end_row = track.end_row, end_col = track.end_col }
@@ -705,6 +772,7 @@ local function clear_namespaces(bufnr)
   end
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, ns, 0, -1)
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, context_ns, 0, -1)
+  clear_damage(bufnr)
   debug_projection.clear(bufnr)
 end
 
@@ -715,6 +783,7 @@ local function seed(bufnr, state)
   end
 
   vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+  clear_damage(bufnr)
   debug_projection.clear(bufnr)
 
   for _, node in ipairs(scan.nodes or {}) do
@@ -798,7 +867,7 @@ function M.attach(bufnr, opts)
     generation = generation,
     next_track_id = 1,
     tracks = {},
-    damage_ranges = {},
+    pending_damage_ranges = {},
     repair_scheduled = false,
     debug_enabled = opts.debug == true,
     on_repair = opts.on_repair,
@@ -825,6 +894,8 @@ function M.attach(bufnr, opts)
       local old_row, old_col = edit_end(row, col, old_end_row, old_end_col)
       local new_row, new_col = edit_end(row, col, new_end_row, new_end_col)
 
+      -- on_bytes runs before Neovim maps extmarks for this edit. Raw damage is
+      -- only constructor data for on_lines; repair must consume damage extmarks.
       for _, track in pairs(state.tracks) do
         if track.state ~= "retired" and edit_touches_track(track, row, col, old_row, old_col) then
           track.state = "dirty"
@@ -832,8 +903,19 @@ function M.attach(bufnr, opts)
         end
       end
 
-      state.damage_ranges[#state.damage_ranges + 1] = { row = row, col = col, end_row = new_row, end_col = new_col }
-      schedule_repair(changed_buf, state)
+      state.pending_damage_ranges[#state.pending_damage_ranges + 1] =
+        { row = row, col = col, end_row = new_row, end_col = new_col }
+    end,
+    on_lines = function(_, changed_buf)
+      if state_by_buf[changed_buf] ~= state then
+        return true
+      end
+
+      local had_damage = materialize_pending_damage(changed_buf, state)
+      sync_tracks(changed_buf, state)
+      if had_damage or has_dirty_track(state) then
+        schedule_repair(changed_buf, state)
+      end
     end,
     on_reload = function(_, reloaded_buf)
       if state_by_buf[reloaded_buf] == state then
@@ -891,26 +973,25 @@ function M.repair(bufnr)
     return false
   end
 
+  -- Repair consumes only current repair geometry: core track extmarks plus damage extmarks.
   sync_tracks(bufnr, state)
-  if not has_pending_repair(state) then
+  local damage_ranges = current_damage_ranges(bufnr)
+  if not has_repair_geometry(damage_ranges, state) then
     return true
   end
 
-  local damages = vim.deepcopy(state.damage_ranges)
   local before_snapshots = track_snapshots(state)
   local old_context_units = vim.deepcopy(state.context_units or {})
-  local context_refresh_needed = context_units_touch_damages(state.context_units, damages)
-  if sync_context_units(bufnr, state) then
-    context_refresh_needed = true
-  end
+  local context_refresh_needed = sync_context_units(bufnr, state)
+    or context_units_touch_damages(state.context_units, damage_ranges)
 
-  for _, window in ipairs(repair_windows(bufnr, state)) do
+  for _, window in ipairs(repair_windows(bufnr, state, damage_ranges)) do
     local ok, result = reconcile_window(bufnr, state, window)
     if not ok then
       refresh_debug(state)
       return false
     end
-    if new_context_units_touch_damages(state.context_units, result and result.context_units, damages) then
+    if new_context_units_touch_damages(state.context_units, result and result.context_units, damage_ranges) then
       context_refresh_needed = true
     end
   end
@@ -927,7 +1008,7 @@ function M.repair(bufnr)
     apply_context_to_tracks(state)
   end
 
-  state.damage_ranges = {}
+  clear_damage(bufnr)
   sync_tracks(bufnr, state)
   emit_repair(
     state,
