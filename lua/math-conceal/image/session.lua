@@ -348,7 +348,7 @@ end
 function M.classify_flow(bufnr, binding, payload, meta)
   meta = meta or {}
   meta.kind = "flow_classification"
-  local service = M.ensure(bufnr, binding, "full")
+  local service = M.ensure(bufnr, binding, "flow")
   if service == nil or service.job_id == nil then
     return false
   end
