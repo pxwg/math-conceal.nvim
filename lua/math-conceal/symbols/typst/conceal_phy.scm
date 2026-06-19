@@ -1,12 +1,10 @@
+; https://www.typst.app/universe/package/physica
 ; Physics constants, symbols, units and quantities
 ([
   (ident)
   (field)
 ] @typ_phy_symbol
-  (#any-of? @typ_phy_symbol
-    "angstrom" "degree" "hbar" "percent" "permille" "permyriad" "prime" "prime.double"
-    "prime.double.rev" "prime.quad" "prime.rev" "prime.rev.double" "prime.rev.triple" "prime.triple"
-    "prime.triple.rev" "ell" "planck" "planck.reduce" "Re" "Im" "grad")
+  (#any-of? @typ_phy_symbol "hbar" "grad")
   (#has-ancestor? @typ_phy_symbol math)
   (#not-has-parent? @typ_phy_symbol field call)
   (#set-conceal! @typ_phy_symbol "conceal"))
@@ -275,7 +273,7 @@
   "^" @sup_symbol
   sup: (_) @typ_phy_symbol
   (#has-ancestor? @sup_symbol math formula)
-  (#any-of? @typ_phy_symbol "dagger" "degree" "TT")
+  (#any-of? @typ_phy_symbol "dagger" "TT")
   (#set! @sup_symbol conceal "")
   (#set-sup! @typ_phy_symbol "sup"))
 
