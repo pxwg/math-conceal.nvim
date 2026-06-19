@@ -461,7 +461,7 @@ local function setup_autocmds()
           local bufnr = vim.api.nvim_win_get_buf(winid)
           if M._buffers[bufnr] ~= nil and not seen[bufnr] then
             seen[bufnr] = true
-            projection.refresh(bufnr)
+            projection.on_layout_change(bufnr)
           end
         end
       end
@@ -477,7 +477,7 @@ local function setup_autocmds()
         if changed then
           projection.force_render(bufnr)
         else
-          projection.refresh(bufnr)
+          projection.on_layout_change(bufnr)
         end
       end
     end,

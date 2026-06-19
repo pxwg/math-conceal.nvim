@@ -3,6 +3,7 @@ local display_composer = require("math-conceal.image.display-composer")
 local display_wrap = require("math-conceal.image.display-wrap")
 local flow_classification = require("math-conceal.image.flow-classification")
 local state = require("math-conceal.image.state")
+local track_view = require("math-conceal.image.track-view")
 local tracker = require("math-conceal.image.tracker")
 
 local M = {}
@@ -161,6 +162,7 @@ local function classify_code(view)
       flow_role = entry and entry.flow_role or role,
       display_role = "inline",
       render_policy = display_view.source_facts and display_view.source_facts.render_policy or nil,
+      renderable = true,
     }
   end
   if display_view ~= nil and display_view.source_display_kind == "block" then
@@ -175,14 +177,16 @@ local function classify_code(view)
       flow_role = entry and entry.flow_role or role,
       display_role = "block",
       render_policy = display_view.source_facts and display_view.source_facts.render_policy or nil,
+      renderable = true,
     }
   end
   return {
     inline = false,
     break_line = true,
     isolated = false,
-    flow_role = "unknown",
+    flow_role = entry and entry.flow_role or "unknown",
     display_role = "unknown",
+    renderable = false,
   }
 end
 
@@ -217,15 +221,24 @@ local function view_from_snapshot(bufnr, snapshot)
   end
 
   local ref = ref_from_snapshot(snapshot)
+  local current = track_view.for_ref(ref, { require_valid = true })
+  if current == nil or current.invalid == true or current.kind ~= "typst" then
+    return nil
+  end
+
   local key = tracker.track_ref_key(ref)
   local view = {}
-  for field, value in pairs(snapshot) do
+  for field, value in pairs(current) do
     view[field] = value
   end
   view.ref = ref
   view.key = key
   view.equation = classify_object(view)
-  view.asset = display_asset_for_key(bufnr, key)
+  if view.equation and view.equation.renderable == false then
+    view.asset = nil
+  else
+    view.asset = display_asset_for_key(bufnr, key)
+  end
   return view
 end
 
