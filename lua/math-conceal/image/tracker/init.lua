@@ -424,6 +424,8 @@ local function diff_event(state, before_snapshots, after_snapshots, old_context_
     changed_refs = refs_from_keys(after, changed_keys),
     retired_refs = refs_from_keys(before, retired_keys),
     affected_refs = refs_from_keys(vim.tbl_extend("force", before, after), affected_keys),
+    damage_ranges = vim.deepcopy(opts.damage_ranges or {}),
+    repair_ranges = vim.deepcopy(opts.repair_ranges or opts.damage_ranges or {}),
     context = {
       changed = first_changed_context ~= nil,
       signature = state.context_signature or "",
@@ -1028,23 +1030,24 @@ function M.repair(bufnr)
 
   -- Repair consumes only current repair geometry: core track extmarks plus damage extmarks.
   sync_tracks(bufnr, state)
-  local damage_ranges = expand_damage_through_touching_tracks(state, current_damage_ranges(bufnr))
-  if not has_repair_geometry(damage_ranges, state) then
+  local damage_ranges = current_damage_ranges(bufnr)
+  local repair_ranges = expand_damage_through_touching_tracks(state, damage_ranges)
+  if not has_repair_geometry(repair_ranges, state) then
     return true
   end
 
   local before_snapshots = track_snapshots(state)
   local old_context_units = vim.deepcopy(state.context_units or {})
   local context_refresh_needed = sync_context_units(bufnr, state)
-    or context_units_touch_damages(state.context_units, damage_ranges)
+    or context_units_touch_damages(state.context_units, repair_ranges)
 
-  for _, window in ipairs(repair_windows(bufnr, state, damage_ranges)) do
+  for _, window in ipairs(repair_windows(bufnr, state, repair_ranges)) do
     local ok, result = reconcile_window(bufnr, state, window)
     if not ok then
       refresh_debug(state)
       return false
     end
-    if new_context_units_touch_damages(state.context_units, result and result.context_units, damage_ranges) then
+    if new_context_units_touch_damages(state.context_units, result and result.context_units, repair_ranges) then
       context_refresh_needed = true
     end
   end
@@ -1065,7 +1068,10 @@ function M.repair(bufnr)
   sync_tracks(bufnr, state)
   emit_repair(
     state,
-    diff_event(state, before_snapshots, track_snapshots(state), old_context_units, state.context_units)
+    diff_event(state, before_snapshots, track_snapshots(state), old_context_units, state.context_units, {
+      damage_ranges = damage_ranges,
+      repair_ranges = repair_ranges,
+    })
   )
   return true
 end

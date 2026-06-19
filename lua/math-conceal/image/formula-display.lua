@@ -1,4 +1,6 @@
 local display = require("math-conceal.image.display")
+local display_composer = require("math-conceal.image.display-composer")
+local display_wrap = require("math-conceal.image.display-wrap")
 local state = require("math-conceal.image.state")
 local tracker = require("math-conceal.image.tracker")
 
@@ -88,6 +90,20 @@ end
 
 local function line_len(bufnr, row)
   return #source_line(bufnr, row)
+end
+
+local function active_window_for_bufnr(bufnr)
+  local current = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_is_valid(current) and vim.api.nvim_win_get_buf(current) == bufnr then
+    return current
+  end
+
+  local wins = vim.fn.win_findbuf(bufnr)
+  for _, winid in ipairs(wins) do
+    if vim.api.nvim_win_is_valid(winid) then
+      return winid
+    end
+  end
 end
 
 local function ref_from_snapshot(snapshot)
@@ -246,7 +262,14 @@ local function build_plan(bufnr, views, config)
       visual = true,
       active = nil,
       suppressed_rows = rows,
-      key = "visual:" .. tostring(visual_start) .. ":" .. tostring(visual_end) .. ":" .. row_set_key(rows),
+      key = "visual:"
+        .. tostring(visual_start)
+        .. ":"
+        .. tostring(visual_end)
+        .. ":"
+        .. row_set_key(rows)
+        .. ":"
+        .. display_wrap.layout_key(bufnr),
     }
   end
 
@@ -256,7 +279,7 @@ local function build_plan(bufnr, views, config)
       visual = false,
       active = nil,
       suppressed_rows = rows,
-      key = "normal-conceal:" .. row_set_key(rows),
+      key = "normal-conceal:" .. row_set_key(rows) .. ":" .. display_wrap.layout_key(bufnr),
     }
   end
 
@@ -283,6 +306,7 @@ local function build_plan(bufnr, views, config)
       tostring(cursor_row),
       active and active.view and active.view.key or "",
       row_set_key(rows),
+      display_wrap.layout_key(bufnr),
     }, "|"),
   }
 end
@@ -416,35 +440,65 @@ local function append_text(lines, text, hl)
   end
 end
 
-local function trim_next_source_leading_space(layout, text)
+local function display_composer_opts(bufnr, start_row, end_row)
+  local winid = active_window_for_bufnr(bufnr)
+  local opts = {
+    exclude_namespaces = {
+      [state.display_ns] = true,
+      [state.aux_ns] = true,
+      [state.preview_ns] = true,
+    },
+    winid = winid,
+  }
+  opts.math_conceal_marks_by_row = display_composer.collect_math_conceal_marks_by_row(bufnr, start_row, end_row, opts)
+    or {}
+  return opts
+end
+
+local function trim_next_source_leading_chunks(layout, chunks)
   if layout == nil or layout.trim_next_source_leading_space ~= true then
-    return text
+    return chunks
   end
   layout.trim_next_source_leading_space = false
-  local trimmed = (text or ""):gsub("^[ \t]+", "")
-  return trimmed
+  local out = {}
+  local trimming = true
+  for _, chunk in ipairs(chunks or {}) do
+    local text = chunk[1] or ""
+    if trimming then
+      text = text:gsub("^[ \t]+", "")
+      trimming = text == ""
+    end
+    if text ~= "" then
+      out[#out + 1] = { text, chunk[2] or "" }
+    end
+  end
+  return out
 end
 
-local function append_source_text(lines, text, layout)
-  append_text(lines, trim_next_source_leading_space(layout, text), "")
+local function append_source_chunks(lines, chunks, layout)
+  for _, chunk in ipairs(trim_next_source_leading_chunks(layout, chunks)) do
+    append_text(lines, chunk[1], chunk[2])
+  end
 end
 
-local function append_source_segment(lines, bufnr, from_pos, to_pos, layout)
+local function append_source_line_segment(lines, bufnr, row, start_col, end_col, layout, opts)
+  local chunks = display_composer.line_range_chunks(bufnr, row, start_col, end_col, opts)
+  append_source_chunks(lines, chunks or {}, layout)
+end
+
+local function append_source_segment(lines, bufnr, from_pos, to_pos, layout, opts)
   if from_pos.row == to_pos.row then
-    local line = source_line(bufnr, from_pos.row)
-    append_source_text(lines, line:sub(from_pos.col + 1, to_pos.col), layout)
+    append_source_line_segment(lines, bufnr, from_pos.row, from_pos.col, to_pos.col, layout, opts)
     return
   end
 
-  local first = source_line(bufnr, from_pos.row)
-  append_source_text(lines, first:sub(from_pos.col + 1), layout)
+  append_source_line_segment(lines, bufnr, from_pos.row, from_pos.col, line_len(bufnr, from_pos.row), layout, opts)
   newline(lines)
   for row = from_pos.row + 1, to_pos.row - 1 do
-    append_source_text(lines, source_line(bufnr, row), layout)
+    append_source_line_segment(lines, bufnr, row, 0, line_len(bufnr, row), layout, opts)
     newline(lines)
   end
-  local last = source_line(bufnr, to_pos.row)
-  append_source_text(lines, last:sub(1, to_pos.col), layout)
+  append_source_line_segment(lines, bufnr, to_pos.row, 0, to_pos.col, layout, opts)
 end
 
 local function append_image_atom(lines, bufnr, view, layout)
@@ -495,13 +549,14 @@ end
 local function compose_run(bufnr, run)
   local lines = { {} }
   local layout = {}
+  local opts = display_composer_opts(bufnr, run.start_row, run.end_row)
   local pos = { row = run.start_row, col = 0 }
   for _, view in ipairs(run.views) do
-    append_source_segment(lines, bufnr, pos, { row = view.row, col = view.col }, layout)
+    append_source_segment(lines, bufnr, pos, { row = view.row, col = view.col }, layout, opts)
     append_image_atom(lines, bufnr, view, layout)
     pos = { row = view.end_row, col = view.end_col }
   end
-  append_source_segment(lines, bufnr, pos, { row = run.end_row, col = line_len(bufnr, run.end_row) }, layout)
+  append_source_segment(lines, bufnr, pos, { row = run.end_row, col = line_len(bufnr, run.end_row) }, layout, opts)
   return finalize_lines(lines)
 end
 
@@ -641,55 +696,136 @@ local function clear_artifacts_for_track_keys(bufnr, fd, keys)
   return touched
 end
 
-local function slice_lines(lines, first, last)
-  local out = {}
-  if type(lines) ~= "table" or first == nil or last == nil or first > last then
-    return out
+local function choose_run_landing(bufnr, run)
+  if run.start_row > 0 then
+    return run.start_row - 1, false, nil
   end
-  for idx = first, math.min(last, #lines) do
-    out[#out + 1] = lines[idx]
+
+  local next_row = run.end_row + 1
+  if next_row < vim.api.nvim_buf_line_count(bufnr) then
+    return next_row, true, nil
   end
-  return out
+
+  return run.start_row, true, run.start_row
 end
 
-local function source_line_landing_opts(bufnr, row, virt_text, virt_lines)
-  local opts = {
-    virt_text = virt_text,
-    virt_text_pos = "overlay",
-    conceal = "",
-    end_row = row,
-    end_col = line_len(bufnr, row),
-    right_gravity = true,
-    end_right_gravity = false,
-    invalidate = true,
-    priority = 220,
-  }
-  if #virt_lines > 0 then
-    opts.virt_lines = virt_lines
-    opts.virt_lines_overflow = "trunc"
+local function has_ranges(ranges)
+  for _, range in ipairs(ranges or {}) do
+    if range.row ~= nil then
+      return true
+    end
   end
-  return opts
+  return false
+end
+
+local function effective_repair_ranges(event)
+  if has_ranges(event and event.repair_ranges) then
+    return event.repair_ranges
+  end
+  return (event and event.damage_ranges) or {}
+end
+
+local function row_span_touches_ranges(start_row, end_row, ranges)
+  for _, range in ipairs(ranges or {}) do
+    local range_start = tonumber(range.row) or 0
+    local range_end = tonumber(range.end_row) or range_start
+    if range_start <= end_row and range_end >= start_row then
+      return true
+    end
+  end
+  return false
+end
+
+local function view_touches_ranges(view, ranges)
+  return view ~= nil and row_span_touches_ranges(view.row, view.end_row, ranges)
+end
+
+local function line_run_touches_ranges(bufnr, run, ranges)
+  if run == nil then
+    return false
+  end
+
+  local anchor_row = choose_run_landing(bufnr, run)
+  return (anchor_row ~= nil and row_span_touches_ranges(anchor_row, anchor_row, ranges))
+    or row_span_touches_ranges(run.start_row, run.end_row, ranges)
+end
+
+local function artifact_track_keys_in_ranges(bufnr, fd, views, plan, ranges)
+  local keys = {}
+  if not has_ranges(ranges) then
+    return keys
+  end
+
+  local by_key = views_by_key(views)
+
+  for _, artifact in pairs(fd.line_runs or {}) do
+    local current_run = nil
+    local touched = false
+    for _, track_key in ipairs(artifact.track_keys or {}) do
+      local view = by_key[track_key]
+      if view ~= nil and eligible_view(view, plan.suppressed_rows) then
+        local run = run_around_row(view.row, views, plan.suppressed_rows)
+        if line_run_touches_ranges(bufnr, run, ranges) then
+          current_run = run
+          touched = true
+          break
+        end
+      elseif view_touches_ranges(view, ranges) then
+        touched = true
+        break
+      end
+    end
+
+    if touched then
+      for _, track_key in ipairs(artifact.track_keys or {}) do
+        add_key(keys, track_key)
+      end
+      for _, track_key in ipairs(current_run and run_track_keys(current_run) or {}) do
+        add_key(keys, track_key)
+      end
+    end
+  end
+
+  for _, artifact in pairs(fd.row_attached or {}) do
+    for _, track_key in ipairs(artifact.track_keys or {}) do
+      local view = by_key[track_key]
+      if view_touches_ranges(view, ranges) then
+        add_key(keys, track_key)
+      end
+    end
+  end
+
+  return keys
 end
 
 local function render_line_run(bufnr, fd, run)
   local key = line_run_key(run)
 
-  local display_lines = compose_run(bufnr, run)
-  local lead = run.views[1]
-  if lead == nil then
+  local display_lines = display_wrap.wrap_virt_lines(bufnr, compose_run(bufnr, run), {
+    winid = active_window_for_bufnr(bufnr),
+  })
+  if #display_lines == 0 then
     return
   end
-  local anchor_row = lead.row
-  local first_line = display_lines[1] or { { "", "" } }
-  local tail_lines = slice_lines(display_lines, 2, #display_lines)
-  local opts = source_line_landing_opts(bufnr, anchor_row, first_line, tail_lines)
-  opts.id = fd.extmarks.line_runs[key]
-  fd.extmarks.line_runs[key] = vim.api.nvim_buf_set_extmark(bufnr, state.display_ns, anchor_row, 0, opts)
+
+  local anchor_row, virt_lines_above, visible_landing_row = choose_run_landing(bufnr, run)
+  if anchor_row == nil then
+    return
+  end
+
+  fd.extmarks.line_runs[key] = vim.api.nvim_buf_set_extmark(bufnr, state.display_ns, anchor_row, 0, {
+    id = fd.extmarks.line_runs[key],
+    virt_lines = display_lines,
+    virt_lines_above = virt_lines_above,
+    virt_lines_overflow = "trunc",
+    invalidate = true,
+    priority = 220,
+  })
 
   local conceal_keys = {}
   local conceal_idx = 0
   for row = run.start_row, run.end_row do
-    if row ~= anchor_row then
+    if row ~= visible_landing_row then
       conceal_idx = conceal_idx + 1
       local conceal_key = key .. ":conceal:" .. tostring(conceal_idx)
       conceal_keys[#conceal_keys + 1] = conceal_key
@@ -697,6 +833,9 @@ local function render_line_run(bufnr, fd, run)
         id = fd.extmarks.conceal_rows[conceal_key],
         conceal_lines = "",
         end_row = row,
+        right_gravity = true,
+        end_right_gravity = true,
+        undo_restore = true,
         invalidate = true,
         priority = 220,
       })
@@ -809,7 +948,9 @@ function M.on_tracker_repair(event, config)
     render_track_keys(bufnr, fd, views, plan, all_view_keys(views))
   else
     local keys = ref_key_set(event.affected_refs)
+    merge_keys(keys, ref_key_set(event.changed_refs))
     merge_keys(keys, ref_key_set(event.retired_refs))
+    merge_keys(keys, artifact_track_keys_in_ranges(bufnr, fd, views, plan, effective_repair_ranges(event)))
     merge_keys(keys, fd.suppressed_track_keys)
     merge_keys(keys, suppressed_keys)
     render_track_keys(bufnr, fd, views, plan, keys)
