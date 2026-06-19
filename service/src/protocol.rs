@@ -10,6 +10,8 @@ pub enum IncomingMessage {
     Compile(CompileRequest),
     #[serde(rename = "render_formulas")]
     RenderFormulas(RenderFormulasRequest),
+    #[serde(rename = "classify_flow")]
+    ClassifyFlow(ClassifyFlowRequest),
     #[serde(rename = "shutdown")]
     Shutdown,
 }
@@ -65,6 +67,40 @@ pub struct FormulaNodeRequest {
     pub source: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct ClassifyFlowRequest {
+    pub request_id: String,
+    #[serde(default)]
+    pub cache_key: Option<String>,
+    pub context_id: String,
+    pub context_rev: u64,
+    #[serde(default)]
+    pub context_source: String,
+    pub root: PathBuf,
+    #[serde(default)]
+    pub inputs: HashMap<String, String>,
+    #[serde(default)]
+    pub layout_width_pt: Option<f64>,
+    #[serde(default)]
+    pub layout_baseline_pt: Option<f64>,
+    pub nodes: Vec<FlowNodeRequest>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct FlowNodeRequest {
+    pub node_id: String,
+    pub node_rev: u64,
+    #[serde(default)]
+    pub source_hash: Option<String>,
+    #[serde(default)]
+    pub kind: Option<String>,
+    pub source: String,
+    #[serde(default)]
+    pub target_start: Option<usize>,
+    #[serde(default)]
+    pub target_end: Option<usize>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 pub enum OutgoingMessage {
@@ -72,6 +108,8 @@ pub enum OutgoingMessage {
     CompileResult(CompileResponse),
     #[serde(rename = "formula_rendered")]
     FormulaRendered(FormulaRenderResponse),
+    #[serde(rename = "flow_classified")]
+    FlowClassified(FlowClassifyResponse),
 }
 
 #[derive(Debug, Serialize)]
@@ -140,6 +178,35 @@ pub struct FormulaRenderResponse {
     pub compile_us: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub render_us: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FlowClassifyResponse {
+    pub request_id: String,
+    pub context_id: String,
+    pub context_rev: u64,
+    pub node_id: String,
+    pub node_rev: u64,
+    pub status: CompileStatus,
+    pub flow_role: FlowRole,
+    pub layout_role: FlowRole,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub layout_break: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layout_reason: Option<String>,
+    pub diagnostics: Vec<DiagnosticInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compile_us: Option<u64>,
+}
+
+#[derive(Debug, Copy, Clone, Serialize)]
+pub enum FlowRole {
+    #[serde(rename = "inline")]
+    Inline,
+    #[serde(rename = "block")]
+    Block,
+    #[serde(rename = "unknown")]
+    Unknown,
 }
 
 #[cfg(test)]

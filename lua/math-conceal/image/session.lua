@@ -33,17 +33,47 @@ local function same_full_context(left, right)
     return false
   end
   for _, key in ipairs({
+    "type",
     "backend",
     "cache_key",
     "context_id",
     "context_rev",
     "context_source",
     "root",
+    "inputs",
     "output_dir",
     "ppi",
     "worker_count",
   }) do
-    if left[key] ~= right[key] then
+    if type(left[key]) == "table" or type(right[key]) == "table" then
+      if not vim.deep_equal(left[key], right[key]) then
+        return false
+      end
+    elseif left[key] ~= right[key] then
+      return false
+    end
+  end
+  return true
+end
+
+local function same_flow_context(left, right)
+  if left == nil or right == nil then
+    return false
+  end
+  for _, key in ipairs({
+    "type",
+    "cache_key",
+    "context_id",
+    "context_rev",
+    "context_source",
+    "root",
+    "inputs",
+  }) do
+    if type(left[key]) == "table" or type(right[key]) == "table" then
+      if not vim.deep_equal(left[key], right[key]) then
+        return false
+      end
+    elseif left[key] ~= right[key] then
       return false
     end
   end
@@ -96,9 +126,52 @@ local function merged_full_request(existing, payload, meta)
   return merged
 end
 
+local function merged_flow_request(existing, payload, meta)
+  if existing == nil or not same_flow_context(existing.payload, payload) then
+    return copy_request(payload, meta)
+  end
+
+  local merged = copy_request(payload, meta)
+  local by_node = {}
+  local order = {}
+
+  local function add_node(node, node_meta)
+    if node == nil or node.node_id == nil then
+      return
+    end
+    if by_node[node.node_id] == nil then
+      order[#order + 1] = node.node_id
+    end
+    by_node[node.node_id] = vim.deepcopy(node)
+    if node_meta ~= nil then
+      merged.meta.node_meta = merged.meta.node_meta or {}
+      merged.meta.node_meta[node.node_id] = vim.deepcopy(node_meta)
+    end
+  end
+
+  for _, node in ipairs(existing.payload.nodes or {}) do
+    add_node(node, existing.meta.node_meta and existing.meta.node_meta[node.node_id] or nil)
+  end
+  for _, node in ipairs(payload.nodes or {}) do
+    add_node(node, meta and meta.node_meta and meta.node_meta[node.node_id] or nil)
+  end
+
+  merged.payload.nodes = {}
+  for _, node_id in ipairs(order) do
+    merged.payload.nodes[#merged.payload.nodes + 1] = by_node[node_id]
+  end
+  merged.payload.request_id = payload.request_id
+  merged.meta.request_id = payload.request_id
+  return merged
+end
+
 local function queue_payload(service, payload, meta)
   if meta ~= nil and meta.kind == "live_preview" then
     service.pending_preview = copy_request(payload, meta)
+    return true
+  end
+  if meta ~= nil and meta.kind == "flow_classification" then
+    service.pending_flow = merged_flow_request(service.pending_flow, payload, meta)
     return true
   end
 
@@ -140,6 +213,10 @@ send_next_payload = function(service)
 
   local next_payload = service.pending_full
   service.pending_full = nil
+  if next_payload == nil then
+    next_payload = service.pending_flow
+    service.pending_flow = nil
+  end
   if next_payload == nil then
     next_payload = service.pending_preview
     service.pending_preview = nil
@@ -257,6 +334,21 @@ end
 function M.render_formulas(bufnr, binding, payload, meta)
   meta = meta or {}
   local service = M.ensure(bufnr, binding, service_kind_for_meta(meta))
+  if service == nil or service.job_id == nil then
+    return false
+  end
+
+  if service.active_request_id ~= nil then
+    return queue_payload(service, payload, meta)
+  end
+
+  return send_payload(service, payload, meta)
+end
+
+function M.classify_flow(bufnr, binding, payload, meta)
+  meta = meta or {}
+  meta.kind = "flow_classification"
+  local service = M.ensure(bufnr, binding, "full")
   if service == nil or service.job_id == nil then
     return false
   end

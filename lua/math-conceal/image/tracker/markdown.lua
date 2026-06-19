@@ -464,6 +464,8 @@ local function node_from_entry(entry)
   local content = content_range(range, spec)
   return {
     kind = "markdown",
+    source_kind = "markdown",
+    object_kind = "math",
     node_type = "math",
     row = range[1],
     col = range[2],
@@ -478,6 +480,7 @@ local function node_from_entry(entry)
     prelude_signature = vim.fn.sha256(""),
     source_facts = {
       source_kind = "markdown",
+      object_kind = "math",
       delimiter = spec.id,
       display_kind = spec.display_kind,
       content_range = content,

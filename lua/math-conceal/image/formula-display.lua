@@ -1,6 +1,7 @@
 local display = require("math-conceal.image.display")
 local display_composer = require("math-conceal.image.display-composer")
 local display_wrap = require("math-conceal.image.display-wrap")
+local flow_classification = require("math-conceal.image.flow-classification")
 local state = require("math-conceal.image.state")
 local tracker = require("math-conceal.image.tracker")
 
@@ -142,6 +143,56 @@ local function classify_equation(view)
   }
 end
 
+local function classify_code(view)
+  local ctx = state.get_buf_state(view.bufnr).context
+  local entry = flow_classification.classification(view.bufnr, view, ctx)
+  local role = entry and (entry.layout_role or entry.flow_role) or nil
+  local display_view = flow_classification.apply_role(view, role, {
+    flow_role = entry and entry.flow_role or nil,
+    render_policy = entry and entry.render_policy or nil,
+    reason = entry and entry.layout_reason or nil,
+  })
+  local break_line = view.row ~= view.end_row
+  if display_view ~= nil and display_view.source_display_kind == "inline" then
+    return {
+      inline = true,
+      break_line = break_line,
+      isolated = false,
+      flow_role = entry and entry.flow_role or role,
+      display_role = "inline",
+      render_policy = display_view.source_facts and display_view.source_facts.render_policy or nil,
+    }
+  end
+  if display_view ~= nil and display_view.source_display_kind == "block" then
+    local start_line = source_line(view.bufnr, view.row)
+    local end_line = source_line(view.bufnr, view.end_row)
+    local prefix = start_line:sub(1, view.col)
+    local suffix = end_line:sub(view.end_col + 1)
+    return {
+      inline = false,
+      break_line = break_line,
+      isolated = break_line == true or (prefix:match("^%s*$") ~= nil and suffix:match("^%s*$") ~= nil),
+      flow_role = entry and entry.flow_role or role,
+      display_role = "block",
+      render_policy = display_view.source_facts and display_view.source_facts.render_policy or nil,
+    }
+  end
+  return {
+    inline = false,
+    break_line = true,
+    isolated = false,
+    flow_role = "unknown",
+    display_role = "unknown",
+  }
+end
+
+local function classify_object(view)
+  if (view.object_kind or view.node_type) == "code" then
+    return classify_code(view)
+  end
+  return classify_equation(view)
+end
+
 local function row_attachable(equation)
   return equation.inline == true and equation.break_line ~= true
 end
@@ -173,7 +224,7 @@ local function view_from_snapshot(bufnr, snapshot)
   end
   view.ref = ref
   view.key = key
-  view.equation = classify_equation(view)
+  view.equation = classify_object(view)
   view.asset = display_asset_for_key(bufnr, key)
   return view
 end

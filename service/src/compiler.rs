@@ -4,16 +4,43 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use comemo::Track;
 use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::{ColorType, ImageEncoder};
 use typst::diag::{Severity, SourceDiagnostic};
+use typst::engine::{Engine, Route, Sink, Traced};
+use typst::foundations::{
+    Content, Label, SequenceElem, Str, StyleChain, StyledElem, Styles, Target, TargetElem, Value,
+};
+use typst::introspection::{Introspector, Locator, MetadataElem};
 use typst::layout::PagedDocument;
+use typst::routines::{Arenas, FragmentKind, RealizationKind};
+use typst::syntax::{LinkedNode, Side, Source, Span, ast};
+use typst::{Document, World};
 
 use crate::protocol::{
-    CompileRequest, CompileResponse, CompileStatus, DiagnosticInfo, FormulaNodeRequest,
-    FormulaRenderResponse, PageResult, RenderFormulasRequest,
+    ClassifyFlowRequest, CompileRequest, CompileResponse, CompileStatus, DiagnosticInfo,
+    FlowClassifyResponse, FlowNodeRequest, FlowRole, FormulaNodeRequest, FormulaRenderResponse,
+    PageResult, RenderFormulasRequest,
 };
 use crate::world::ConcealerWorld;
+
+const FLOW_TARGET_MARKER: &str = "__math_conceal_flow_target__";
+const FLOW_LAYOUT_BEFORE_LABEL: &str = "__math_conceal_layout_before__";
+const FLOW_LAYOUT_AFTER_LABEL: &str = "__math_conceal_layout_after__";
+
+struct FlowClassifyDocument {
+    source_text: String,
+    node_start: usize,
+    node_end: usize,
+}
+
+struct FlowLayoutClassification {
+    role: FlowRole,
+    breaks: bool,
+    reason: Option<String>,
+    diagnostics: Vec<DiagnosticInfo>,
+}
 
 pub struct Compiler {
     world: ConcealerWorld,
@@ -194,6 +221,288 @@ impl Compiler {
             compile_us: Some(compile_us),
             render_us: Some(render_us),
             rendered_pages: Some(rendered_count),
+        }
+    }
+
+    pub fn classify_flow(
+        &mut self,
+        req: &ClassifyFlowRequest,
+        node: &FlowNodeRequest,
+    ) -> FlowClassifyResponse {
+        let _cache_identity = (&node.source_hash, &node.kind);
+        let document = build_flow_classify_document(
+            &req.context_source,
+            &node.source,
+            node.target_start,
+            node.target_end,
+        );
+        let node_start = document.node_start;
+        let node_end = document.node_end;
+        self.world
+            .update(document.source_text, req.root.clone(), req.inputs.clone());
+        comemo::evict(30);
+
+        let t_compile = Instant::now();
+        let mut sink = Sink::new();
+        let result = self.classify_current_world_flow(node_start, node_end, &mut sink);
+
+        match result {
+            Ok(kind) => {
+                let warnings = sink.warnings();
+                let flow_role = match kind {
+                    FragmentKind::Inline => FlowRole::Inline,
+                    FragmentKind::Block => FlowRole::Block,
+                };
+                let mut diagnostics = self.format_diagnostics(warnings.iter());
+                let layout = self.classify_flow_layout(req, node, flow_role);
+                diagnostics.extend(layout.diagnostics);
+                let compile_us = t_compile.elapsed().as_micros() as u64;
+                FlowClassifyResponse {
+                    request_id: req.request_id.clone(),
+                    context_id: req.context_id.clone(),
+                    context_rev: req.context_rev,
+                    node_id: node.node_id.clone(),
+                    node_rev: node.node_rev,
+                    status: CompileStatus::Ok,
+                    flow_role,
+                    layout_role: layout.role,
+                    layout_break: layout.breaks,
+                    layout_reason: layout.reason,
+                    diagnostics,
+                    compile_us: Some(compile_us),
+                }
+            }
+            Err(mut diagnostics) => {
+                let warnings = sink.warnings();
+                diagnostics.splice(0..0, self.format_diagnostics(warnings.iter()));
+                let compile_us = t_compile.elapsed().as_micros() as u64;
+                FlowClassifyResponse {
+                    request_id: req.request_id.clone(),
+                    context_id: req.context_id.clone(),
+                    context_rev: req.context_rev,
+                    node_id: node.node_id.clone(),
+                    node_rev: node.node_rev,
+                    status: CompileStatus::Error,
+                    flow_role: FlowRole::Unknown,
+                    layout_role: FlowRole::Unknown,
+                    layout_break: false,
+                    layout_reason: None,
+                    diagnostics,
+                    compile_us: Some(compile_us),
+                }
+            }
+        }
+    }
+
+    fn classify_current_world_flow(
+        &self,
+        node_start: usize,
+        node_end: usize,
+        sink: &mut Sink,
+    ) -> Result<FragmentKind, Vec<DiagnosticInfo>> {
+        let world = (&self.world as &dyn World).track();
+        let main = self.world.main();
+        let main_source = self.world.source(main).map_err(|err| {
+            vec![DiagnosticInfo {
+                message: format!("failed to read classifier source: {err}"),
+                severity: "error".to_string(),
+                file: None,
+                line: None,
+                column: None,
+            }]
+        })?;
+
+        let Some(target_span) = find_target_expr_span(&main_source, node_start, node_end) else {
+            return Err(vec![DiagnosticInfo {
+                message: "failed to locate target node expression in classifier source".to_string(),
+                severity: "error".to_string(),
+                file: None,
+                line: None,
+                column: None,
+            }]);
+        };
+
+        let traced = Traced::new(target_span);
+        let module = typst_eval::eval(
+            &typst::ROUTINES,
+            world,
+            traced.track(),
+            sink.track_mut(),
+            Route::default().track(),
+            &main_source,
+        )
+        .map_err(|errors| self.format_diagnostics(errors.iter()))?;
+
+        let traced_values = sink.clone().values();
+        let Some((value, _)) = traced_values.into_iter().next() else {
+            return Err(vec![DiagnosticInfo {
+                message: "failed to inspect target node value".to_string(),
+                severity: "error".to_string(),
+                file: None,
+                line: None,
+                column: None,
+            }]);
+        };
+
+        let module_content = module.content();
+        let active_styles = styles_at_marker(&module_content).ok_or_else(|| {
+            vec![DiagnosticInfo {
+                message: "failed to locate target style marker in classifier source".to_string(),
+                severity: "error".to_string(),
+                file: None,
+                line: None,
+                column: None,
+            }]
+        })?;
+
+        let content = value.display();
+        self.classify_content_flow(&content, &active_styles, sink)
+    }
+
+    fn classify_content_flow(
+        &self,
+        content: &Content,
+        active_styles: &Styles,
+        sink: &mut Sink,
+    ) -> Result<FragmentKind, Vec<DiagnosticInfo>> {
+        let world = (&self.world as &dyn World).track();
+        let traced = Traced::default();
+        let library = self.world.library();
+        let base = StyleChain::new(&library.styles);
+        let target = TargetElem::target.set(Target::Paged).wrap();
+        let target_styles = base.chain(&target);
+        let styles = target_styles.chain(active_styles);
+        let introspector = Introspector::default();
+        let mut engine = Engine {
+            routines: &typst::ROUTINES,
+            world,
+            introspector: introspector.track(),
+            traced: traced.track(),
+            sink: sink.track_mut(),
+            route: Route::default(),
+        };
+        let arenas = Arenas::default();
+        let mut locator = Locator::root().split();
+        let mut kind = FragmentKind::Block;
+
+        (engine.routines.realize)(
+            RealizationKind::LayoutFragment { kind: &mut kind },
+            &mut engine,
+            &mut locator,
+            &arenas,
+            content,
+            styles,
+        )
+        .map_err(|errors| self.format_diagnostics(errors.iter()))?;
+
+        Ok(kind)
+    }
+
+    fn classify_flow_layout(
+        &mut self,
+        req: &ClassifyFlowRequest,
+        node: &FlowNodeRequest,
+        flow_role: FlowRole,
+    ) -> FlowLayoutClassification {
+        if !matches!(flow_role, FlowRole::Inline) {
+            return FlowLayoutClassification {
+                role: flow_role,
+                breaks: false,
+                reason: None,
+                diagnostics: Vec::new(),
+            };
+        }
+
+        let Some(width_pt) = req
+            .layout_width_pt
+            .filter(|width| width.is_finite() && *width > 0.0)
+        else {
+            return FlowLayoutClassification {
+                role: flow_role,
+                breaks: false,
+                reason: None,
+                diagnostics: Vec::new(),
+            };
+        };
+        let baseline_pt = req
+            .layout_baseline_pt
+            .filter(|baseline| baseline.is_finite() && *baseline > 0.0)
+            .unwrap_or(11.0);
+
+        let document = build_flow_layout_document(
+            &req.context_source,
+            &node.source,
+            node.target_start,
+            node.target_end,
+            width_pt,
+            baseline_pt,
+        );
+        self.world
+            .update(document.source_text, req.root.clone(), req.inputs.clone());
+        comemo::evict(30);
+
+        let warned = typst::compile::<PagedDocument>(&self.world);
+        let mut diagnostics = self.format_diagnostics(warned.warnings.iter());
+        let document = match warned.output {
+            Ok(document) => document,
+            Err(errors) => {
+                diagnostics.extend(self.format_diagnostics(errors.iter()));
+                return FlowLayoutClassification {
+                    role: FlowRole::Unknown,
+                    breaks: false,
+                    reason: Some("layout_probe_failed".to_string()),
+                    diagnostics,
+                };
+            }
+        };
+
+        let Some(before) = labelled_position(&document, FLOW_LAYOUT_BEFORE_LABEL) else {
+            diagnostics.push(DiagnosticInfo {
+                message: "failed to locate flow layout before marker".to_string(),
+                severity: "warning".to_string(),
+                file: None,
+                line: None,
+                column: None,
+            });
+            return FlowLayoutClassification {
+                role: FlowRole::Unknown,
+                breaks: false,
+                reason: Some("layout_probe_missing_marker".to_string()),
+                diagnostics,
+            };
+        };
+        let Some(after) = labelled_position(&document, FLOW_LAYOUT_AFTER_LABEL) else {
+            diagnostics.push(DiagnosticInfo {
+                message: "failed to locate flow layout after marker".to_string(),
+                severity: "warning".to_string(),
+                file: None,
+                line: None,
+                column: None,
+            });
+            return FlowLayoutClassification {
+                role: FlowRole::Unknown,
+                breaks: false,
+                reason: Some("layout_probe_missing_marker".to_string()),
+                diagnostics,
+            };
+        };
+
+        let y_delta = (after.point.y - before.point.y).abs().to_pt();
+        let page_break = after.page != before.page;
+        if page_break || y_delta > 0.1 {
+            FlowLayoutClassification {
+                role: FlowRole::Block,
+                breaks: true,
+                reason: Some("layout_probe_break".to_string()),
+                diagnostics,
+            }
+        } else {
+            FlowLayoutClassification {
+                role: FlowRole::Inline,
+                breaks: false,
+                reason: None,
+                diagnostics,
+            }
         }
     }
 
@@ -427,6 +736,186 @@ fn build_formula_entry_document(context_source: &str, node_path: &str) -> String
     source
 }
 
+fn build_flow_classify_document(
+    context_source: &str,
+    node_source: &str,
+    target_start: Option<usize>,
+    target_end: Option<usize>,
+) -> FlowClassifyDocument {
+    let mut source = String::new();
+    let context_source = context_source.trim_end();
+    if !context_source.is_empty() {
+        source.push_str(context_source);
+        source.push('\n');
+    }
+
+    let target_start = clamp_char_boundary(node_source, target_start.unwrap_or(0));
+    let target_end = clamp_char_boundary(node_source, target_end.unwrap_or(node_source.len()));
+    let (target_start, target_end) = if target_start <= target_end {
+        (target_start, target_end)
+    } else {
+        (target_end, target_end)
+    };
+
+    source.push_str(&node_source[..target_start]);
+    source.push_str("#metadata(\"");
+    source.push_str(FLOW_TARGET_MARKER);
+    source.push_str("\")\n");
+    let node_start = source.len();
+    source.push_str(&node_source[target_start..target_end]);
+    let node_end = source.len();
+    source.push_str(&node_source[target_end..]);
+    if !node_source.ends_with('\n') {
+        source.push('\n');
+    }
+
+    FlowClassifyDocument {
+        source_text: source,
+        node_start,
+        node_end,
+    }
+}
+
+fn build_flow_layout_document(
+    context_source: &str,
+    node_source: &str,
+    target_start: Option<usize>,
+    target_end: Option<usize>,
+    width_pt: f64,
+    baseline_pt: f64,
+) -> FlowClassifyDocument {
+    let mut source = String::new();
+    let context_source = context_source.trim_end();
+    if !context_source.is_empty() {
+        source.push_str(context_source);
+        source.push('\n');
+    }
+    source.push_str(&format!(
+        "#set page(width: {width_pt}pt, height: auto, margin: (x: 0pt, y: 0pt), fill: none)\n#set text(size: {baseline_pt}pt)\n"
+    ));
+
+    let target_start = clamp_char_boundary(node_source, target_start.unwrap_or(0));
+    let target_end = clamp_char_boundary(node_source, target_end.unwrap_or(node_source.len()));
+    let (target_start, target_end) = if target_start <= target_end {
+        (target_start, target_end)
+    } else {
+        (target_end, target_end)
+    };
+
+    if let Some(line_start) = node_source[..target_start].rfind('\n') {
+        source.push_str(&node_source[..=line_start]);
+    }
+    source.push_str("x #box(width: 0pt)[#metadata(\"");
+    source.push_str(FLOW_LAYOUT_BEFORE_LABEL);
+    source.push_str("\") <");
+    source.push_str(FLOW_LAYOUT_BEFORE_LABEL);
+    source.push_str(">]");
+    let node_start = source.len();
+    source.push_str(&node_source[target_start..target_end]);
+    let node_end = source.len();
+    source.push_str("#metadata(\"");
+    source.push_str(FLOW_LAYOUT_AFTER_LABEL);
+    source.push_str("\") <");
+    source.push_str(FLOW_LAYOUT_AFTER_LABEL);
+    source.push('>');
+    source.push('\n');
+
+    FlowClassifyDocument {
+        source_text: source,
+        node_start,
+        node_end,
+    }
+}
+
+fn clamp_char_boundary(source: &str, offset: usize) -> usize {
+    let mut offset = offset.min(source.len());
+    while offset > 0 && !source.is_char_boundary(offset) {
+        offset -= 1;
+    }
+    offset
+}
+
+fn labelled_position(document: &PagedDocument, label: &str) -> Option<typst::layout::Position> {
+    let label = Label::construct(Str::from(label)).ok()?;
+    let content = document.introspector().query_label(label).ok()?;
+    let location = content.location()?;
+    Some(document.introspector().position(location))
+}
+
+fn find_target_expr_span(source: &Source, node_start: usize, node_end: usize) -> Option<Span> {
+    if node_start >= node_end {
+        return None;
+    }
+
+    let root = LinkedNode::new(source.root());
+    for cursor in node_start..node_end {
+        if let Some(span) = find_target_expr_span_from_cursor(&root, cursor, node_start, node_end) {
+            return Some(span);
+        }
+    }
+
+    None
+}
+
+fn find_target_expr_span_from_cursor(
+    root: &LinkedNode,
+    cursor: usize,
+    node_start: usize,
+    node_end: usize,
+) -> Option<Span> {
+    let mut node = root.leaf_at(cursor, Side::After)?;
+    let mut best = None;
+    loop {
+        let range = node.range();
+        if range.start >= node_start
+            && range.end <= node_end
+            && node.get().cast::<ast::Expr>().is_some()
+        {
+            best = Some(node.span());
+        }
+
+        let Some(parent) = node.parent().cloned() else {
+            break;
+        };
+        node = parent;
+    }
+
+    best
+}
+
+fn styles_at_marker(content: &Content) -> Option<Styles> {
+    find_marker_styles(content, &Styles::new())
+}
+
+fn find_marker_styles(content: &Content, active_styles: &Styles) -> Option<Styles> {
+    if is_flow_marker(content) {
+        return Some(active_styles.clone());
+    }
+
+    if let Some(styled) = content.to_packed::<StyledElem>() {
+        let mut child_styles = styled.styles.clone();
+        child_styles.apply(active_styles.clone());
+        return find_marker_styles(&styled.child, &child_styles);
+    }
+
+    if let Some(sequence) = content.to_packed::<SequenceElem>() {
+        for child in &sequence.children {
+            if let Some(styles) = find_marker_styles(child, active_styles) {
+                return Some(styles);
+            }
+        }
+    }
+
+    None
+}
+
+fn is_flow_marker(content: &Content) -> bool {
+    let Some(metadata) = content.to_packed::<MetadataElem>() else {
+        return false;
+    };
+    matches!(&metadata.value, Value::Str(value) if value.as_str() == FLOW_TARGET_MARKER)
+}
+
 fn formula_node_path(node_id: &str) -> String {
     format!(
         "/__typst_concealer__/nodes/{}.typ",
@@ -484,6 +973,200 @@ mod tests {
             "typst-concealer-service-{name}-{}-{stamp}",
             std::process::id()
         ))
+    }
+
+    fn classify_flow_case(context_source: &str, source: &str) -> FlowClassifyResponse {
+        classify_flow_case_with_target(context_source, source, None, None)
+    }
+
+    fn classify_flow_case_with_target(
+        context_source: &str,
+        source: &str,
+        target_start: Option<usize>,
+        target_end: Option<usize>,
+    ) -> FlowClassifyResponse {
+        classify_flow_case_with_layout(context_source, source, target_start, target_end, None)
+    }
+
+    fn classify_flow_case_with_layout(
+        context_source: &str,
+        source: &str,
+        target_start: Option<usize>,
+        target_end: Option<usize>,
+        layout_width_pt: Option<f64>,
+    ) -> FlowClassifyResponse {
+        let req = ClassifyFlowRequest {
+            request_id: "flow:test".to_string(),
+            cache_key: None,
+            context_id: "ctx".to_string(),
+            context_rev: 1,
+            context_source: context_source.to_string(),
+            root: temp_dir("flow-root"),
+            inputs: HashMap::new(),
+            layout_width_pt,
+            layout_baseline_pt: Some(11.0),
+            nodes: Vec::new(),
+        };
+        let node = FlowNodeRequest {
+            node_id: "node".to_string(),
+            node_rev: 1,
+            source_hash: None,
+            kind: Some("code".to_string()),
+            source: source.to_string(),
+            target_start,
+            target_end,
+        };
+
+        let mut compiler = Compiler::new();
+        compiler.classify_flow(&req, &node)
+    }
+
+    #[test]
+    fn flow_classifier_uses_target_node_not_whole_context_document() {
+        let resp = classify_flow_case(
+            "#let chip() = box[GEOMETRY]\n\n#let tag = (geometry: chip())\n",
+            "#tag.geometry",
+        );
+
+        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
+    }
+
+    #[test]
+    fn flow_classifier_uses_target_range_inside_node_source() {
+        let source = "#let chip() = box[GEOMETRY]\n\n#let tag = (geometry: chip())\n#tag.geometry";
+        let target_start = source.find("#tag.geometry").unwrap();
+        let resp = classify_flow_case_with_target(
+            "",
+            source,
+            Some(target_start),
+            Some(target_start + "#tag.geometry".len()),
+        );
+
+        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
+    }
+
+    #[test]
+    fn flow_classifier_respects_selector_show_rules_at_target_position() {
+        let resp = classify_flow_case("#show strong: it => block(it.body)\n", "#strong[hi]");
+
+        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(resp.flow_role, FlowRole::Block), "{resp:?}");
+    }
+
+    #[test]
+    fn flow_classifier_distinguishes_inline_and_block_values() {
+        let inline = classify_flow_case("", "#box[hi]");
+        assert!(matches!(&inline.status, CompileStatus::Ok), "{inline:?}");
+        assert!(matches!(inline.flow_role, FlowRole::Inline), "{inline:?}");
+
+        let block = classify_flow_case("", "#block[hi]");
+        assert!(matches!(&block.status, CompileStatus::Ok), "{block:?}");
+        assert!(matches!(block.flow_role, FlowRole::Block), "{block:?}");
+
+        let let_block = classify_flow_case("#let b = block[hi]\n", "#b");
+        assert!(
+            matches!(&let_block.status, CompileStatus::Ok),
+            "{let_block:?}"
+        );
+        assert!(
+            matches!(let_block.flow_role, FlowRole::Block),
+            "{let_block:?}"
+        );
+    }
+
+    #[test]
+    fn flow_layout_probe_promotes_full_width_inline_box_after_prefix() {
+        let source = "Hello #box(width: 100%)[hello, test]";
+        let target_start = source.find("#box").unwrap();
+        let resp = classify_flow_case_with_layout(
+            "",
+            source,
+            Some(target_start),
+            Some(source.len()),
+            Some(100.0),
+        );
+
+        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
+        assert!(matches!(resp.layout_role, FlowRole::Block), "{resp:?}");
+        assert!(resp.layout_break, "{resp:?}");
+    }
+
+    #[test]
+    fn flow_layout_probe_keeps_small_relative_width_inline_box_on_same_line() {
+        let source = "x #box(width: 1%)[hi]";
+        let target_start = source.find("#box").unwrap();
+        let resp = classify_flow_case_with_layout(
+            "",
+            source,
+            Some(target_start),
+            Some(source.len()),
+            Some(100.0),
+        );
+
+        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
+        assert!(matches!(resp.layout_role, FlowRole::Inline), "{resp:?}");
+        assert!(!resp.layout_break, "{resp:?}");
+    }
+
+    #[test]
+    fn flow_layout_probe_promotes_full_width_inline_box_at_line_start() {
+        let source = "#box(width: 100%)[hi]";
+        let resp =
+            classify_flow_case_with_layout("", source, Some(0), Some(source.len()), Some(100.0));
+
+        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
+        assert!(matches!(resp.layout_role, FlowRole::Block), "{resp:?}");
+        assert!(resp.layout_break, "{resp:?}");
+        assert_eq!(resp.layout_reason.as_deref(), Some("layout_probe_break"));
+    }
+
+    #[test]
+    fn flow_layout_probe_promotes_multiline_full_width_inline_box_at_line_start() {
+        let source = "#box(width: 100%)[hi\n  $ sin(alpha) $\n  hello]";
+        let resp =
+            classify_flow_case_with_layout("", source, Some(0), Some(source.len()), Some(100.0));
+
+        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
+        assert!(matches!(resp.layout_role, FlowRole::Block), "{resp:?}");
+        assert!(resp.layout_break, "{resp:?}");
+        assert_eq!(resp.layout_reason.as_deref(), Some("layout_probe_break"));
+    }
+
+    #[test]
+    fn flow_layout_probe_keeps_auto_width_inline_box_on_same_line() {
+        let source = "Hello #box(width: auto)[hello, test]";
+        let target_start = source.find("#box").unwrap();
+        let resp = classify_flow_case_with_layout(
+            "",
+            source,
+            Some(target_start),
+            Some(source.len()),
+            Some(100.0),
+        );
+
+        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
+        assert!(matches!(resp.layout_role, FlowRole::Inline), "{resp:?}");
+        assert!(!resp.layout_break, "{resp:?}");
+    }
+
+    #[test]
+    fn flow_layout_probe_keeps_multiline_text_call_inline() {
+        let source = "#text[\n  hello\n] world";
+        let target_end = source.find(" world").unwrap();
+        let resp =
+            classify_flow_case_with_layout("", source, Some(0), Some(target_end), Some(1000.0));
+
+        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
+        assert!(matches!(resp.layout_role, FlowRole::Inline), "{resp:?}");
+        assert!(!resp.layout_break, "{resp:?}");
     }
 
     #[test]

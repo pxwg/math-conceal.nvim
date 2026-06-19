@@ -97,11 +97,13 @@ function M.resolve(bufnr, binding, tracker_context, config)
     source_kind = binding.source_kind or binding.kind,
     header = binding.header or "",
     mitex_package = binding.mitex_package,
+    code_block = vim.deepcopy(binding.code_block or {}),
     context_units = context_units,
     preamble_include_line = resolve_preamble_include_line(bufnr, binding, effective_root),
   }
 
   ctx.context_source = wrapper.build_context_document(config, ctx)
+  ctx.flow_context_source = wrapper.build_flow_context_document(ctx)
   ctx.context_signature = signature({
     binding.kind,
     binding.source_kind,
@@ -112,6 +114,7 @@ function M.resolve(bufnr, binding, tracker_context, config)
     ctx.effective_root,
     ctx.inputs,
     ctx.context_source,
+    ctx.flow_context_source,
     ctx.mitex_package or "",
     tracker_context and tracker_context.signature or "",
     state.render_ppi(config),

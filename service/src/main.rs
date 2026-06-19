@@ -10,7 +10,10 @@ use std::thread;
 
 use compiler::Compiler;
 use latex::LatexRenderer;
-use protocol::{FormulaRenderResponse, IncomingMessage, OutgoingMessage, RenderFormulasRequest};
+use protocol::{
+    ClassifyFlowRequest, FlowClassifyResponse, FormulaRenderResponse, IncomingMessage,
+    OutgoingMessage, RenderFormulasRequest,
+};
 
 const MAX_COMPILERS: usize = 16;
 const MAX_FORMULA_WORKERS: usize = 8;
@@ -71,10 +74,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     render_formulas_parallel(&mut stdout, req)?;
                 }
             }
+            IncomingMessage::ClassifyFlow(req) => {
+                classify_flow_sequential(&mut stdout, req, &mut compilers, &mut use_clock)?;
+            }
             IncomingMessage::Shutdown => break,
         }
     }
 
+    Ok(())
+}
+
+fn classify_flow_sequential(
+    stdout: &mut impl Write,
+    req: ClassifyFlowRequest,
+    compilers: &mut HashMap<String, CachedCompiler>,
+    use_clock: &mut u64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let cache_key = req
+        .cache_key
+        .clone()
+        .unwrap_or_else(|| format!("flow:{}:{}", req.context_id, req.context_rev));
+    *use_clock = (*use_clock).saturating_add(1);
+    let compiler = compilers
+        .entry(cache_key.clone())
+        .or_insert_with(|| CachedCompiler {
+            compiler: Compiler::new(),
+            last_used: *use_clock,
+        });
+    compiler.last_used = *use_clock;
+
+    for node in &req.nodes {
+        let resp = compiler.compiler.classify_flow(&req, node);
+        write_flow_response(stdout, resp)?;
+    }
+    evict_stale_compilers(compilers, &cache_key);
     Ok(())
 }
 
@@ -168,6 +201,16 @@ fn write_formula_response(
     resp: FormulaRenderResponse,
 ) -> Result<(), Box<dyn std::error::Error>> {
     serde_json::to_writer(stdout.by_ref(), &OutgoingMessage::FormulaRendered(resp))?;
+    stdout.write_all(b"\n")?;
+    stdout.flush()?;
+    Ok(())
+}
+
+fn write_flow_response(
+    stdout: &mut impl Write,
+    resp: FlowClassifyResponse,
+) -> Result<(), Box<dyn std::error::Error>> {
+    serde_json::to_writer(stdout.by_ref(), &OutgoingMessage::FlowClassified(resp))?;
     stdout.write_all(b"\n")?;
     stdout.flush()?;
     Ok(())

@@ -107,6 +107,7 @@ local function build_match_index(bufnr, root, parsed_query, start_row, end_row)
       local range = node_range(node)
       local entry = {
         node = node,
+        object_kind = math_node ~= nil and "math" or "code",
         node_type = math_node ~= nil and "math" or node:type(),
         row = range.row,
         col = range.col,
@@ -115,6 +116,7 @@ local function build_match_index(bufnr, root, parsed_query, start_row, end_row)
       }
 
       if code_node ~= nil then
+        entry.object_kind = "code"
         entry.node_type = "code"
         entry.code_type = code_node:type()
         entry.call_ident = call_ident_node and vim.treesitter.get_node_text(call_ident_node, bufnr) or ""
@@ -200,7 +202,7 @@ local function collect_local_top_level_units(match_index)
 end
 
 local function context_kind(unit)
-  if unit.node_type ~= "code" then
+  if unit.object_kind ~= "code" then
     return nil
   end
   if unit.code_type == "let" or unit.code_type == "set" or unit.code_type == "import" then
@@ -215,26 +217,19 @@ local function context_kind(unit)
   return nil
 end
 
-local function is_context_unit(bufnr, unit)
+local function is_context_unit(_, unit)
   local kind = context_kind(unit)
   if kind == nil then
     return false
   end
-
-  if kind == "show" then
-    local source = range_source(bufnr, unit)
-    -- Bare `#show: ...` is document-wide and usually not useful for isolated
-    -- snippet rendering. Selector show rules such as `#show math...` stay.
-    return not source:match("^%s*#%s*show%s*:")
-  end
-
   return true
 end
 
-local function source_display_facts(bufnr, unit, source)
+local function math_source_display_facts(bufnr, unit, source)
   local source_rows = unit.end_row - unit.row + 1
   local source_facts = {
     source_kind = "typst",
+    object_kind = "math",
     break_line = source_rows > 1,
   }
 
@@ -255,6 +250,18 @@ local function source_display_facts(bufnr, unit, source)
   source_facts.inline = true
   source_facts.isolated = false
   return "inline", false, source_rows, source_facts
+end
+
+local function code_source_display_facts(unit)
+  local source_rows = unit.end_row - unit.row + 1
+  return "unknown",
+    false,
+    source_rows,
+    {
+      source_kind = "typst",
+      object_kind = "code",
+      break_line = source_rows > 1,
+    }
 end
 
 local function prefix_signatures(context_units)
@@ -292,7 +299,14 @@ end
 
 local function node_record(bufnr, unit, context_units, prefixes)
   local source = range_source(bufnr, unit)
-  local source_display_kind, render_whole_line, source_rows, source_facts = source_display_facts(bufnr, unit, source)
+  local object_kind = unit.object_kind or unit.node_type or "math"
+  local source_display_kind, render_whole_line, source_rows, source_facts
+  if object_kind == "code" then
+    source_display_kind, render_whole_line, source_rows, source_facts = code_source_display_facts(unit)
+  else
+    object_kind = "math"
+    source_display_kind, render_whole_line, source_rows, source_facts = math_source_display_facts(bufnr, unit, source)
+  end
   local prelude_count = 0
   for idx, context_unit in ipairs(context_units or {}) do
     if le(context_unit.end_row, context_unit.end_col, unit.row, unit.col) then
@@ -304,7 +318,9 @@ local function node_record(bufnr, unit, context_units, prefixes)
 
   return {
     kind = "typst",
-    node_type = "math",
+    source_kind = "typst",
+    object_kind = object_kind,
+    node_type = object_kind,
     row = unit.row,
     col = unit.col,
     end_row = unit.end_row,
@@ -342,13 +358,16 @@ local function build_scan(bufnr)
   local context_units = {}
 
   for _, unit in ipairs(units) do
-    if unit.node_type == "math" then
+    if unit.object_kind == "math" then
       local prefixes = prefix_signatures(context_units)
       nodes[#nodes + 1] = node_record(bufnr, unit, context_units, prefixes)
     elseif is_context_unit(bufnr, unit) then
       local record = context_record(bufnr, unit)
       record.index = #context_units + 1
       context_units[#context_units + 1] = record
+    elseif unit.object_kind == "code" then
+      local prefixes = prefix_signatures(context_units)
+      nodes[#nodes + 1] = node_record(bufnr, unit, context_units, prefixes)
     end
   end
 
@@ -387,12 +406,14 @@ local function build_window_scan(bufnr, window, context_units)
   local local_context_units = {}
 
   for _, unit in ipairs(units) do
-    if unit.node_type == "math" and range_intersects(unit, window) then
+    if unit.object_kind == "math" and range_intersects(unit, window) then
       nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
     elseif is_context_unit(bufnr, unit) and range_intersects(unit, window) then
       local record = context_record(bufnr, unit)
       record.index = #local_context_units + 1
       local_context_units[#local_context_units + 1] = record
+    elseif unit.object_kind == "code" and range_intersects(unit, window) then
+      nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
     end
   end
 

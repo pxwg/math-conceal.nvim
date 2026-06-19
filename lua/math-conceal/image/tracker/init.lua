@@ -169,6 +169,8 @@ local function track_snapshot(state, track)
     state = track.state,
     invalid = track.invalid == true,
     kind = state.kind,
+    source_kind = state.kind,
+    object_kind = track.object_kind or track.node_type or "math",
     node_type = track.node_type,
     row = track.row,
     col = track.col,
@@ -479,6 +481,7 @@ local function new_track(state, node)
     render_whole_line = node.render_whole_line == true,
     prelude_count = node.prelude_count or 0,
     prelude_signature = node.prelude_signature,
+    object_kind = node.object_kind or node.node_type or "math",
     node_type = node.node_type,
   }
 end
@@ -730,6 +733,7 @@ local function inherit_track(bufnr, track, node, opts)
     track.prelude_count = node.prelude_count or 0
     track.prelude_signature = node.prelude_signature
   end
+  track.object_kind = node.object_kind or node.node_type or "math"
   track.node_type = node.node_type
   set_core_extmark(bufnr, track)
 end
@@ -738,9 +742,11 @@ local function best_pair(bufnr, tracks, nodes)
   local best = nil
   for ti, track in ipairs(tracks) do
     for ni, node in ipairs(nodes) do
-      local score = overlap_bytes(bufnr, track, node)
-      if best == nil or score > best.score or (score == best.score and track.id < best.track.id) then
-        best = { track_index = ti, node_index = ni, track = track, node = node, score = score }
+      if (track.object_kind or track.node_type or "math") == (node.object_kind or node.node_type or "math") then
+        local score = overlap_bytes(bufnr, track, node)
+        if best == nil or score > best.score or (score == best.score and track.id < best.track.id) then
+          best = { track_index = ti, node_index = ni, track = track, node = node, score = score }
+        end
       end
     end
   end
@@ -806,6 +812,9 @@ local function reconcile_window(bufnr, state, window)
 
   while #tracks > 0 and #nodes > 0 do
     local pair = best_pair(bufnr, tracks, nodes)
+    if pair == nil then
+      break
+    end
     local track = remove_at(tracks, pair.track_index)
     local node = remove_at(nodes, pair.node_index)
     inherit_track(bufnr, track, node, { preserve_prelude = true })
