@@ -42,6 +42,10 @@ local function context_inputs_signature(ctx)
   return table.concat(stable_table_parts((ctx and ctx.inputs) or {}), "\0")
 end
 
+local function service_cache_key(ctx)
+  return "typst:" .. (ctx and ctx.context_id or "") .. ":" .. tostring(ctx and ctx.context_rev or 0)
+end
+
 local function is_code_track(track)
   return track ~= nil and (track.object_kind or track.node_type) == "code"
 end
@@ -263,7 +267,7 @@ function M.request(bufnr, binding, ctx, tracks)
   local payload = {
     type = "classify_flow",
     request_id = req_id,
-    cache_key = "flow:" .. (ctx.context_id or "") .. ":" .. tostring(ctx.context_rev or 0),
+    cache_key = service_cache_key(ctx),
     context_id = ctx.context_id,
     context_rev = ctx.context_rev,
     context_source = ctx.flow_context_source or ctx.context_source,

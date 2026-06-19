@@ -206,6 +206,10 @@ local function request_id(bufnr)
   return ("image:%d:%d"):format(bufnr, bs.next_request_id)
 end
 
+local function service_cache_key(ctx)
+  return "typst:" .. (ctx and ctx.context_id or "") .. ":" .. tostring(ctx and ctx.context_rev or 0)
+end
+
 local function make_node(projection, track, ctx, config)
   local source, line_map = wrapper.build_slot_document(track, ctx, config)
   local key = render_key(track, ctx, config)
@@ -285,7 +289,7 @@ local function render_affected(bufnr, binding, ctx, config, render_items)
     type = "render_formulas",
     backend = ctx.backend or "typst",
     request_id = req_id,
-    cache_key = "formula:" .. (ctx.context_id or "") .. ":" .. tostring(ctx.context_rev or 0),
+    cache_key = service_cache_key(ctx),
     context_id = ctx.context_id,
     context_rev = ctx.context_rev,
     context_source = ctx.context_source,

@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             IncomingMessage::RenderFormulas(req) => {
                 if req.backend.as_deref() == Some("latex") {
                     render_latex_formulas(&mut stdout, req, &mut latex_renderer)?;
-                } else if formula_worker_count(&req) <= 1 {
+                } else if request_contains_code(&req) || formula_worker_count(&req) <= 1 {
                     render_formulas_sequential(&mut stdout, req, &mut compilers, &mut use_clock)?;
                 } else {
                     render_formulas_parallel(&mut stdout, req)?;
@@ -133,9 +133,14 @@ fn render_formulas_sequential(
         .cache_key
         .clone()
         .unwrap_or_else(|| format!("formula:{}:{}", req.context_id, req.context_rev));
+    let contains_code = request_contains_code(&req);
     let mut active_cache_key = base_cache_key.clone();
     for node in &req.nodes {
-        let cache_key = format!("{base_cache_key}:{}", node.node_id);
+        let cache_key = if is_code_formula_node(node) {
+            base_cache_key.clone()
+        } else {
+            format!("{base_cache_key}:{}", node.node_id)
+        };
         active_cache_key = cache_key.clone();
         *use_clock = (*use_clock).saturating_add(1);
         let compiler = compilers
@@ -148,7 +153,12 @@ fn render_formulas_sequential(
         let resp = compiler.compiler.render_formula(&req, node);
         write_formula_response(stdout, resp)?;
     }
-    evict_stale_compilers(compilers, &active_cache_key);
+    let protected_cache_key = if contains_code {
+        &base_cache_key
+    } else {
+        &active_cache_key
+    };
+    evict_stale_compilers(compilers, protected_cache_key);
     Ok(())
 }
 
@@ -187,6 +197,14 @@ fn render_formulas_parallel(
 
         Ok(())
     })
+}
+
+fn request_contains_code(req: &RenderFormulasRequest) -> bool {
+    req.nodes.iter().any(is_code_formula_node)
+}
+
+fn is_code_formula_node(node: &protocol::FormulaNodeRequest) -> bool {
+    node.kind.as_deref() == Some("code")
 }
 
 fn formula_worker_count(req: &RenderFormulasRequest) -> usize {
