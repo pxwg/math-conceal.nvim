@@ -365,63 +365,6 @@ function M.build_slot_document(track, ctx, config)
     }
 end
 
-local function flow_probe_start_row(track)
-  local bufnr = track and track.bufnr or nil
-  local row = track and track.row or nil
-  local col = track and track.col or nil
-  if bufnr == nil or row == nil or col == nil or not vim.api.nvim_buf_is_valid(bufnr) then
-    return row or 0
-  end
-
-  local start_row = row
-  local ok, tracked = pcall(function()
-    return require("math-conceal.image.tracker").get_tracks(bufnr)
-  end)
-  if not ok or type(tracked) ~= "table" then
-    return start_row
-  end
-
-  for _, other in ipairs(tracked) do
-    local other_id = other.track_id or other.id
-    local track_id = track.track_id or track.id
-    if
-      other_id ~= track_id
-      and other.row ~= nil
-      and other.end_row ~= nil
-      and other.end_col ~= nil
-      and other.row < row
-      and other.end_row >= row
-      and (other.end_row > row or other.end_col <= col)
-    then
-      start_row = math.min(start_row, other.row)
-    end
-  end
-
-  return start_row
-end
-
-local function flow_line_unit(track, ctx)
-  local bufnr = track and track.bufnr or nil
-  local row = track and track.row or nil
-  local col = track and track.col or nil
-  if bufnr == nil or row == nil or col == nil or not vim.api.nvim_buf_is_valid(bufnr) then
-    local source = render_input(track, ctx)
-    return "", source
-  end
-
-  local start_row = flow_probe_start_row(track)
-  local ok, lines = pcall(vim.api.nvim_buf_get_lines, bufnr, start_row, row + 1, false)
-  if not ok or type(lines) ~= "table" or #lines == 0 then
-    local source = render_input(track, ctx)
-    return "", source
-  end
-
-  lines[#lines] = (lines[#lines] or ""):sub(1, col)
-  local prefix = table.concat(lines, "\n")
-  local source = render_input(track, ctx)
-  return rewrite(ctx, bufnr, prefix), source
-end
-
 function M.build_flow_source(track, ctx)
   local parts = {}
   local len = 0
@@ -440,7 +383,11 @@ function M.build_flow_source(track, ctx)
     append(rewrite(ctx, track.bufnr, ctx.context_units[idx].source or ""))
   end
 
-  local prefix, source = flow_line_unit(track, ctx)
+  -- Flow/layout probes must be syntactically self-contained.  Context units
+  -- above provide the Typst prelude, but arbitrary buffer prefixes can contain
+  -- half-open math/code delimiters and must not be replayed into the probe.
+  local prefix = "x "
+  local source = render_input(track, ctx)
   parts[#parts + 1] = prefix
   len = len + #prefix
   local target_start = len

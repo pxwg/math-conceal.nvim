@@ -2,6 +2,7 @@ local context = require("math-conceal.image.context")
 local display = require("math-conceal.image.display")
 local flow_classification = require("math-conceal.image.flow-classification")
 local formula_display = require("math-conceal.image.formula-display")
+local quickfix = require("math-conceal.image.quickfix")
 local session = require("math-conceal.image.session")
 local state = require("math-conceal.image.state")
 local terminal = require("math-conceal.image.terminal")
@@ -146,22 +147,7 @@ local function cleanup_projection(projection)
 end
 
 local function rebuild_quickfix(bufnr)
-  local bucket = state.render_diagnostics[bufnr] or {}
-  local items = {}
-  local node_ids = vim.tbl_keys(bucket.formula_by_node or {})
-  table.sort(node_ids)
-  for _, node_id in ipairs(node_ids) do
-    for _, item in ipairs(bucket.formula_by_node[node_id] or {}) do
-      items[#items + 1] = item
-    end
-  end
-  vim.schedule(function()
-    vim.fn.setqflist({}, "r", {
-      title = "math-conceal.image: "
-        .. (vim.api.nvim_buf_get_name(bufnr) ~= "" and vim.api.nvim_buf_get_name(bufnr) or ("buf:" .. bufnr)),
-      items = items,
-    })
-  end)
+  quickfix.rebuild(bufnr)
 end
 
 local function map_generated_pos(line_map, line, col)
