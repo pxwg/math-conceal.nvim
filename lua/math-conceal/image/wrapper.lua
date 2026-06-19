@@ -88,6 +88,23 @@ function M.build_flow_context_document(ctx)
   return table.concat(parts)
 end
 
+local function baseline_pt(config)
+  local baseline = tonumber(config and config.math_baseline_pt) or 11
+  if baseline <= 0 then
+    baseline = 11
+  end
+  return baseline
+end
+
+function M.editor_size_prelude(config)
+  local baseline = baseline_pt(config)
+  return string.format("#set text(size: %gpt)\n#show math.equation: set text(size: %gpt)\n", baseline, baseline)
+end
+
+function M.render_size_key(config)
+  return tostring(baseline_pt(config))
+end
+
 local function flow_block_config(ctx)
   local cfg = (ctx and ctx.code_block) or {}
   return {
@@ -100,7 +117,7 @@ end
 local function flow_block_layout(bufnr, ctx, config)
   local state = require("math-conceal.image.state")
   local cfg = flow_block_config(ctx)
-  local baseline = config.math_baseline_pt or 11
+  local baseline = baseline_pt(config)
   local pad_cols = math.max(0, cfg.padding_cols or 15)
   local min_cols = math.max(1, cfg.min_cols or 8)
   local win_cols = state.visible_window_width(bufnr)
@@ -209,7 +226,7 @@ function M.inline_wrap(config, source_rows, opts)
   opts = opts or {}
   local state = require("math-conceal.image.state")
   local cell_w, cell_h = state.cell_size()
-  local baseline = config.math_baseline_pt or 11
+  local baseline = baseline_pt(config)
   local naturalize = inline_naturalize_prelude(opts.naturalize == true)
   if cell_h ~= nil and cell_w ~= nil then
     local cell_w_pt = baseline * (cell_w / cell_h)
@@ -318,6 +335,8 @@ function M.build_slot_document(track, ctx, config)
   if prefix ~= "" then
     append(prefix)
   end
+
+  append(M.editor_size_prelude(config))
 
   local gen_start = cur_line
   local gen_start_col = cur_col

@@ -331,6 +331,7 @@ local function preview_render_key(
     ctx.context_id or "",
     tostring(ctx.context_rev or 0),
     tostring(state.render_ppi(config)),
+    wrapper.render_size_key(config),
     tostring(cursor_row),
     tostring(cursor_col),
     source_text or "",
@@ -356,6 +357,7 @@ local function preview_service_cache_key(projection, track, ctx, config)
     tostring(ctx.context_rev or 0),
     ctx.effective_root or "",
     tostring(state.render_ppi(config)),
+    wrapper.render_size_key(config),
   }
   return "preview:" .. vim.fn.sha256(table.concat(parts, "\0"))
 end

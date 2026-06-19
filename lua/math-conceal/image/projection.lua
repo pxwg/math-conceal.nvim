@@ -27,6 +27,7 @@ local function render_key(track, ctx, config)
     ctx.context_id or "",
     tostring(ctx.context_rev or 0),
     tostring(state.render_ppi(config)),
+    wrapper.render_size_key(config),
     tostring(track.source_display_kind or ""),
     tostring(track.render_whole_line == true),
   }
@@ -206,8 +207,13 @@ local function request_id(bufnr)
   return ("image:%d:%d"):format(bufnr, bs.next_request_id)
 end
 
-local function service_cache_key(ctx)
-  return "typst:" .. (ctx and ctx.context_id or "") .. ":" .. tostring(ctx and ctx.context_rev or 0)
+local function service_cache_key(ctx, config)
+  return table.concat({
+    "typst",
+    ctx and ctx.context_id or "",
+    tostring(ctx and ctx.context_rev or 0),
+    wrapper.render_size_key(config),
+  }, ":")
 end
 
 local function make_node(projection, track, ctx, config)
@@ -289,7 +295,7 @@ local function render_affected(bufnr, binding, ctx, config, render_items)
     type = "render_formulas",
     backend = ctx.backend or "typst",
     request_id = req_id,
-    cache_key = service_cache_key(ctx),
+    cache_key = service_cache_key(ctx, config),
     context_id = ctx.context_id,
     context_rev = ctx.context_rev,
     context_source = ctx.context_source,

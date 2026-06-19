@@ -29,6 +29,14 @@ local function default(val, fallback)
   return val
 end
 
+local function baseline_pt(config)
+  local baseline = tonumber(config and config.math_baseline_pt) or 11
+  if baseline <= 0 then
+    baseline = 11
+  end
+  return baseline
+end
+
 function M.get_buf_state(bufnr)
   bufnr = normalize_bufnr(bufnr)
   if M.buffers[bufnr] == nil then
@@ -121,7 +129,7 @@ function M.refresh_cell_px_size(config)
   if ffi.C.ioctl(1, request, ws) == 0 and ws.ws_xpixel > 0 and ws.ws_col > 0 then
     M._cell_px_w = ws.ws_xpixel / ws.ws_col
     M._cell_px_h = ws.ws_ypixel / ws.ws_row
-    local baseline = default(config and config.math_baseline_pt, 11)
+    local baseline = baseline_pt(config)
     M._render_ppi = math.max(72, math.floor(M._cell_px_h * 72 / baseline))
   end
   return old_w ~= M._cell_px_w or old_h ~= M._cell_px_h or old_ppi ~= M._render_ppi

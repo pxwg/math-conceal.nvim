@@ -42,6 +42,14 @@ local function context_inputs_signature(ctx)
   return table.concat(stable_table_parts((ctx and ctx.inputs) or {}), "\0")
 end
 
+local function baseline_pt(config)
+  local baseline = tonumber(config and config.math_baseline_pt) or 11
+  if baseline <= 0 then
+    baseline = 11
+  end
+  return baseline
+end
+
 local function service_cache_key(ctx)
   return "typst:" .. (ctx and ctx.context_id or "") .. ":" .. tostring(ctx and ctx.context_rev or 0)
 end
@@ -51,7 +59,7 @@ local function is_code_track(track)
 end
 
 local function layout_metrics(bufnr, config)
-  local baseline = tonumber(config and config.math_baseline_pt) or 11
+  local baseline = baseline_pt(config)
   local win_cols = state.visible_window_width(bufnr)
   local cell_w, cell_h = state.cell_size()
   local cell_w_pt
