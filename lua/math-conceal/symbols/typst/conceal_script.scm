@@ -2,7 +2,7 @@
 ; Replace simple letter by italic symbols. Must before sub- superscript rulers!
 ((letter) @typ_math_symbol
   (#match? @typ_math_symbol "^[a-zA-Z]$")
-  (#not-has-parent? @typ_math_symbol field call)
+  (#not-has-parent? @typ_math_symbol field call tagged)
   (#has-ancestor? @typ_math_symbol math)
   (#set-conceal! @typ_math_symbol "conceal"))
 
@@ -48,7 +48,7 @@
     ")" @close_paren) @sup_object
   (#match? @sup_object "^[(]\\S+[)]$")
   (#match? @sup_letter
-    "^([0-9]|[a-pr-zABDEG-PRT-W]|[*+=()\\-]|alpha|beta|gamma|delta|epsilon|theta|iota|phi|chi|prime|prime.double|prime.triple|prime.quad|prime.rev|prime.rev.double|prime.rev.triple|prime.double.rev|prime.triple.rev)$")
+    "^([0-9]|[a-pr-zABDEG-PRT-W]|[*+=()\\-]|alpha|beta|gamma|delta|epsilon|theta|iota|phi|chi|prime|prime.double|prime.triple|prime.quad|prime.rev|prime.rev.double|prime.rev.triple|prime.double.rev|prime.triple.rev|degree)$")
   (#has-ancestor? @sup_object math formula)
   (#set! @open_paren conceal "")
   (#set! @close_paren conceal ""))
@@ -144,7 +144,7 @@
   (#has-ancestor? @sup_symbol math formula)
   (#match? @sup_digit "^([0-9]|[*+=()\\-])$")
   (#match? @sup_letter
-    "^([a-pr-zABDEG-PRT-W]|alpha|beta|gamma|delta|epsilon|theta|iota|phi|chi|prime|prime.double|prime.triple|prime.quad|prime.rev|prime.rev.double|prime.rev.triple|prime.double.rev|prime.triple.rev)$")
+    "^([a-pr-zABDEG-PRT-W]|alpha|beta|gamma|delta|epsilon|theta|iota|phi|chi|prime|prime.double|prime.triple|prime.quad|prime.rev|prime.rev.double|prime.rev.triple|prime.double.rev|prime.triple.rev|degree)$")
   (#set! @sup_symbol conceal "")
   (#set-sup! @sup_digit "sup")
   (#set-sup! @sup_letter "sup"))
@@ -199,7 +199,7 @@
     ")" @close_paren) @content
   (#match? @sup_digit "^([0-9]|[*+=()\\-])$")
   (#match? @sup_letter
-    "^([a-pr-zABDEG-PRT-W]|alpha|beta|gamma|delta|epsilon|theta|iota|phi|chi|prime|prime.double|prime.triple|prime.quad|prime.rev|prime.rev.double|prime.rev.triple|prime.double.rev|prime.triple.rev)$")
+    "^([a-pr-zABDEG-PRT-W]|alpha|beta|gamma|delta|epsilon|theta|iota|phi|chi|prime|prime.double|prime.triple|prime.quad|prime.rev|prime.rev.double|prime.rev.triple|prime.double.rev|prime.triple.rev|degree)$")
   (#match? @content "^[(]\\S+[)]$")
   (#has-ancestor? @sup_symbol math formula)
   (#set! @open_paren conceal "")

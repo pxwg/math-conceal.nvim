@@ -4,9 +4,9 @@
   (ident)
   (field)
 ] @typ_phy_symbol
-  (#any-of? @typ_phy_symbol "hbar" "grad")
+  (#any-of? @typ_phy_symbol "cprod" "dprod" "grad" "hbar")
   (#has-ancestor? @typ_phy_symbol math)
-  (#not-has-parent? @typ_phy_symbol field call)
+  (#not-has-parent? @typ_phy_symbol field call tagged)
   (#set-conceal! @typ_phy_symbol "conceal"))
 
 ; Symbols
@@ -505,35 +505,6 @@
   (#set! @left_brace conceal "⟨")
   (#set! @comma conceal "￨")
   (#set! @right_brace conceal "⟩"))
-
-(call
-  item: (ident) @typ_font_name
-  "(" @open_paren
-  ")" @close_paren
-  (#any-of? @typ_font_name "scripts")
-  (#has-ancestor? @typ_font_name math formula)
-  (#not-has-parent? @typ_font_name field)
-  (#set! @typ_font_name conceal "")
-  (#set! @open_paren conceal "")
-  (#set! @close_paren conceal ""))
-
-(attach
-  (_)
-  "^" @sup_symbol
-  sup: (call
-    item: (ident) @typ_font_name
-    "(" @left_paren
-    (formula
-      (_) @typ_phy_symbol)
-    ")" @right_paren)
-  (#any-of? @typ_font_name "scripts")
-  (#has-ancestor? @typ_font_name math formula)
-  (#not-has-parent? @typ_font_name field)
-  (#set! @typ_font_name conceal "")
-  (#set! @left_paren conceal "")
-  (#set! @right_paren conceal "")
-  (#set! @sup_symbol conceal "")
-  (#set-sup! @typ_phy_symbol "sup"))
 
 ((call
   item: (ident) @_cmd

@@ -3,7 +3,7 @@
   (field)
 ] @typ_greek_symbol
   (#has-ancestor? @typ_greek_symbol math)
-  (#not-has-parent? @typ_greek_symbol field call)
+  (#not-has-parent? @typ_greek_symbol field call tagged)
   (#set-greek! @typ_greek_symbol "greek"))
 
 (call
@@ -24,7 +24,6 @@
   ")" @right_paren
   (#any-of? @typ_font_name "bb" "bold" "cal" "frak" "italic" "mono" "sans" "scr" "serif" "upright")
   (#has-ancestor? @typ_font_name math formula)
-  (#not-has-parent? @typ_font_name field)
   (#set! @typ_font_name conceal "")
   (#set! @left_paren conceal "")
   (#set! @right_paren conceal "")
@@ -43,7 +42,6 @@
     "dot" "dot.double" "dot.quad" "dot.triple" "grave" "harpoon" "harpoon.lt" "hat" "macron"
     "overline" "tilde")
   (#has-ancestor? @typ_font_name math formula)
-  (#not-has-parent? @typ_font_name field)
   (#set! @typ_font_name conceal "")
   (#set! @left_paren conceal "")
   (#set! @right_paren conceal "")
