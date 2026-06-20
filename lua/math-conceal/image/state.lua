@@ -109,6 +109,22 @@ function M.visible_window_width(bufnr)
   return vim.o.columns
 end
 
+local function window_text_width(winid)
+  local info = vim.fn.getwininfo(winid)[1] or {}
+  local textoff = tonumber(info.textoff) or 0
+  return math.max(1, vim.api.nvim_win_get_width(winid) - textoff)
+end
+
+function M.visible_text_width(bufnr)
+  local wins = vim.fn.win_findbuf(bufnr)
+  for _, winid in ipairs(wins) do
+    if vim.api.nvim_win_is_valid(winid) then
+      return window_text_width(winid)
+    end
+  end
+  return vim.o.columns
+end
+
 function M.refresh_cell_px_size(config)
   local ok, ffi = pcall(require, "ffi")
   if not ok then

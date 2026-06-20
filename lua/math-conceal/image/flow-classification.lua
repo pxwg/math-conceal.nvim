@@ -60,7 +60,7 @@ end
 
 local function layout_metrics(bufnr, config)
   local baseline = baseline_pt(config)
-  local win_cols = state.visible_window_width(bufnr)
+  local win_cols = state.visible_text_width(bufnr)
   local cell_w, cell_h = state.cell_size()
   local cell_w_pt
   if cell_w ~= nil and cell_h ~= nil then

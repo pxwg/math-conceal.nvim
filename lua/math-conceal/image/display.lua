@@ -27,6 +27,47 @@ function M.placeholder_row(row, cols)
   return placeholder_row(row, cols)
 end
 
+local function is_code_block(track)
+  if track == nil or (track.object_kind or track.node_type) ~= "code" then
+    return false
+  end
+  local facts = track.source_facts or {}
+  local equation = track.equation or {}
+  return track.source_display_kind == "block"
+    or facts.layout_role == "block"
+    or equation.display_role == "block"
+    or facts.render_policy == "block"
+    or facts.render_policy == "block_constrained"
+end
+
+local function block_left_pad_cols(bufnr, track, cols)
+  if is_code_block(track) then
+    return 0
+  end
+  local win_width = state.visible_window_width(bufnr)
+  if cols < win_width then
+    return math.floor((win_width - cols) / 2)
+  end
+  return 0
+end
+
+function M.block_left_pad_cols(bufnr, track, cols)
+  return block_left_pad_cols(bufnr, track, cols)
+end
+
+local function code_block_layout_config(config)
+  local renderers = config and config.renderers or nil
+  local typst = renderers and renderers.typst or nil
+  return (typst and typst.code_block) or {}
+end
+
+local function code_block_max_cols(track, config)
+  local cfg = code_block_layout_config(config)
+  local pad_cols = math.max(0, tonumber(cfg.padding_cols) or 0)
+  local right_pad_cols = math.max(0, tonumber(cfg.right_padding_cols) or 1)
+  return math.max(1, state.visible_text_width(track.bufnr) - 2 * pad_cols - right_pad_cols)
+end
+
 local function line_len(bufnr, row)
   local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
   return #line
@@ -120,8 +161,13 @@ function M.cell_dimensions(track, width_px, height_px, config)
   end
 
   if track.source_display_kind == "block" then
-    local max_cols =
-      math.max(1, state.visible_window_width(track.bufnr) - 2 * ((config and config.block_padding_cols) or 0))
+    local max_cols
+    if is_code_block(track) then
+      max_cols = code_block_max_cols(track, config)
+    else
+      max_cols =
+        math.max(1, state.visible_window_width(track.bufnr) - 2 * ((config and config.block_padding_cols) or 0))
+    end
     cols = math.min(cols, max_cols)
   end
 
@@ -301,11 +347,7 @@ function M.show(projection, track, asset, config)
   }
 
   if track.source_display_kind == "block" then
-    local pad = 0
-    local win_width = state.visible_window_width(projection.bufnr)
-    if cols < win_width then
-      pad = math.floor((win_width - cols) / 2)
-    end
+    local pad = block_left_pad_cols(projection.bufnr, track, cols)
     local pad_text = pad > 0 and string.rep(" ", pad) or ""
     local function row_chunks(row)
       return { { pad_text, "" }, { placeholder_row(row, cols), hl } }

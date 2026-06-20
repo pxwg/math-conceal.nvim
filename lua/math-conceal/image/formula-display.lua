@@ -583,8 +583,7 @@ local function append_image_atom(lines, bufnr, view, layout)
   if not line_empty(lines[#lines]) then
     newline(lines)
   end
-  local win_width = state.visible_window_width(bufnr)
-  local pad = cols < win_width and math.floor((win_width - cols) / 2) or 0
+  local pad = display.block_left_pad_cols(bufnr, view, cols)
   local pad_text = pad > 0 and string.rep(" ", pad) or ""
   for row = 1, rows do
     append_chunk(lines, pad_text .. display.placeholder_row(row, cols), hl)

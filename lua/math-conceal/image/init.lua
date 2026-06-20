@@ -28,7 +28,7 @@ local M = {}
 ---@field header string?
 ---@field preamble_file string|function?
 ---@field mitex_package string?
----@field code_block { padding_cols?: integer, margin_pt?: number, min_cols?: integer }?
+---@field code_block { padding_cols?: integer, right_padding_cols?: integer, margin_pt?: number, min_cols?: integer }?
 ---@field render_paths table
 
 ---@class MathConcealImageConfig
@@ -73,8 +73,9 @@ local defaults = {
       header = "",
       preamble_file = nil,
       code_block = {
-        padding_cols = 15,
-        margin_pt = 6,
+        padding_cols = 0,
+        right_padding_cols = 1,
+        margin_pt = 0,
         min_cols = 8,
       },
       render_paths = {

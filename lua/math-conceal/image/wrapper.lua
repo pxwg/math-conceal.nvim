@@ -108,8 +108,9 @@ end
 local function flow_block_config(ctx)
   local cfg = (ctx and ctx.code_block) or {}
   return {
-    padding_cols = cfg.padding_cols ~= nil and tonumber(cfg.padding_cols) or 15,
-    margin_pt = cfg.margin_pt ~= nil and tonumber(cfg.margin_pt) or 6,
+    padding_cols = cfg.padding_cols ~= nil and tonumber(cfg.padding_cols) or 0,
+    right_padding_cols = cfg.right_padding_cols ~= nil and tonumber(cfg.right_padding_cols) or 1,
+    margin_pt = cfg.margin_pt ~= nil and tonumber(cfg.margin_pt) or 0,
     min_cols = cfg.min_cols ~= nil and tonumber(cfg.min_cols) or 8,
   }
 end
@@ -118,10 +119,11 @@ local function flow_block_layout(bufnr, ctx, config)
   local state = require("math-conceal.image.state")
   local cfg = flow_block_config(ctx)
   local baseline = baseline_pt(config)
-  local pad_cols = math.max(0, cfg.padding_cols or 15)
+  local pad_cols = math.max(0, cfg.padding_cols or 0)
+  local right_pad_cols = math.max(0, cfg.right_padding_cols or 1)
   local min_cols = math.max(1, cfg.min_cols or 8)
-  local win_cols = state.visible_window_width(bufnr)
-  local usable_cols = math.max(min_cols, win_cols - 2 * pad_cols)
+  local win_cols = state.visible_text_width(bufnr)
+  local usable_cols = math.max(min_cols, win_cols - 2 * pad_cols - right_pad_cols)
   local cell_w, cell_h = state.cell_size()
   local cell_w_pt
   if cell_w ~= nil and cell_h ~= nil then
@@ -132,7 +134,8 @@ local function flow_block_layout(bufnr, ctx, config)
   return {
     baseline = baseline,
     pad_cols = pad_cols,
-    margin_pt = math.max(0, cfg.margin_pt or 6),
+    right_pad_cols = right_pad_cols,
+    margin_pt = math.max(0, cfg.margin_pt or 0),
     min_cols = min_cols,
     win_cols = win_cols,
     usable_cols = usable_cols,
@@ -148,6 +151,7 @@ function M.flow_block_wrap(bufnr, ctx, config)
     "#context {\n"
       .. "  set page(width: %gpt, height: auto, margin: (x: 0pt, y: 0pt), fill: none)\n"
       .. "  set text(size: %gpt)\n"
+      .. "  set align(left)\n"
       .. "  block(width: 100%%, inset: (x: %gpt, y: 0pt))[\n",
     layout.page_w_pt,
     layout.baseline,
@@ -178,9 +182,10 @@ function M.render_layout_key(track, ctx, config)
   if render_policy == "block_constrained" or render_policy == "block" then
     local layout = flow_block_layout(track.bufnr, ctx, config or {})
     return table.concat({
-      "code-block-flow-v2",
+      "code-block-flow-v7",
       tostring(layout.baseline),
       tostring(layout.pad_cols),
+      tostring(layout.right_pad_cols),
       tostring(layout.margin_pt),
       tostring(layout.min_cols),
       tostring(layout.win_cols),
