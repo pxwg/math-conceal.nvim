@@ -2,7 +2,6 @@ local display = require("math-conceal.image.display")
 local flow_classification = require("math-conceal.image.flow-classification")
 local repair_event = require("math-conceal.image.repair-event")
 local state = require("math-conceal.image.state")
-local track_view = require("math-conceal.image.track-view")
 local tracker = require("math-conceal.image.tracker")
 
 local M = {}
@@ -172,14 +171,9 @@ local function view_from_snapshot(bufnr, snapshot)
   end
 
   local ref = ref_from_snapshot(snapshot)
-  local current = track_view.for_ref(ref, { require_valid = true })
-  if current == nil or current.invalid == true or current.kind ~= "typst" then
-    return nil
-  end
-
   local key = tracker.track_ref_key(ref)
   local view = {}
-  for field, value in pairs(current) do
+  for field, value in pairs(snapshot) do
     view[field] = value
   end
   view.ref = ref
@@ -194,8 +188,10 @@ local function view_from_snapshot(bufnr, snapshot)
 end
 
 local function resolve_views(bufnr, snapshots)
+  snapshots = snapshots or tracker.get_tracks(bufnr)
+
   local views = {}
-  for _, snapshot in ipairs(snapshots or tracker.get_tracks(bufnr)) do
+  for _, snapshot in ipairs(snapshots) do
     local view = view_from_snapshot(bufnr, snapshot)
     if view ~= nil then
       views[#views + 1] = view
