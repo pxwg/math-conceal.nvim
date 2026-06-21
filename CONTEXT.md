@@ -108,29 +108,33 @@ _Avoid_: Cursor-safe block, local preview node
 The node-revealable formula whose source range currently contains the cursor. On a cursor row, row-attachable formulas other than the active formula may remain image-rendered while the active formula reveals source.
 _Avoid_: Cursor line formula, hovered formula, selected render node
 
-**Display Line Run**:
-A Typst display projection interval made from consecutive source rows whose tracked objects can be presented together by one carrier display extmark while the covered source rows are concealed. It is the normal non-interactive graphical display shape for Typst tracked objects, not a per-object render asset.
-_Avoid_: Line-run optimization, per-formula extmark group, placeholder run
+**Node Slot**:
+A Typst Display Projection display artifact for one tracked object. It consists of a source-anchored node-slot extmark in the display namespace plus object-local conceal span or conceal-row extmarks in the auxiliary namespace. It presents the object's rendered asset while ordinary text remains drawn by Neovim.
+_Avoid_: Display line run, redraw carrier, render node, placeholder run
 
-**Display Redraw Carrier**:
-A Typst display projection carrier extmark that presents the complete reconstructed editor reading stream for one or more covered source rows while auxiliary display extmarks conceal those source rows. In folded display, layout width comes from the carrier's reconstructed source/display chunks and tracker-provided image atom widths, not from the concealed source range width.
-_Avoid_: Repaint extmark, renderer extmark, display anchor
+**Source Row Slot**:
+A node slot whose first rendered image row is attached to a real source fragment row. Inline slots use inline virtual text at the first fragment column. Isolated block slots use overlay virtual text at the first fragment column and carry remaining image rows through `virt_lines`.
+_Avoid_: Cursor-row placeholder, row carrier, line-run landing row
 
-**Display Atom**:
-An ordered piece of a Typst display projection's reconstructed reading stream. Source atoms preserve source text together with editor display facts, image atoms present tracker-provided rendered objects, and source-reveal atoms leave an object's source visible when no valid image should cover it.
-_Avoid_: Placeholder atom, render node, display chunk
+**Block Node Slot**:
+A block-shaped node slot whose anchor follows the object's source boundary shape. Suffix-only blocks anchor above the end boundary row, prefix-only and multi-line both-boundary blocks anchor after the start boundary row, isolated blocks use a source row slot, and single-line sandwich blocks source-reveal.
+_Avoid_: Display line run, block carrier, whole-row redraw
 
-**Display Composer**:
-The Typst display projection component that combines source text, editor display facts, and tracker-provided image replacements into source atoms, image atoms, and source-reveal atoms for a display redraw carrier. It does not discover tracked objects, call scanners, or own render keys.
-_Avoid_: Formula scanner, renderer composer, source adapter
+**Kitty Placeholder Row Alignment**:
+The invariant that every placeholder row for one Kitty image id starts at the same visual text column. If an isolated block's first row is overlaid at an indented source fragment column while the remaining rows are `virt_lines`, those `virt_lines` must be prefixed by the source prefix display width so indentation is preserved without horizontally tearing the image.
+_Avoid_: Image reupload fix, renderer scaling fix, moving indented blocks to column zero
+
+**Legacy Display Line Run**:
+The pre-node-local Typst display model that folded consecutive source rows behind a carrier extmark and reconstructed ordinary source plus image atoms. It is retained only as historical language; active Typst main-buffer display uses node slots instead.
+_Avoid_: Active display shape, node slot, current landing model
 
 **Editor Display Fact**:
-An editor-side presentation fact attached to source text, including editor-owned highlight, conceal, semantic token, inline decoration layers, and math-conceal ASCII/Unicode display marks, that affects how source atoms are reconstructed inside a Typst display projection. It is not tracker identity, scanner source structure, or image-rendering state.
+An editor-side presentation fact attached to source text, including editor-owned highlight, conceal, semantic token, inline decoration layers, and math-conceal ASCII/Unicode display marks. Active node-local Typst display generally leaves ordinary source text to Neovim instead of reconstructing it from these facts.
 _Avoid_: Source fact, render asset, tracker decoration
 
 **Display Repair Scope**:
-The bounded part of a Typst display projection that must be recomputed after tracker, asset, cursor, or geometry changes. It is derived from affected object rows and neighboring display line-run boundaries rather than from the whole buffer.
-_Avoid_: Full-buffer display plan, global rerender, complete projection refresh
+The bounded part of Typst Display Projection that must be recomputed after tracker, asset, cursor, visual-selection, or layout changes. In the node-local model it is track/object-local and keyed by track references and stable extmark keys, not by neighboring display line-run boundaries.
+_Avoid_: Full-buffer display plan, global rerender, line-run repair
 
 **Renderer Binding**:
 The buffer-level image-path choice that associates a supported buffer with a source kind, scanner, and render-context family. It does not own object identity and must not discover tracked objects itself.
