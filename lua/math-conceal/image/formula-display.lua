@@ -1,5 +1,6 @@
 local display = require("math-conceal.image.display")
 local flow_classification = require("math-conceal.image.flow-classification")
+local repair_event = require("math-conceal.image.repair-event")
 local state = require("math-conceal.image.state")
 local track_view = require("math-conceal.image.track-view")
 local tracker = require("math-conceal.image.tracker")
@@ -774,6 +775,18 @@ local function ensure_conceal_options(bufnr)
   end
 end
 
+local function repair_keys_for_event(event, plan)
+  if event.force == true then
+    return all_plan_keys(plan.node_plans)
+  end
+
+  local keys = repair_event.ref_set(event.checked_refs)
+  merge_keys(keys, repair_event.ref_set(event.born_refs))
+  merge_keys(keys, repair_event.ref_set(event.retired_refs))
+  merge_keys(keys, repair_event.context_dependent_key_set(event))
+  return keys
+end
+
 function M.on_tracker_repair(event, config)
   if event == nil or event.bufnr == nil or not vim.api.nvim_buf_is_valid(event.bufnr) then
     return
@@ -787,9 +800,7 @@ function M.on_tracker_repair(event, config)
     clear_all_artifacts(bufnr, fd)
     render_track_keys(bufnr, fd, plan, all_plan_keys(plan.node_plans))
   else
-    local keys = ref_key_set(event.affected_refs)
-    merge_keys(keys, ref_key_set(event.changed_refs))
-    merge_keys(keys, ref_key_set(event.retired_refs))
+    local keys = repair_keys_for_event(event, plan)
     merge_keys(keys, fd.suppressed_track_keys)
     merge_keys(keys, plan.suppressed_keys)
     render_track_keys(bufnr, fd, plan, keys)

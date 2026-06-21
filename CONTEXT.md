@@ -68,9 +68,17 @@ _Avoid_: Raw edit range, damage range, full-buffer repair
 The set of tracker-owned source positions and intervals that repair consumes for a single current buffer version. Core track positions and damaged regions must belong to the same repair geometry before scanner repair can reconcile tracked object identity.
 _Avoid_: Mixed edit ranges, stale damage data
 
+**Tracker Repair Event**:
+A tracker-owned report of neutral repair facts after validation, including object identity changes, geometry changes, lifecycle changes, context facts, and repair geometry. It is not a renderer, display, diagnostics, or preview trigger list.
+_Avoid_: Render event, display event, affected refs
+
 **Track Reference**:
 A compound reference to one tracked object, made from buffer number, tracker generation, and buffer-local track id. It is the identity shape used across module or asynchronous boundaries.
 _Avoid_: Global track id, bare track id across buffers
+
+**Object Identity Change**:
+A tracker repair result where an existing tracked object inherits different scanner-owned object facts, such as object kind, source identity, source display form, or source facts. It is distinct from geometry-only movement, context dependency changes, and projection-specific decisions about rendering or display.
+_Avoid_: Render change, display change, dirty track
 
 **TrackView**:
 The live tracker-owned view resolved from a track reference at the moment a projection needs current source geometry, source facts, or revision. Repair-event snapshots may seed track references and stable render requests, but projections must not cache or reuse snapshot rows as display geometry.
@@ -185,7 +193,7 @@ A buffer-level index of context units used to detect rendering-context changes a
 _Avoid_: Context list on tracks, renderer cache
 
 **Context Dependency**:
-The relationship between a tracked object and the context-unit prefix that affects its rendered form. Image projections use context dependencies to stale only downstream objects after context changes.
+The relationship between a tracked object and the context-unit prefix that affects its rendered form. Projections derive context impact from tracker-reported context facts and per-track prefix facts rather than receiving projection-specific affected-object lists from tracker.
 _Avoid_: Full-buffer rerender, implicit prelude
 
 **Projection Anchor**:

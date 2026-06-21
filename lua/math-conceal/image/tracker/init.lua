@@ -247,28 +247,16 @@ local function refresh_debug(state)
   end
 end
 
-local function snapshots_by_key(snapshots)
-  local by_key = {}
-  for _, snapshot in ipairs(snapshots or {}) do
-    by_key[M.track_ref_key(snapshot)] = snapshot
-  end
-  return by_key
-end
-
-local function refs_from_keys(by_key, keys)
+local function refs_from_snapshots(snapshots)
   local refs = {}
-  table.sort(keys)
-  for _, key in ipairs(keys) do
-    local snapshot = by_key[key]
-    if snapshot ~= nil then
-      refs[#refs + 1] = {
-        bufnr = snapshot.bufnr,
-        tracker_generation = snapshot.tracker_generation,
-        generation = snapshot.generation,
-        track_id = snapshot.track_id,
-        id = snapshot.track_id,
-      }
-    end
+  for _, snapshot in ipairs(snapshots or {}) do
+    refs[#refs + 1] = {
+      bufnr = snapshot.bufnr,
+      tracker_generation = snapshot.tracker_generation,
+      generation = snapshot.generation,
+      track_id = snapshot.track_id,
+      id = snapshot.track_id,
+    }
   end
   return refs
 end
@@ -286,16 +274,6 @@ local function changed_context_indexes(old_units, new_units)
     end
   end
   return changed
-end
-
-local function min_value(values)
-  local min = nil
-  for _, value in ipairs(values or {}) do
-    if min == nil or value < min then
-      min = value
-    end
-  end
-  return min
 end
 
 local function prefix_signatures(context_units)
@@ -377,42 +355,31 @@ local function sync_context_units(bufnr, state)
   return invalid
 end
 
-local function diff_event(state, before_snapshots, after_snapshots, old_context_units, new_context_units, opts)
-  opts = opts or {}
-  local before = snapshots_by_key(before_snapshots)
-  local after = snapshots_by_key(after_snapshots)
-  local changed_keys = {}
-  local retired_keys = {}
-  local affected = {}
+local function empty_repair_report()
+  return {
+    checked_refs = {},
+    identity_changed_refs = {},
+    geometry_changed_refs = {},
+    unchanged_refs = {},
+    born_refs = {},
+    retired_refs = {},
+    reasons_by_key = {},
+  }
+end
 
-  for key, snapshot in pairs(after) do
-    if before[key] == nil or not vim.deep_equal(before[key], snapshot) then
-      changed_keys[#changed_keys + 1] = key
-      affected[key] = snapshot
-    end
-  end
-
-  for key, snapshot in pairs(before) do
-    if after[key] == nil then
-      retired_keys[#retired_keys + 1] = key
-      affected[key] = snapshot
-    end
-  end
-
+local function context_event(state, old_context_units, new_context_units)
   local changed_units = changed_context_indexes(old_context_units, new_context_units)
-  local first_changed_context = min_value(changed_units)
-  if first_changed_context ~= nil then
-    for key, snapshot in pairs(after) do
-      if (snapshot.prelude_count or 0) >= first_changed_context then
-        affected[key] = snapshot
-      end
-    end
-  end
+  return {
+    changed = #changed_units > 0,
+    signature = state.context_signature or "",
+    changed_unit_indexes = changed_units,
+    units = vim.deepcopy(state.context_units or {}),
+  }
+end
 
-  local affected_keys = {}
-  for key, _ in pairs(affected) do
-    affected_keys[#affected_keys + 1] = key
-  end
+local function repair_event(state, report, old_context_units, new_context_units, opts)
+  opts = opts or {}
+  report = report or empty_repair_report()
 
   state.repair_tick = (state.repair_tick or 0) + 1
 
@@ -422,18 +389,17 @@ local function diff_event(state, before_snapshots, after_snapshots, old_context_
     tracker_generation = state.generation,
     tick = state.repair_tick,
     initial = opts.initial == true,
-    tracks = after_snapshots,
-    changed_refs = refs_from_keys(after, changed_keys),
-    retired_refs = refs_from_keys(before, retired_keys),
-    affected_refs = refs_from_keys(vim.tbl_extend("force", before, after), affected_keys),
+    tracks = opts.tracks or track_snapshots(state),
+    checked_refs = vim.deepcopy(report.checked_refs or {}),
+    identity_changed_refs = vim.deepcopy(report.identity_changed_refs or {}),
+    geometry_changed_refs = vim.deepcopy(report.geometry_changed_refs or {}),
+    unchanged_refs = vim.deepcopy(report.unchanged_refs or {}),
+    born_refs = vim.deepcopy(report.born_refs or {}),
+    retired_refs = vim.deepcopy(report.retired_refs or {}),
+    reasons_by_key = vim.deepcopy(report.reasons_by_key or {}),
     damage_ranges = vim.deepcopy(opts.damage_ranges or {}),
     repair_ranges = vim.deepcopy(opts.repair_ranges or opts.damage_ranges or {}),
-    context = {
-      changed = first_changed_context ~= nil,
-      signature = state.context_signature or "",
-      changed_unit_indexes = changed_units,
-      units = vim.deepcopy(state.context_units or {}),
-    },
+    context = context_event(state, old_context_units, new_context_units),
   }
 end
 
@@ -491,13 +457,28 @@ local function retire(bufnr, track)
   pcall(vim.api.nvim_buf_del_extmark, bufnr, ns, track.id)
 end
 
-local function mark_track_dirty_once(track)
+local function add_dirty_reason(track, reason)
+  if track == nil or reason == nil then
+    return
+  end
+  track.dirty_reasons = track.dirty_reasons or {}
+  track.dirty_reasons[reason] = true
+end
+
+local function dirty_reasons(track)
+  local reasons = {}
+  for reason in pairs(track.dirty_reasons or {}) do
+    reasons[#reasons + 1] = reason
+  end
+  table.sort(reasons)
+  return reasons
+end
+
+local function mark_track_dirty_once(track, reason)
   if track.state == "retired" then
     return
   end
-  if track.state ~= "dirty" then
-    track.rev = track.rev + 1
-  end
+  add_dirty_reason(track, reason or "unknown")
   track.state = "dirty"
 end
 
@@ -509,7 +490,7 @@ local function sync_track(bufnr, track)
   local pos = vim.api.nvim_buf_get_extmark_by_id(bufnr, ns, track.id, { details = true })
   local row, col, details = pos[1], pos[2], pos[3]
   if row == nil then
-    mark_track_dirty_once(track)
+    mark_track_dirty_once(track, "anchor_missing")
     track.invalid = true
     return
   end
@@ -520,7 +501,7 @@ local function sync_track(bufnr, track)
   track.end_col = details.end_col or col
   track.invalid = details.invalid == true
   if track.invalid then
-    mark_track_dirty_once(track)
+    mark_track_dirty_once(track, "anchor_invalid")
   end
 end
 
@@ -573,6 +554,7 @@ local function expand_damage_through_touching_tracks(state, damage_ranges)
 
   for _, track in ipairs(dirty_tracks(state)) do
     if track.state ~= "retired" then
+      add_dirty_reason(track, "preexisting_dirty")
       included[track.id] = true
       affected[#affected + 1] = track_range(track)
     end
@@ -597,7 +579,7 @@ local function expand_damage_through_touching_tracks(state, damage_ranges)
 
         if touches then
           included[track.id] = true
-          mark_track_dirty_once(track)
+          mark_track_dirty_once(track, "range_touch")
           affected[#affected + 1] = current
           affected = merge_touching_ranges(affected)
           changed = true
@@ -715,8 +697,23 @@ local function tracks_in_window(state, window)
   return tracks
 end
 
+local function range_equal(a, b)
+  return a.row == b.row and a.col == b.col and a.end_row == b.end_row and a.end_col == b.end_col
+end
+
+local function object_identity_changed(track, node)
+  return (track.object_kind or track.node_type or "math") ~= (node.object_kind or node.node_type or "math")
+    or track.node_type ~= node.node_type
+    or track.source_hash ~= node.source_hash
+    or track.source_rows ~= node.source_rows
+    or track.source_display_kind ~= node.source_display_kind
+    or not vim.deep_equal(track.source_facts or {}, node.source_facts or {})
+    or (track.render_whole_line == true) ~= (node.render_whole_line == true)
+end
+
 local function inherit_track(bufnr, track, node, opts)
   opts = opts or {}
+  local identity_changed = object_identity_changed(track, node)
   track.state = "valid"
   track.invalid = false
   track.row = node.row
@@ -735,7 +732,11 @@ local function inherit_track(bufnr, track, node, opts)
   end
   track.object_kind = node.object_kind or node.node_type or "math"
   track.node_type = node.node_type
+  if identity_changed then
+    track.rev = track.rev + 1
+  end
   set_core_extmark(bufnr, track)
+  return identity_changed
 end
 
 local function best_pair(bufnr, tracks, nodes)
@@ -803,7 +804,55 @@ local function scan_all(bufnr, state)
   return result or { nodes = nodes }
 end
 
-local function reconcile_window(bufnr, state, window)
+local function add_report_ref(list, ref)
+  list[#list + 1] = vim.deepcopy(ref)
+end
+
+local function set_report_reason(report, ref, repair_reasons, result_reasons)
+  report.reasons_by_key[M.track_ref_key(ref)] = {
+    repair = vim.deepcopy(repair_reasons or {}),
+    result = vim.deepcopy(result_reasons or {}),
+  }
+end
+
+local function record_checked_pair(report, state, track, before_range, repair_reasons, identity_changed)
+  local ref = track_ref(state, track)
+  local geometry_changed = not range_equal(before_range, track_range(track))
+  local results = {}
+
+  add_report_ref(report.checked_refs, ref)
+  if identity_changed then
+    results[#results + 1] = "object_identity_changed"
+    add_report_ref(report.identity_changed_refs, ref)
+  end
+  if geometry_changed then
+    results[#results + 1] = "geometry_changed"
+    add_report_ref(report.geometry_changed_refs, ref)
+  end
+  if not identity_changed and not geometry_changed then
+    results[#results + 1] = "unchanged"
+    add_report_ref(report.unchanged_refs, ref)
+  end
+
+  set_report_reason(report, ref, repair_reasons, results)
+  track.dirty_reasons = nil
+end
+
+local function record_retired(report, state, track)
+  local ref = track_ref(state, track)
+  add_report_ref(report.checked_refs, ref)
+  add_report_ref(report.retired_refs, ref)
+  set_report_reason(report, ref, dirty_reasons(track), { "retired" })
+  track.dirty_reasons = nil
+end
+
+local function record_born(report, state, track)
+  local ref = track_ref(state, track)
+  add_report_ref(report.born_refs, ref)
+  set_report_reason(report, ref, {}, { "born" })
+end
+
+local function reconcile_window(bufnr, state, window, report)
   local tracks = tracks_in_window(state, window)
   local nodes, result = scan_nodes(bufnr, state, window)
   if nodes == nil then
@@ -817,10 +866,14 @@ local function reconcile_window(bufnr, state, window)
     end
     local track = remove_at(tracks, pair.track_index)
     local node = remove_at(nodes, pair.node_index)
-    inherit_track(bufnr, track, node, { preserve_prelude = true })
+    local before_range = track_range(track)
+    local repair_reasons = dirty_reasons(track)
+    local identity_changed = inherit_track(bufnr, track, node, { preserve_prelude = true })
+    record_checked_pair(report, state, track, before_range, repair_reasons, identity_changed)
   end
 
   for _, track in ipairs(tracks) do
+    record_retired(report, state, track)
     retire(bufnr, track)
   end
 
@@ -828,6 +881,7 @@ local function reconcile_window(bufnr, state, window)
     local track = new_track(state, node)
     state.tracks[track.id] = track
     set_core_extmark(bufnr, track)
+    record_born(report, state, track)
   end
 
   return true, result
@@ -1007,10 +1061,13 @@ function M.attach(bufnr, opts)
   end
 
   local snapshots = track_snapshots(state)
+  local report = empty_repair_report()
+  report.born_refs = refs_from_snapshots(snapshots)
   emit_repair(
     state,
-    diff_event(state, {}, snapshots, {}, state.context_units, {
+    repair_event(state, report, {}, state.context_units, {
       initial = true,
+      tracks = snapshots,
     })
   )
   return true
@@ -1045,13 +1102,13 @@ function M.repair(bufnr)
     return true
   end
 
-  local before_snapshots = track_snapshots(state)
   local old_context_units = vim.deepcopy(state.context_units or {})
   local context_refresh_needed = sync_context_units(bufnr, state)
     or context_units_touch_damages(state.context_units, repair_ranges)
 
+  local report = empty_repair_report()
   for _, window in ipairs(repair_windows(bufnr, state, repair_ranges)) do
-    local ok, result = reconcile_window(bufnr, state, window)
+    local ok, result = reconcile_window(bufnr, state, window, report)
     if not ok then
       refresh_debug(state)
       return false
@@ -1075,9 +1132,11 @@ function M.repair(bufnr)
 
   clear_damage(bufnr)
   sync_tracks(bufnr, state)
+  local after_snapshots = track_snapshots(state)
   emit_repair(
     state,
-    diff_event(state, before_snapshots, track_snapshots(state), old_context_units, state.context_units, {
+    repair_event(state, report, old_context_units, state.context_units, {
+      tracks = after_snapshots,
       damage_ranges = damage_ranges,
       repair_ranges = repair_ranges,
     })

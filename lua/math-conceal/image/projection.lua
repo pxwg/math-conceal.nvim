@@ -3,6 +3,7 @@ local display = require("math-conceal.image.display")
 local flow_classification = require("math-conceal.image.flow-classification")
 local formula_display = require("math-conceal.image.formula-display")
 local quickfix = require("math-conceal.image.quickfix")
+local repair_event = require("math-conceal.image.repair-event")
 local session = require("math-conceal.image.session")
 local state = require("math-conceal.image.state")
 local terminal = require("math-conceal.image.terminal")
@@ -37,22 +38,6 @@ local function render_key(track, ctx, config)
     parts[#parts + 1] = layout_key
   end
   return vim.fn.sha256(table.concat(parts, "\0"))
-end
-
-local function ref_set(refs)
-  local set = {}
-  for _, ref in ipairs(refs or {}) do
-    set[tracker.track_ref_key(ref)] = true
-  end
-  return set
-end
-
-local function tracks_by_key(tracks)
-  local by_key = {}
-  for _, track in ipairs(tracks or {}) do
-    by_key[tracker.track_ref_key(track)] = track
-  end
-  return by_key
 end
 
 local function ensure_projection(bs, bufnr, track)
@@ -340,6 +325,17 @@ local function render_affected(bufnr, binding, ctx, config, render_items)
   end
 end
 
+local function render_trigger_keys(event)
+  if event.initial == true or event.force == true then
+    return repair_event.current_track_key_set(event)
+  end
+
+  local keys = repair_event.ref_set(event.identity_changed_refs)
+  repair_event.merge_keys(keys, repair_event.ref_set(event.born_refs))
+  repair_event.merge_keys(keys, repair_event.context_dependent_key_set(event))
+  return keys
+end
+
 function M.on_tracker_repair(event)
   local image = require("math-conceal.image")
   local bufnr = event.bufnr
@@ -350,13 +346,8 @@ function M.on_tracker_repair(event)
 
   local bs = state.get_buf_state(bufnr)
   local ctx = context.resolve(bufnr, binding, event.context, image.config)
-  local by_key = tracks_by_key(event.tracks)
-  local affected = ref_set(event.affected_refs)
-  if event.initial == true and vim.tbl_isempty(affected) then
-    for key, _ in pairs(by_key) do
-      affected[key] = true
-    end
-  end
+  local by_key = repair_event.tracks_by_key(event)
+  local render_keys = render_trigger_keys(event)
 
   for _, ref in ipairs(event.retired_refs or {}) do
     local key = tracker.track_ref_key(ref)
@@ -375,7 +366,7 @@ function M.on_tracker_repair(event)
 
     if track.invalid then
       cleanup_projection(projection)
-    elseif affected[key] then
+    elseif render_keys[key] then
       if (track.object_kind or track.node_type) == "code" then
         local classified = renderable_track(bufnr, track, ctx)
         if classified ~= nil then
@@ -659,12 +650,11 @@ function M.force_render(bufnr)
     bufnr = bufnr,
     generation = tracks[1] and tracks[1].generation or nil,
     tracker_generation = tracks[1] and tracks[1].tracker_generation or nil,
+    force = true,
     tracks = tracks,
-    affected_refs = tracks,
     retired_refs = {},
     context = tracker.get_context(bufnr),
   }
-  event.context.changed = true
   M.on_tracker_repair(event)
 end
 
