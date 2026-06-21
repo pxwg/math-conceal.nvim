@@ -431,66 +431,81 @@ local function build_node_plans(bufnr, views)
   return node_plans, by_key
 end
 
-local function fragment_collides_cursor(row, col, fragment)
-  if row ~= fragment.row then
-    return false
+local function node_source_cols_for_row(plan, row)
+  local view = plan and plan.view or nil
+  if view == nil or row < view.row or row > view.end_row then
+    return nil, nil
   end
-  if fragment.empty_row then
-    return col == 0
+
+  if view.row == view.end_row then
+    return view.col, view.end_col
   end
-  return col >= fragment.col and col < fragment.end_col
+  if row == view.row then
+    return view.col, math.huge
+  end
+  if row == view.end_row then
+    return 0, view.end_col
+  end
+  return 0, math.huge
 end
 
 local function cursor_collides_with_plan(row, col, plan)
   if row == nil then
     return false
   end
-  for _, fragment in ipairs(plan.fragments) do
-    if fragment_collides_cursor(row, col, fragment) then
-      return true
-    end
-  end
-  return false
+  local start_col, end_col = node_source_cols_for_row(plan, row)
+  return start_col ~= nil and col >= start_col and col < end_col
 end
 
-local function char_selection_intersects_fragment(selection, fragment)
-  if selection.end_row < fragment.row or selection.start_row > fragment.row then
-    return false
-  end
-  if fragment.empty_row then
-    return selection.start_row <= fragment.row and selection.end_row >= fragment.row
-  end
-
-  local start_col = selection.start_row == fragment.row and selection.start_col or 0
-  local end_col = selection.end_row == fragment.row and selection.end_col or math.huge
-  return start_col < fragment.end_col and fragment.col < end_col
-end
-
-local function selection_intersects_fragment(selection, fragment)
-  if selection == nil then
-    return false
+local function selection_cols_for_row(selection, row)
+  if selection == nil or row < selection.start_row or row > selection.end_row then
+    return nil, nil
   end
   if selection.mode == "line" then
-    return fragment.row >= selection.start_row and fragment.row <= selection.end_row
+    return 0, math.huge
   end
   if selection.mode == "block" then
-    if fragment.row < selection.start_row or fragment.row > selection.end_row then
-      return false
-    end
-    if fragment.empty_row then
-      return selection.start_col <= 0 and selection.end_col > 0
-    end
-    return selection.start_col < fragment.end_col and fragment.col < selection.end_col
+    return selection.start_col, selection.end_col
   end
-  return char_selection_intersects_fragment(selection, fragment)
+  if selection.start_row == selection.end_row then
+    return selection.start_col, selection.end_col
+  end
+  if row == selection.start_row then
+    return selection.start_col, math.huge
+  end
+  if row == selection.end_row then
+    return 0, selection.end_col
+  end
+  return 0, math.huge
+end
+
+local function ranges_overlap(a_start, a_end, b_start, b_end)
+  return a_start < b_end and b_start < a_end
 end
 
 local function selection_collides_with_plan(selection, plan)
-  for _, fragment in ipairs(plan.fragments) do
-    if selection_intersects_fragment(selection, fragment) then
+  if selection == nil or plan == nil or plan.view == nil then
+    return false
+  end
+
+  local start_row = math.max(selection.start_row, plan.view.row)
+  local end_row = math.min(selection.end_row, plan.view.end_row)
+  if start_row > end_row then
+    return false
+  end
+
+  for row = start_row, end_row do
+    local selection_start_col, selection_end_col = selection_cols_for_row(selection, row)
+    local node_start_col, node_end_col = node_source_cols_for_row(plan, row)
+    if
+      selection_start_col ~= nil
+      and node_start_col ~= nil
+      and ranges_overlap(selection_start_col, selection_end_col, node_start_col, node_end_col)
+    then
       return true
     end
   end
+
   return false
 end
 
