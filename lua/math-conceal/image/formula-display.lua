@@ -685,7 +685,34 @@ local function render_conceal_fragments(bufnr, plan, extmarks)
   end
 end
 
-local function render_inline_slot(bufnr, plan, extmarks)
+local function source_prefix_display_width(bufnr, fragment)
+  if fragment == nil or fragment.col <= 0 then
+    return 0
+  end
+  local line = source_line(bufnr, fragment.row)
+  return math.max(0, vim.fn.strdisplaywidth(line:sub(1, fragment.col)))
+end
+
+local function add_virt_lines_prefix(virt_lines, prefix_cols)
+  prefix_cols = math.max(0, math.floor(tonumber(prefix_cols) or 0))
+  if prefix_cols == 0 then
+    return virt_lines
+  end
+
+  local prefix = string.rep(" ", prefix_cols)
+  local out = {}
+  for _, line in ipairs(virt_lines or {}) do
+    local prefixed = { { prefix, "" } }
+    for _, chunk in ipairs(line) do
+      prefixed[#prefixed + 1] = chunk
+    end
+    out[#out + 1] = prefixed
+  end
+  return out
+end
+
+local function render_source_row_slot(bufnr, plan, extmarks, slot_opts)
+  slot_opts = slot_opts or {}
   local fragment = plan.start_fragment
   local rows = image_cell_rows(bufnr, plan.view)
   if fragment == nil or rows == nil or rows[1] == nil then
@@ -701,20 +728,35 @@ local function render_inline_slot(bufnr, plan, extmarks)
   local opts = {
     id = extmarks.node_slots[key],
     virt_text = rows[1],
-    virt_text_pos = "inline",
+    virt_text_pos = slot_opts.virt_text_pos or "inline",
     invalidate = true,
     priority = SLOT_PRIORITY,
   }
   if #extra_rows > 0 then
-    opts.virt_lines = extra_rows
+    opts.virt_lines = add_virt_lines_prefix(extra_rows, slot_opts.virt_lines_prefix_cols)
     opts.virt_lines_overflow = "trunc"
   end
   extmarks.node_slots[key] = vim.api.nvim_buf_set_extmark(bufnr, state.display_ns, fragment.row, fragment.col, opts)
 end
 
+local function render_inline_slot(bufnr, plan, extmarks)
+  render_source_row_slot(bufnr, plan, extmarks, { virt_text_pos = "inline" })
+end
+
+local function render_isolated_block_slot(bufnr, plan, extmarks)
+  -- Isolated block rows do not need to shift suffix text. Overlay keeps
+  -- concealed carrier text from contributing to wrap width. Extra virtual
+  -- lines still start at window column zero, so prefix them to the same
+  -- visual source column as the first overlaid image row.
+  render_source_row_slot(bufnr, plan, extmarks, {
+    virt_text_pos = "overlay",
+    virt_lines_prefix_cols = source_prefix_display_width(bufnr, plan.start_fragment),
+  })
+end
+
 local function render_block_slot(bufnr, plan, extmarks)
   if plan.block_shape == "isolated" then
-    render_inline_slot(bufnr, plan, extmarks)
+    render_isolated_block_slot(bufnr, plan, extmarks)
     return
   end
 
