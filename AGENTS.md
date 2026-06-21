@@ -5,6 +5,10 @@
 - Before project work, load `memory-dream show` and treat the generated `Memory.md` entry point as the curated project truth.
 - For graphical image-renderer work, start from Memory Dream `2606190506`: the current architecture is tracker/projection based, not the historical scaffold reset.
 
+## Commit Messages
+
+- Use Conventional Commits for project commits, for example `fix(tracker): separate repair facts from render triggers`.
+
 ## Tracker Core Semantics
 
 - Use the term `tracker core` for the formula identity and geometry layer; do not call it renderer core.
