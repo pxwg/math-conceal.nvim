@@ -32,7 +32,7 @@ local function is_code_block(track)
     return false
   end
   local facts = track.source_facts or {}
-  local equation = track.equation or {}
+  local equation = track.equation or track.object or {}
   return track.source_display_kind == "block"
     or facts.layout_role == "block"
     or equation.display_role == "block"
