@@ -164,9 +164,9 @@
   "(" @left_paren
   (_)
   ")" @right_paren
-  (#any-of? @typ_symbol "dif")
+  (#any-of? @typ_symbol "dif" "partial")
   (#has-ancestor? @typ_symbol math formula)
-  (#set! @typ_symbol conceal "𝚍"))
+  (#set-conceal! @typ_symbol "conceal"))
 
 (fraction
   "/" @frac
