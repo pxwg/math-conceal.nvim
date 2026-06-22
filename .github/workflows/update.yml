@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout Code
@@ -63,12 +64,23 @@ jobs:
             echo "updated=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Commit and Push
+      - name: Create Pull Request
         if: steps.update_process.outputs.updated == 'true'
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: peter-evans/create-pull-request@v8
         with:
-          commit_message: "chore: update symbols to typst ${{ steps.update_process.outputs.version }}"
-          branch: main
-          file_pattern: 'lua/ scripts/'
-          commit_user_name: "github-actions[bot]"
-          commit_user_email: "github-actions[bot]@users.noreply.github.com"
+          commit-message: "chore: update symbols to typst ${{ steps.update_process.outputs.version }}"
+          branch: chore/update-typst-symbols
+          base: main
+          delete-branch: true
+          title: "chore: update symbols to typst ${{ steps.update_process.outputs.version }}"
+          body: |
+            Auto-generated Typst symbol update.
+
+            - Typst version: `${{ steps.update_process.outputs.version }}`
+            - Regenerated `lua/math-conceal/conceal/math_symbols_typst.json`
+            - Updated `scripts/typst_symbols.rs`
+          add-paths: |
+            lua/math-conceal/conceal/math_symbols_typst.json
+            scripts/typst_symbols.rs
+          committer: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          author: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
