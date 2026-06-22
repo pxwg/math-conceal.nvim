@@ -265,23 +265,6 @@ local function cursor_for_buf(bufnr)
   return cursor[1] - 1, cursor[2]
 end
 
-local function window_text_width(winid)
-  local info = vim.fn.getwininfo(winid)[1] or {}
-  local textoff = tonumber(info.textoff) or 0
-  return math.max(1, vim.api.nvim_win_get_width(winid) - textoff)
-end
-
-local function wrapping_text_width(bufnr)
-  local width = nil
-  for _, winid in ipairs(vim.fn.win_findbuf(bufnr)) do
-    if vim.api.nvim_win_is_valid(winid) and vim.wo[winid].wrap then
-      local win_width = window_text_width(winid)
-      width = width == nil and win_width or math.min(width, win_width)
-    end
-  end
-  return width
-end
-
 local function visual_selection()
   local mode = vim.api.nvim_get_mode().mode
   if mode ~= "v" and mode ~= "V" and mode ~= "\22" then
@@ -575,16 +558,19 @@ local function build_projection_plan(bufnr, snapshots, config)
   }
 end
 
-local function node_slot_key(track_key)
+local function node_slot_key(track_key, index)
+  if index ~= nil then
+    return "slot:" .. track_key .. ":row:" .. tostring(index)
+  end
   return "slot:" .. track_key
+end
+
+local function node_slot_prefix(track_key)
+  return "slot:" .. track_key .. ":"
 end
 
 local function conceal_span_key(track_key, index)
   return "conceal:" .. track_key .. ":" .. tostring(index)
-end
-
-local function conceal_row_key(track_key, index)
-  return "conceal-line:" .. track_key .. ":" .. tostring(index)
 end
 
 local function clear_group_prefix(bufnr, group, ns, prefix)
@@ -597,6 +583,7 @@ end
 
 local function clear_artifacts_for_track_key(bufnr, fd, track_key)
   delete_group_extmark(bufnr, fd.extmarks.node_slots, state.display_ns, node_slot_key(track_key))
+  clear_group_prefix(bufnr, fd.extmarks.node_slots, state.display_ns, node_slot_prefix(track_key))
   clear_group_prefix(bufnr, fd.extmarks.conceal_spans, state.aux_ns, "conceal:" .. track_key .. ":")
   clear_group_prefix(bufnr, fd.extmarks.conceal_rows, state.aux_ns, "conceal-line:" .. track_key .. ":")
 end
@@ -645,64 +632,6 @@ local function block_slot_position(plan)
   return nil, false
 end
 
-local function source_row_wraps(bufnr, row)
-  local text_width = wrapping_text_width(bufnr)
-  if text_width == nil then
-    return false
-  end
-  return vim.fn.strdisplaywidth(source_line(bufnr, row)) > text_width
-end
-
--- UNSAFE: temporary wrap workaround for long single-row isolated blocks.
--- This deliberately allows the source fragment row to stop carrying the node
--- slot and later receive conceal_lines. That weakens the node-local display
--- invariant that the slot row remains a visible cursor-addressable landing
--- surface. Cursor collision should still source-reveal if the editor lands on
--- the concealed row, but visual reachability is weaker and may regress in some
--- navigation or multi-window cases. Prefer replacing this with a safer
--- source-reveal fallback or a proven Neovim/Kitty-safe landing model.
-local function isolated_block_slot_detached(bufnr, plan)
-  return plan.block_shape == "isolated"
-    and plan.view.object.inline ~= true
-    and plan.start_fragment ~= nil
-    and source_row_wraps(bufnr, plan.start_fragment.row)
-end
-
-local function fragment_carries_node_slot(bufnr, plan, fragment)
-  if fragment == nil then
-    return false
-  end
-
-  if isolated_block_slot_detached(bufnr, plan) then
-    -- UNSAFE: returning false lets render_conceal_fragment() height-collapse
-    -- the source fragment row with conceal_lines even though it is logically
-    -- the node's own landing row. This is only to avoid wrap-splitting Kitty
-    -- placeholders on long concealed carrier rows.
-    return false
-  end
-
-  if plan.view.object.inline or plan.block_shape == "isolated" then
-    return fragment == plan.start_fragment
-  end
-
-  local anchor_row = block_slot_position(plan)
-  return anchor_row ~= nil and fragment.row == anchor_row
-end
-
-local function render_conceal_line(bufnr, plan, fragment, index, extmarks)
-  local key = conceal_row_key(plan.view.key, index)
-  extmarks.conceal_rows[key] = vim.api.nvim_buf_set_extmark(bufnr, state.aux_ns, fragment.row, 0, {
-    id = extmarks.conceal_rows[key],
-    conceal_lines = "",
-    end_row = fragment.row,
-    right_gravity = true,
-    end_right_gravity = true,
-    undo_restore = true,
-    invalidate = true,
-    priority = CONCEAL_PRIORITY,
-  })
-end
-
 local function render_conceal_span(bufnr, plan, fragment, index, extmarks)
   if fragment.end_col <= fragment.col then
     return
@@ -719,11 +648,10 @@ local function render_conceal_span(bufnr, plan, fragment, index, extmarks)
 end
 
 local function render_conceal_fragment(bufnr, plan, fragment, index, extmarks)
-  if fragment.fragment_only and not fragment_carries_node_slot(bufnr, plan, fragment) then
-    render_conceal_line(bufnr, plan, fragment, index, extmarks)
-    return
-  end
-
+  -- Keep source rows drawable in image state.  A conceal_lines cluster becomes
+  -- zero-height; if a window's logical topline intersects that cluster, Neovim
+  -- skips directly to the next unconcealed line.  Range conceal blanks source
+  -- text while preserving the row as a scroll/cursor anchor.
   render_conceal_span(bufnr, plan, fragment, index, extmarks)
 end
 
@@ -791,64 +719,80 @@ local function render_inline_slot(bufnr, plan, extmarks)
   render_source_row_slot(bufnr, plan, extmarks, { virt_text_pos = "inline" })
 end
 
-local function detached_block_anchor(bufnr, plan)
-  if plan.view.row > 0 then
-    return plan.view.row - 1, false
-  end
-  if plan.view.end_row + 1 < vim.api.nvim_buf_line_count(bufnr) then
-    return plan.view.end_row + 1, true
-  end
-  return nil, nil
+local function prefixed_virt_text(chunks, prefix_cols)
+  return (add_virt_lines_prefix({ chunks }, prefix_cols) or {})[1] or chunks
 end
 
--- UNSAFE: detached isolated slots are not truly node-local. The rendered image
--- is attached to a neighboring row while the tracked source row is concealed as
--- a line. This preserves visual image integrity under 'wrap' for long source
--- rows, but can make the source location less discoverable than an on-row slot.
-local function render_detached_isolated_block_slot(bufnr, plan, extmarks)
+local function render_isolated_block_carrier_slots(bufnr, plan, extmarks)
   local rows = image_cell_rows(bufnr, plan.view)
-  if rows == nil or #rows == 0 then
+  if rows == nil or #rows == 0 or plan.start_fragment == nil then
     return
   end
 
-  local anchor_row, virt_lines_above = detached_block_anchor(bufnr, plan)
-  if anchor_row == nil then
-    render_source_row_slot(bufnr, plan, extmarks, {
+  local prefix_cols = source_prefix_display_width(bufnr, plan.start_fragment)
+  local last_slot_key = nil
+  local last_slot_opts = nil
+  local rendered_rows = math.min(#rows, #plan.fragments)
+
+  for index = 1, rendered_rows do
+    local fragment = plan.fragments[index]
+    local mark_col = index == 1 and fragment.col or 0
+    local virt_text = rows[index]
+    if index ~= 1 then
+      virt_text = prefixed_virt_text(virt_text, prefix_cols)
+    end
+
+    local key = node_slot_key(plan.view.key, index)
+    local opts = {
+      id = extmarks.node_slots[key],
+      virt_text = virt_text,
       virt_text_pos = "overlay",
-      virt_lines_prefix_cols = source_prefix_display_width(bufnr, plan.start_fragment),
-    })
+      invalidate = true,
+      priority = SLOT_PRIORITY,
+    }
+    extmarks.node_slots[key] = vim.api.nvim_buf_set_extmark(bufnr, state.display_ns, fragment.row, mark_col, opts)
+    last_slot_key = key
+    last_slot_opts = opts
+  end
+
+  if #rows <= rendered_rows then
     return
   end
 
-  local key = node_slot_key(plan.view.key)
-  extmarks.node_slots[key] = vim.api.nvim_buf_set_extmark(bufnr, state.display_ns, anchor_row, 0, {
-    id = extmarks.node_slots[key],
-    virt_lines = add_virt_lines_prefix(rows, source_prefix_display_width(bufnr, plan.start_fragment)),
-    virt_lines_above = virt_lines_above,
-    virt_lines_overflow = "trunc",
-    invalidate = true,
-    priority = SLOT_PRIORITY,
-  })
+  local extra_rows = {}
+  for index = rendered_rows + 1, #rows do
+    extra_rows[#extra_rows + 1] = rows[index]
+  end
+
+  local fragment = plan.fragments[math.max(1, rendered_rows)] or plan.start_fragment
+  local key = last_slot_key or node_slot_key(plan.view.key, 1)
+  local opts = last_slot_opts
+  if opts == nil then
+    opts = {
+      id = extmarks.node_slots[key],
+      virt_text = prefixed_virt_text(rows[1], prefix_cols),
+      virt_text_pos = "overlay",
+      invalidate = true,
+      priority = SLOT_PRIORITY,
+    }
+  end
+  opts.virt_lines = add_virt_lines_prefix(extra_rows, prefix_cols)
+  opts.virt_lines_overflow = "trunc"
+  extmarks.node_slots[key] = vim.api.nvim_buf_set_extmark(
+    bufnr,
+    state.display_ns,
+    fragment.row,
+    fragment == plan.start_fragment and fragment.col or 0,
+    opts
+  )
 end
 
 local function render_isolated_block_slot(bufnr, plan, extmarks)
-  if isolated_block_slot_detached(bufnr, plan) then
-    -- UNSAFE: concealed long source lines still consume wrap rows in Neovim.
-    -- Rendering adjacent virtual lines avoids splitting Kitty placeholder rows,
-    -- but height-collapsing the source row may make the source less visually
-    -- reachable until cursor collision reveals it.
-    render_detached_isolated_block_slot(bufnr, plan, extmarks)
-    return
-  end
-
-  -- Isolated block rows do not need to shift suffix text. Overlay keeps
-  -- concealed carrier text from contributing to image width. Extra virtual
-  -- lines still start at window column zero, so prefix them to the same
-  -- visual source column as the first overlaid image row.
-  render_source_row_slot(bufnr, plan, extmarks, {
-    virt_text_pos = "overlay",
-    virt_lines_prefix_cols = source_prefix_display_width(bufnr, plan.start_fragment),
-  })
+  -- Isolated block rows are real source-row carriers in image state. Mapping
+  -- image rows onto the source rows prevents a hidden source range from
+  -- becoming a zero-height conceal_lines cluster, so the window can keep a
+  -- stable topline inside the block while scrolling through the image.
+  render_isolated_block_carrier_slots(bufnr, plan, extmarks)
 end
 
 local function render_block_slot(bufnr, plan, extmarks)
