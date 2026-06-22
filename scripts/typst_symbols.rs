@@ -1,8 +1,8 @@
 #!/usr/bin/env rust-script
 //! ```cargo
 //! [dependencies]
-//! typst = "0.14.2"
-//! typst-library = "0.14.2"
+//! typst = "0.15.0"
+//! typst-library = "0.15.0"
 //! serde = { version = "1.0", features = ["derive"] }
 //! serde_json = "1.0"
 //! ```
@@ -57,12 +57,13 @@ fn main() {
         if let TypstValue::Module(module) = value {
             let mut module_symbols = BTreeMap::new();
             let mut module_deprecated = HashSet::new();
-            extract_from_scope(module.scope(), &mut module_symbols, &mut module_deprecated, Some(&binding));
 
             if mod_name == "math" {
+                extract_from_scope(module.scope(), &mut module_symbols, &mut module_deprecated, Some(&binding), true);
                 math_symbols = module_symbols;
                 deprecated_symbols = module_deprecated;
             } else {
+                extract_from_scope(module.scope(), &mut module_symbols, &mut module_deprecated, Some(&binding), false);
                 other_symbols.insert(mod_name.to_string(), module_symbols);
                 deprecated_symbols.extend(module_deprecated);
             }
@@ -81,17 +82,28 @@ fn main() {
         }
     }
 
-    // Remove duplicates within downloaded data
-    for (_, module_map) in &mut other_symbols {
-        let mut to_remove = Vec::new();
-        for key in module_map.keys() {
-            if math_symbols.contains_key(key) {
-                to_remove.push(key.clone());
+    let mut emoji_symbols: BTreeMap<String, String> = BTreeMap::new();
+    let mut all_other: BTreeMap<String, String> = BTreeMap::new();
+
+    for (mod_name, module_map) in other_symbols {
+        if mod_name == "emoji" {
+            emoji_symbols = module_map;
+        } else {
+            for (key, value) in module_map {
+                all_other.insert(key, value);
             }
         }
-        for key in to_remove {
-            module_map.remove(&key);
+    }
+
+    // Remove duplicates from other that exist in math
+    let mut to_remove = Vec::new();
+    for key in all_other.keys() {
+        if math_symbols.contains_key(key) {
+            to_remove.push(key.clone());
         }
+    }
+    for key in to_remove {
+        all_other.remove(&key);
     }
 
     // Build initial JSON
@@ -99,10 +111,12 @@ fn main() {
         "conceal": math_symbols
     });
 
-    for (mod_name, module_map) in other_symbols {
-        if !module_map.is_empty() {
-            output_json[mod_name] = json!(module_map);
-        }
+    if !emoji_symbols.is_empty() {
+        output_json["emoji"] = json!(emoji_symbols);
+    }
+
+    if !all_other.is_empty() {
+        output_json["other"] = json!(all_other);
     }
 
     // Filter entire keys whose values consist ONLY of filterable characters
@@ -200,7 +214,8 @@ fn main() {
 fn extract_from_scope(scope: &Scope,
     map: &mut BTreeMap<String, String>,
     deprecated: &mut HashSet<String>,
-    parent_binding: Option<&Binding>
+    parent_binding: Option<&Binding>,
+    skip_nested: bool
 ) {
     for (name, binding) in scope.iter() {
         let value = binding.read();
@@ -222,7 +237,9 @@ fn extract_from_scope(scope: &Scope,
                 walk_symbol(name, sym, map);
             }
         } else if let TypstValue::Module(module) = value {
-            extract_from_scope(module.scope(), map, deprecated, Some(&binding));
+            if !skip_nested {
+                extract_from_scope(module.scope(), map, deprecated, Some(&binding), skip_nested);
+            }
         }
     }
 }
