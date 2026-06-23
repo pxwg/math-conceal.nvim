@@ -2423,6 +2423,7 @@ dependencies = [
  "time",
  "tiny-skia",
  "typst",
+ "typst-eval",
  "typst-kit",
  "typst-render",
 ]

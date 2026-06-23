@@ -58,7 +58,6 @@ lazy.nvim setup with graphical equation conceal:
       ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
       image = {
         enabled = true,
-        filetypes = { "typst", "markdown" },
       },
     },
   }
@@ -70,8 +69,8 @@ If you do not use a plugin manager build hook, build it manually:
   cargo build --release --manifest-path service/Cargo.toml
 <
 
-When `image.service_binary` is omitted, math-conceal first checks the bundled
-release binary:
+When a renderer `service_binary` is omitted, math-conceal first checks the
+bundled release binary:
 >
   service/target/release/typst-concealer-service
 <
@@ -146,24 +145,23 @@ Graphical equation conceal is configured under the top-level `image` table:
   require("math-conceal").setup({
     image = {
       enabled = true,
-      filetypes = { "typst", "markdown" },
     },
   })
 <
 
-The `image` table is passed to the migrated renderer after removing the
-top-level control key `enabled`. This means advanced renderer options can be
-placed directly under `image`.
+Renderer bindings are configured under `image.renderers`. The default bindings
+enable Typst buffers through `renderers.typst` and Markdown buffers through
+`renderers.markdown`.
 
 Graphical equation conceal and ASCII conceal can be enabled together. ASCII
-conceal still uses `ft`; graphical equation rendering uses `image.filetypes`.
+conceal still uses `ft`; graphical equation rendering uses
+`image.renderers.<name>.filetypes`.
 
-Supported source kinds:
+Default renderer bindings:
 
 - `typst`: Typst math and supported top-level Typst code blocks.
 - `markdown`: `$...$`, `$$...$$`, `\(...\)`, and `\[...\]`
-  Markdown math rendered through MiTeX.
-- `latex`: experimental LaTeX backend, off by default.
+  Markdown math rendered through MiTeX on the Typst service backend.
 
 ==============================================================================
 5. Equation conceal examples                    *math-conceal-image-examples*
@@ -173,7 +171,14 @@ Typst only:
   require("math-conceal").setup({
     image = {
       enabled = true,
-      filetypes = { "typst" },
+      renderers = {
+        typst = {
+          filetypes = { "typst" },
+        },
+        markdown = {
+          filetypes = {},
+        },
+      },
     },
   })
 <
@@ -183,8 +188,6 @@ Typst and Markdown:
   require("math-conceal").setup({
     image = {
       enabled = true,
-      filetypes = { "typst", "markdown" },
-      markdown_filetypes = { "markdown" },
     },
   })
 <
@@ -194,23 +197,9 @@ Typst and plugin-owned Markdown-like buffers:
   require("math-conceal").setup({
     image = {
       enabled = true,
-      filetypes = { "typst", "markdown" },
-      markdown_filetypes = { "markdown", "copilot-chat" },
-    },
-  })
-<
-
-Experimental LaTeX equation rendering:
->
-  require("math-conceal").setup({
-    image = {
-      enabled = true,
-      filetypes = { "typst", "markdown", "latex" },
-      backends = {
-        latex = {
-          enabled = true,
-          compiler = "pdflatex",
-          converter = "pdftocairo",
+      renderers = {
+        markdown = {
+          filetypes = { "markdown", "copilot-chat" },
         },
       },
     },
@@ -222,22 +211,24 @@ Project-aware Typst rendering:
   require("math-conceal").setup({
     image = {
       enabled = true,
-      filetypes = { "typst" },
-      get_root = function(_bufnr, path, _cwd, _kind)
-        local wiki = vim.fs.normalize(vim.fn.expand("~/wiki"))
-        path = vim.fs.normalize(path)
-        if path == wiki or path:sub(1, #wiki + 1) == wiki .. "/" then
-          return wiki
-        end
-      end,
-      get_inputs = function()
-        return { "concealed=true", "preview=true" }
-      end,
-      get_preamble_file = function(_bufnr, path)
-        if path:match("/wiki/") then
-          return vim.fn.expand("~/wiki/concealer-context.typ")
-        end
-      end,
+      renderers = {
+        typst = {
+          filetypes = { "typst" },
+          root = function(ctx)
+            local wiki = vim.fs.normalize(vim.fn.expand("~/wiki"))
+            local path = vim.fs.normalize(ctx.path)
+            if path == wiki or path:sub(1, #wiki + 1) == wiki .. "/" then
+              return wiki
+            end
+          end,
+          inputs = { "concealed=true", "preview=true" },
+          preamble_file = function(ctx)
+            if ctx.path:match("/wiki/") then
+              return vim.fn.expand("~/wiki/concealer-context.typ")
+            end
+          end,
+        },
+      },
     },
   })
 <
@@ -247,9 +238,12 @@ Restrict rendering by path:
   require("math-conceal").setup({
     image = {
       enabled = true,
-      render_paths = {
-        include = { "/notes/", "/slides/" },
-        exclude = { "/vendor/", "/node_modules/", "/large%-generated/" },
+      renderers = {
+        typst = {
+          render_paths = {
+            exclude = { "/vendor/", "/node_modules/", "/large%-generated/" },
+          },
+        },
       },
     },
   })
@@ -262,18 +256,29 @@ Restrict rendering by path:
 `image.enabled`~
         Boolean. Enables graphical equation conceal. Default: false.
 
-                                                       *math-conceal-image.filetypes*
-`image.filetypes`~
-        List of source kinds/filetypes managed by graphical equation rendering.
-        Common values: `typst`, `markdown`, `latex`.
+                                                       *math-conceal-image.renderers*
+`image.renderers`~
+        Table of renderer bindings. Defaults include:
+>
+        renderers = {
+          typst = {
+            filetypes = { "typst" },
+          },
+          markdown = {
+            filetypes = { "markdown" },
+            mitex_package = "@preview/mitex:0.2.7",
+          },
+        }
+<
 
-        Default at the top-level math-conceal integration: `{ "typst" }`.
-        The migrated renderer itself defaults to Typst and Markdown when used
-        directly.
+                                        *math-conceal-image.renderers.filetypes*
+`image.renderers.<name>.filetypes`~
+        Concrete Neovim filetypes managed by one renderer binding.
 
-                                                  *math-conceal-image.service_binary*
-`image.service_binary`~
-        Path to the Rust compiler service. If omitted, math-conceal tries:
+                                  *math-conceal-image.renderers.service_binary*
+`image.renderers.<name>.service_binary`~
+        Path to the Rust compiler service for one renderer binding. If omitted,
+        math-conceal tries:
 >
         service/target/release/typst-concealer-service
 <
@@ -311,23 +316,16 @@ Restrict rendering by path:
         Baseline point size used to derive render PPI from terminal cell height.
         Default: 11.
 
-                                                       *math-conceal-image.header*
-`image.header`~
-        Typst code prepended to every rendered document.
-
-                                                *math-conceal-image.compiler_args*
-`image.compiler_args`~
-        Backward-compatible Typst `--input` arguments. Prefer `get_inputs` for
-        new configuration.
-
                                               *math-conceal-image.live_preview_enabled*
 `image.live_preview_enabled`~
-        Boolean. Enables the cursor-following live preview in insert mode.
+        Boolean. Enables the cursor-following live preview in normal, insert,
+        and visual modes.
         Default: true.
 
-                                             *math-conceal-image.live_preview_debounce*
-`image.live_preview_debounce`~
-        Delay in milliseconds for live preview updates. Default: 100.
+                                      *math-conceal-image.renderers.live_debounce*
+`image.renderers.<name>.live_debounce`~
+        Delay in milliseconds for text-change live preview updates for a
+        renderer. Cursor movement preview is immediate. Typst defaults to 0.
 
                                         *math-conceal-image.cursor_hover_throttle_ms*
 `image.cursor_hover_throttle_ms`~
@@ -338,71 +336,52 @@ Restrict rendering by path:
         Boolean. Keeps concealing when the cursor is on a rendered item in
         normal mode. Default: false.
 
-                                                *math-conceal-image.markdown_filetypes*
-`image.markdown_filetypes`~
-        Filetypes treated as Markdown math sources. Default: `{ "markdown" }`.
-        Add plugin-owned buffers such as `copilot-chat` here when needed.
+                                           *math-conceal-image.renderers.header*
+`image.renderers.<name>.header`~
+        Renderer-scoped Typst code prepended to generated render documents.
 
-                                                  *math-conceal-image.mitex_package*
-`image.mitex_package`~
-        Typst package spec used for Markdown LaTeX math conversion through
-        MiTeX. Default: `@preview/mitex:0.2.7`.
+                                             *math-conceal-image.renderers.root*
+`image.renderers.<name>.root`~
+        String or function returning the Typst root directory passed to the
+        compiler service. Function form receives one context table:
+        `{ bufnr, kind, filetype, path, cwd }`.
 
-                                                    *math-conceal-image.backends*
-`image.backends.latex`~
-        Experimental LaTeX backend configuration.
+                                           *math-conceal-image.renderers.inputs*
+`image.renderers.<name>.inputs`~
+        Table, list of `key=value` strings, or function returning Typst input
+        values for one renderer binding.
+
+                                    *math-conceal-image.renderers.preamble_file*
+`image.renderers.<name>.preamble_file`~
+        String or function returning an absolute `.typ` file to include at the
+        top of generated render documents for one renderer binding.
+
+                                      *math-conceal-image.renderers.render_paths*
+`image.renderers.<name>.render_paths`~
+        Optional path exclude rules. String rules are Lua patterns matched
+        against normalized absolute paths. Function rules receive the renderer
+        attach context and should return true when matched.
 >
         image = {
-          backends = {
-            latex = {
-              enabled = true,
-              compiler = "pdflatex",
-              converter = "pdftocairo",
-              compiler_args = {},
-              header = "",
-              mitex_fast_path = true,
-              viewport_margin = 0,
+          renderers = {
+            typst = {
+              render_paths = {
+                exclude = {
+                  "/vendor/",
+                  function(ctx)
+                    return ctx.path:match("/generated/") ~= nil
+                  end,
+                },
+              },
             },
           },
         }
 <
 
-                                                    *math-conceal-image.render_paths*
-`image.render_paths`~
-        Optional path include/exclude rules. String rules are Lua patterns
-        matched against normalized absolute paths. Function rules receive
-        `(path, bufnr)` and should return true when matched.
->
-        render_paths = {
-          include = { "/notes/" },
-          exclude = {
-            "/vendor/",
-            function(path)
-              return path:match("/generated/") ~= nil
-            end,
-          },
-        }
-<
-
-                                                        *math-conceal-image.get_root*
-`image.get_root(bufnr, path, cwd, kind)`~
-        Returns the Typst root directory passed to the compiler service. Must be
-        an absolute directory. Returning nil falls back to automatic root
-        detection from the buffer path (`typst.toml`, VCS markers), then the
-        buffer directory/current working directory.
-
-                                                      *math-conceal-image.get_inputs*
-`image.get_inputs(bufnr, path, cwd, kind)`~
-        Returns extra Typst input values such as:
->
-        return { "concealed=true", "preview=true" }
-<
-
-                                               *math-conceal-image.get_preamble_file*
-`image.get_preamble_file(bufnr, path, cwd, kind)`~
-        Returns an absolute `.typ` file to include at the top of generated
-        render documents. Use this for project imports, bibliography setup, or
-        show rules needed by snippets.
+                                     *math-conceal-image.renderers.mitex_package*
+`image.renderers.markdown.mitex_package`~
+        Typst package spec used for Markdown LaTeX math conversion through
+        MiTeX. Default: `@preview/mitex:0.2.7`.
 
 ==============================================================================
 7. Equation conceal API                              *math-conceal-image-api*
@@ -459,10 +438,17 @@ No rendered equations appear~
 <
 
 Service cannot be spawned~
-        Set `image.service_binary` to an absolute path:
+        Set the renderer service binary to an absolute path:
 >
         image = {
-          service_binary = "/absolute/path/to/typst-concealer-service",
+          renderers = {
+            typst = {
+              service_binary = "/absolute/path/to/typst-concealer-service",
+            },
+            markdown = {
+              service_binary = "/absolute/path/to/typst-concealer-service",
+            },
+          },
         }
 <
 
@@ -471,23 +457,29 @@ Markdown math does not render~
 >
         image = {
           enabled = true,
-          filetypes = { "typst", "markdown" },
-          markdown_filetypes = { "markdown" },
+          renderers = {
+            markdown = {
+              filetypes = { "markdown" },
+            },
+          },
         }
 <
 
 Custom Markdown-like filetypes do not render~
-        Add both the source kind and the concrete filetype:
+        Add the concrete filetype to the Markdown renderer:
 >
         image = {
-          filetypes = { "typst", "markdown" },
-          markdown_filetypes = { "markdown", "copilot-chat" },
+          renderers = {
+            markdown = {
+              filetypes = { "markdown", "copilot-chat" },
+            },
+          },
         }
 <
 
 Project imports fail~
-        Configure `get_root`, `get_inputs`, or `get_preamble_file` so snippets
-        compile under the same context as the real project.
+        Configure renderer-scoped `root`, `inputs`, or `preamble_file` so
+        snippets compile under the same context as the real project.
 
 ==============================================================================
 

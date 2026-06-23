@@ -1,6 +1,3 @@
---- Markdown math source adapter.
---- Collects LaTeX math ranges and converts them to Typst/MiTeX render text.
-
 local M = {}
 
 local delimiter_specs = {
@@ -47,18 +44,25 @@ local markdown_inline_math_query = nil
 local markdown_shield_query = nil
 local markdown_inline_shield_query = nil
 
-function M.render_viewport()
-  return {
-    kind = "visible",
-    margin = 0,
-  }
+local function lt(a_row, a_col, b_row, b_col)
+  return a_row < b_row or (a_row == b_row and a_col < b_col)
 end
 
-function M.render_policy()
-  return {
-    kind = "progressive",
-    margin = 0,
-  }
+local function range_intersects(a, b)
+  return lt(a.row, a.col, b.end_row, b.end_col) and lt(b.row, b.col, a.end_row, a.end_col)
+end
+
+local function range_table_intersects(range, window)
+  return range_intersects({
+    row = range[1],
+    col = range[2],
+    end_row = range[3],
+    end_col = range[4],
+  }, window)
+end
+
+local function source_hash(source)
+  return vim.fn.sha256(source or "")
 end
 
 local function is_escaped(line, idx)
@@ -110,21 +114,6 @@ local function find_unescaped(line, needle, init, row, shields)
   end
 end
 
-local function typst_string_literal(value)
-  value = value or ""
-  value = value:gsub("\\", "\\\\")
-  value = value:gsub('"', '\\"')
-  value = value:gsub("\n", "\\n")
-  return '"' .. value .. '"'
-end
-
-local function render_text(content, display_kind)
-  if display_kind == "block" then
-    return "#mitex(" .. typst_string_literal(content) .. ")"
-  end
-  return "#mi(" .. typst_string_literal(content) .. ")"
-end
-
 local function original_text(lines, range)
   local start_row, start_col, end_row, end_col = range[1], range[2], range[3], range[4]
   if start_row == end_row then
@@ -140,29 +129,24 @@ local function original_text(lines, range)
   return table.concat(parts, "\n")
 end
 
-local function delimited_content(lines, range, spec)
+local function content_range(range, spec)
   local start_row, start_col, end_row, end_col = range[1], range[2], range[3], range[4]
   local open_len = #spec.open
   local close_len = #spec.close
-
   if start_row == end_row then
-    return (lines[start_row + 1] or ""):sub(start_col + open_len + 1, end_col - close_len)
+    return {
+      row = start_row,
+      col = start_col + open_len,
+      end_row = end_row,
+      end_col = end_col - close_len,
+    }
   end
-
-  local parts = {}
-  parts[1] = (lines[start_row + 1] or ""):sub(start_col + open_len + 1)
-  for row = start_row + 1, end_row - 1 do
-    parts[#parts + 1] = lines[row + 1] or ""
-  end
-  parts[#parts + 1] = (lines[end_row + 1] or ""):sub(1, end_col - close_len)
-
-  if spec.display_kind == "block" and parts[1] == "" then
-    table.remove(parts, 1)
-  end
-  if spec.display_kind == "block" and parts[#parts] == "" then
-    parts[#parts] = nil
-  end
-  return table.concat(parts, "\n")
+  return {
+    row = start_row,
+    col = start_col + open_len,
+    end_row = end_row,
+    end_col = end_col - close_len,
+  }
 end
 
 local function spec_for_source(source)
@@ -174,30 +158,12 @@ local function spec_for_source(source)
   return nil
 end
 
-local function push_entry(entries, lines, range, spec, content)
+local function push_entry(entries, lines, range, spec)
+  local source = original_text(lines, range)
   entries[#entries + 1] = {
     range = range,
-    display_range = range,
-    prelude_count = 0,
-    node_type = "math",
-    source_text = original_text(lines, range),
-    render_text = render_text(content, spec.display_kind),
-    stable_key = table.concat({
-      "markdown",
-      spec.id,
-      tostring(range[1]),
-      tostring(range[2]),
-      tostring(range[3]),
-      tostring(range[4]),
-    }, ":"),
-    semantics = {
-      constraint_kind = "intrinsic",
-      display_kind = spec.display_kind,
-      markdown_delimiter = spec.id,
-      source_kind = "math",
-      markdown_math = true,
-    },
-    requires_mitex = true,
+    spec = spec,
+    source = source,
   }
 end
 
@@ -344,10 +310,6 @@ local function iter_parser_trees(parser)
 end
 
 local function collect_shield_ranges(bufnr, markdown_parser)
-  if markdown_parser == nil then
-    return nil
-  end
-
   local shields = {}
   local markdown_query = get_markdown_shield_query()
   if markdown_query ~= nil then
@@ -381,19 +343,15 @@ local function collect_shield_ranges(bufnr, markdown_parser)
 end
 
 local function collect_treesitter_math(bufnr, lines, markdown_parser)
-  if markdown_parser == nil then
-    return nil
-  end
-
   local query = get_markdown_inline_math_query()
   if query == nil then
-    return nil
+    return {}
   end
 
   local inline_parsers = {}
   collect_target_parsers(markdown_parser, "markdown", "markdown_inline", inline_parsers)
   if #inline_parsers == 0 then
-    return nil
+    return {}
   end
 
   local entries = {}
@@ -409,14 +367,14 @@ local function collect_treesitter_math(bufnr, lines, markdown_parser)
           local key = table.concat(range, ":")
           if not seen[key] then
             seen[key] = true
-            push_entry(entries, lines, range, spec, delimited_content(lines, range, spec))
+            push_entry(entries, lines, range, spec)
           end
         end
       end
     end
   end
 
-  return top_level_entries(entries)
+  return entries
 end
 
 local function find_next_open(line, row, pos, specs, shields)
@@ -467,66 +425,122 @@ end
 
 local function collect_delimited_math(entries, lines, specs, shields)
   local row = 0
-  local in_fence = false
 
   while row < #lines do
     local line = lines[row + 1] or ""
-    if shields == nil and (line:match("^%s*```") or line:match("^%s*~~~")) then
-      in_fence = not in_fence
-      row = row + 1
-    elseif shields == nil and in_fence then
-      row = row + 1
-    else
-      local pos = 1
-      local advanced_to_block_end = false
+    local pos = 1
+    local advanced_to_block_end = false
 
-      while pos <= #line do
-        local spec, start_pos = find_next_open(line, row, pos, specs, shields)
-        if spec == nil or start_pos == nil then
+    while pos <= #line do
+      local spec, start_pos = find_next_open(line, row, pos, specs, shields)
+      if spec == nil or start_pos == nil then
+        break
+      end
+
+      local end_row, end_col = find_close(lines, row, start_pos, spec, shields)
+      if end_row ~= nil and end_col ~= nil then
+        local range = { row, start_pos - 1, end_row, end_col }
+        push_entry(entries, lines, range, spec)
+        if end_row > row then
+          row = end_row + 1
+          advanced_to_block_end = true
           break
         end
-
-        local end_row, end_col = find_close(lines, row, start_pos, spec, shields)
-        if end_row ~= nil and end_col ~= nil then
-          local range = { row, start_pos - 1, end_row, end_col }
-          push_entry(entries, lines, range, spec, delimited_content(lines, range, spec))
-          if end_row > row then
-            row = end_row + 1
-            advanced_to_block_end = true
-            break
-          end
-          pos = end_col + 1
-        else
-          pos = start_pos + #spec.open
-        end
+        pos = end_col + 1
+      else
+        pos = start_pos + #spec.open
       end
+    end
 
-      if not advanced_to_block_end then
-        row = row + 1
-      end
+    if not advanced_to_block_end then
+      row = row + 1
     end
   end
 end
 
---- @param bufnr integer
---- @return table[]
-function M.collect(bufnr)
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local entries = {}
+local function node_from_entry(entry)
+  local range = entry.range
+  local spec = entry.spec
+  local content = content_range(range, spec)
+  return {
+    kind = "markdown",
+    source_kind = "markdown",
+    object_kind = "math",
+    node_type = "math",
+    row = range[1],
+    col = range[2],
+    end_row = range[3],
+    end_col = range[4],
+    source = entry.source,
+    source_hash = source_hash(entry.source),
+    source_rows = range[3] - range[1] + 1,
+    source_display_kind = spec.display_kind,
+    render_whole_line = false,
+    prelude_count = 0,
+    prelude_signature = vim.fn.sha256(""),
+    source_facts = {
+      source_kind = "markdown",
+      object_kind = "math",
+      delimiter = spec.id,
+      display_kind = spec.display_kind,
+      content_range = content,
+      content_start_row = content.row,
+      content_start_col = content.col,
+      content_end_row = content.end_row,
+      content_end_col = content.end_col,
+    },
+  }
+end
 
+local function collect_entries(bufnr)
   local markdown_parser = get_markdown_parser(bufnr)
-  local ts_entries = collect_treesitter_math(bufnr, lines, markdown_parser)
-  if ts_entries ~= nil then
-    for _, entry in ipairs(ts_entries) do
-      entries[#entries + 1] = entry
-    end
+  if markdown_parser == nil then
+    return {}
   end
 
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local entries = collect_treesitter_math(bufnr, lines, markdown_parser)
   local shields = collect_shield_ranges(bufnr, markdown_parser)
-  local specs = ts_entries == nil and delimiter_specs or scanner_delimiter_specs
-  collect_delimited_math(entries, lines, specs, shields)
-
+  collect_delimited_math(entries, lines, scanner_delimiter_specs, shields)
   return top_level_entries(entries)
+end
+
+local function scan_entries(bufnr, window)
+  local nodes = {}
+  for _, entry in ipairs(collect_entries(bufnr)) do
+    if window == nil or range_table_intersects(entry.range, window) then
+      nodes[#nodes + 1] = node_from_entry(entry)
+    end
+  end
+  return nodes
+end
+
+---@param bufnr integer
+---@return table
+function M.scan_all(bufnr)
+  return {
+    nodes = scan_entries(bufnr),
+    context_units = {},
+    context_signature = vim.fn.sha256(""),
+  }
+end
+
+---@return table
+function M.scan_context()
+  return {
+    units = {},
+    signature = vim.fn.sha256(""),
+  }
+end
+
+---@param bufnr integer
+---@param window {row: integer, col: integer, end_row: integer, end_col: integer}
+---@return table
+function M.scan(bufnr, window)
+  return {
+    nodes = scan_entries(bufnr, window),
+    context_units = {},
+  }
 end
 
 return M

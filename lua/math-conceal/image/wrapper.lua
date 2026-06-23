@@ -1,55 +1,25 @@
---- Typst document wrapper construction for math-conceal.image.
---- Builds the Typst source that wraps each snippet so it renders at the correct
---- cell-grid dimensions.
----
---- Typst document assembly interface
----   M.build_batch_document(items) -> string    assembled multi-page Typst source
----   M.build_item_fragment(item, ...)           assembled single-item fragment for inclusion
----   M.build_wrapper(item, source_rows)         per-item wrapper dispatch
----   M.make_inline_sizing_wrap(source_rows)     intrinsic-constraint wrapper
----   M.make_flow_block_wrap(bufnr)              flow-constraint wrapper
----                                              (page width = available cols, no terminal padding)
-local state = require("math-conceal.image.state")
 local M = {}
 
---- @param s string
---- @return integer
-local function count_lines(s)
-  if s == "" then
+local function count_lines(text)
+  if text == nil or text == "" then
     return 0
   end
-  local _, n = s:gsub("\n", "\n")
-  if s:sub(-1) ~= "\n" then
+  local _, n = text:gsub("\n", "\n")
+  if text:sub(-1) ~= "\n" then
     n = n + 1
   end
   return n
 end
 
---- @param parts string[]
---- @param s string
---- @param cur_line integer
---- @return integer
-local function push(parts, s, cur_line)
-  parts[#parts + 1] = s
-  return cur_line + count_lines(s)
-end
-
---- Advance a 1-based (line, col) cursor through string s.
---- Column is also 1-based and points to the next character position.
---- @param s string
---- @param line integer
---- @param col integer
---- @return integer, integer
-local function advance_pos(s, line, col)
-  if s == "" then
+local function advance_pos(text, line, col)
+  if text == nil or text == "" then
     return line, col
   end
-
   local idx = 1
   while true do
-    local nl = s:find("\n", idx, true)
+    local nl = text:find("\n", idx, true)
     if nl == nil then
-      return line, col + (#s - idx + 1)
+      return line, col + (#text - idx + 1)
     end
     line = line + 1
     col = 1
@@ -57,286 +27,330 @@ local function advance_pos(s, line, col)
   end
 end
 
---- @param item table
---- @return string
-local function normalize_item_str(item)
-  if type(item.str) == "table" then
-    return table.concat(item.str)
-  end
-  if type(item.str) == "string" then
-    return item.str
-  end
-  return ""
+local function typst_string_literal(value)
+  value = value or ""
+  value = value:gsub("\\", "\\\\")
+  value = value:gsub('"', '\\"')
+  value = value:gsub("\n", "\\n")
+  return '"' .. value .. '"'
 end
 
-local function mitex_import_line()
-  local config = require("math-conceal.image").config or {}
-  local package = config.mitex_package or "@preview/mitex:0.2.7"
+local function mitex_import_line(ctx)
+  local package = ctx.mitex_package or "@preview/mitex:0.2.7"
   if package == "" then
     return ""
   end
   return '#import "' .. package .. '": mitex, mi\n'
 end
 
-local function build_header_text(config, main, maybe_rewrite, preamble_include_line)
-  local parts = {}
-  if config.header and config.header ~= "" then
-    parts[#parts + 1] = maybe_rewrite(config.header) .. "\n"
+local function rewrite(ctx, bufnr, text)
+  if text == nil or text == "" then
+    return text or ""
   end
-  parts[#parts + 1] = main._styling_prelude
-  if preamble_include_line ~= nil and preamble_include_line ~= "" then
-    parts[#parts + 1] = preamble_include_line
+  return require("math-conceal.image.path-rewrite").rewrite_paths(text, {
+    bufnr = bufnr,
+    buf_dir = ctx.buf_dir,
+    source_root = ctx.source_root,
+    effective_root = ctx.effective_root,
+  })
+end
+
+function M.count_lines(text)
+  return count_lines(text)
+end
+
+function M.build_context_document(config, ctx)
+  local parts = {}
+  if type(ctx.header) == "string" and ctx.header ~= "" then
+    parts[#parts + 1] = rewrite(ctx, ctx.bufnr, ctx.header) .. "\n"
+  end
+  parts[#parts + 1] = config._styling_prelude or ""
+  if ctx.wrapper == "mitex" then
+    parts[#parts + 1] = mitex_import_line(ctx)
+  end
+  if type(ctx.preamble_include_line) == "string" and ctx.preamble_include_line ~= "" then
+    parts[#parts + 1] = ctx.preamble_include_line
   end
   return table.concat(parts)
 end
 
---- Build document-level context text for service sidecar rendering.
---- @param bufnr integer
---- @param buf_dir string|nil
---- @param source_root string|nil
---- @param effective_root string|nil
---- @param preamble_include_line string|nil
---- @return string
-function M.build_context_document(bufnr, buf_dir, source_root, effective_root, preamble_include_line)
-  local main = require("math-conceal.image")
-  local config = main.config
-  local do_rewrite = buf_dir ~= nil and source_root ~= nil and effective_root ~= nil
-  local pr = do_rewrite and require("math-conceal.image.path-rewrite") or nil
-  local function maybe_rewrite(text)
-    if pr == nil then
-      return text
-    end
-    return pr.rewrite_paths(text, {
-      bufnr = bufnr,
-      buf_dir = buf_dir,
-      source_root = source_root,
-      effective_root = effective_root,
-    })
+function M.build_flow_context_document(ctx)
+  local parts = {}
+  if type(ctx.header) == "string" and ctx.header ~= "" then
+    parts[#parts + 1] = rewrite(ctx, ctx.bufnr, ctx.header) .. "\n"
   end
-  return build_header_text(config, main, maybe_rewrite, preamble_include_line)
+  if ctx.wrapper == "mitex" then
+    parts[#parts + 1] = mitex_import_line(ctx)
+  end
+  if type(ctx.preamble_include_line) == "string" and ctx.preamble_include_line ~= "" then
+    parts[#parts + 1] = ctx.preamble_include_line
+  end
+  return table.concat(parts)
 end
 
---- Returns available window width in Typst points.
---- Typst page width = 可用宽度（不含终端 padding）; terminal padding is added by extmark layer.
---- @param bufnr integer
---- @return number
-local function current_window_width_pt(bufnr)
-  local config = require("math-conceal.image").config
-  local baseline_pt = config.math_baseline_pt or 11
-  local pad_cols = config.block_padding_cols or 4
-  local win_cols = state.visible_window_width(bufnr)
-  local usable_cols = math.max(8, win_cols - 2 * pad_cols)
-  if state._cell_px_w and state._cell_px_h then
-    local cell_w_pt = baseline_pt * (state._cell_px_w / state._cell_px_h)
-    return usable_cols * cell_w_pt
+local function baseline_pt(config)
+  local baseline = tonumber(config and config.math_baseline_pt) or 11
+  if baseline <= 0 then
+    baseline = 11
   end
-  local approx_cell_w_pt = baseline_pt * 0.55
-  return usable_cols * approx_cell_w_pt
+  return baseline
 end
 
---- Inline/intrinsic sizing wrapper.
---- Single-line items keep their measured width to avoid transparent right-side
---- padding; multi-line items still snap to the terminal cell grid.
---- @param source_rows integer
---- @return string prefix, string suffix   both "" when cell size is unknown
-function M.make_inline_sizing_wrap(source_rows)
-  local config = require("math-conceal.image").config
-  if state._cell_px_h and state._cell_px_w then
-    local baseline_pt = config.math_baseline_pt
-    local cell_w_pt = baseline_pt * (state._cell_px_w / state._cell_px_h)
-    if source_rows == 1 then
-      return "#context { let __it = [",
-        string.format(
-          "]; let __d = measure(__it); let __mh = %gpt; let __mw = %gpt;"
-            .. " let __rows = __d.height / __mh;"
-            .. " if __rows <= 1.5 { block(width: __d.width, height: __mh, clip: true, align(horizon, __it)) }"
-            .. " else { let __r = calc.max(1, calc.ceil(__rows - 0.001));"
-            .. " block(width: __d.width, height: __r * __mh, align(horizon, __it)) } }\n",
-          baseline_pt,
-          cell_w_pt
-        )
-    else
-      return "#context { let __it = [",
-        string.format(
-          "]; let __d = measure(__it); let __mh = %gpt; let __mw = %gpt;"
-            .. " let __rows = calc.max(1, calc.ceil(__d.height / __mh - 0.001));"
-            .. " let __cols = calc.max(1, calc.ceil(__d.width / __mw - 0.001));"
-            .. " let __th = __rows * __mh; let __tw = __cols * __mw;"
-            .. " block(width: __tw, height: __th, align(horizon, __it)) }\n",
-          baseline_pt,
-          cell_w_pt
-        )
-    end
-  elseif state._cell_px_h then
-    local baseline_pt = config.math_baseline_pt
-    if source_rows == 1 then
-      return "#context { let __it = [",
-        string.format(
-          "]; let __d = measure(__it); let __mh = %gpt;"
-            .. " let __rows = __d.height / __mh;"
-            .. " if __rows <= 1.5 { block(width: __d.width, height: __mh, clip: true, align(horizon, __it)) }"
-            .. " else { let __r = calc.max(1, calc.ceil(__rows - 0.001));"
-            .. " block(width: __d.width, height: __r * __mh, align(horizon, __it)) } }\n",
-          baseline_pt
-        )
-    else
-      return "#context { let __it = [",
-        string.format(
-          "]; let __d = measure(__it); let __mh = %gpt;"
-            .. " let __rows = calc.max(1, calc.ceil(__d.height / __mh - 0.001));"
-            .. " let __th = __rows * __mh;"
-            .. " block(width: __d.width, height: __th, align(horizon, __it)) }\n",
-          baseline_pt
-        )
-    end
-  end
-  return "", ""
+function M.editor_size_prelude(config)
+  local baseline = baseline_pt(config)
+  return string.format("#set text(size: %gpt)\n#show math.equation: set text(size: %gpt)\n", baseline, baseline)
 end
 
---- Flow-block wrapper: Typst page width = available column width (no terminal padding).
---- Terminal display padding (block_padding_cols) is added separately in the extmark layer.
---- block_preview_margin_pt is Typst-side inset inside the rendered image (orthogonal to terminal padding).
---- @param bufnr integer
---- @return string prefix, string suffix
-function M.make_flow_block_wrap(bufnr)
-  local config = require("math-conceal.image").config
-  local page_w_pt = current_window_width_pt(bufnr)
-  local margin_pt = config.block_preview_margin_pt or 0
+function M.render_size_key(config)
+  return tostring(baseline_pt(config))
+end
+
+local function flow_block_config(ctx)
+  local cfg = (ctx and ctx.code_block) or {}
+  return {
+    padding_cols = cfg.padding_cols ~= nil and tonumber(cfg.padding_cols) or 0,
+    right_padding_cols = cfg.right_padding_cols ~= nil and tonumber(cfg.right_padding_cols) or 1,
+    margin_pt = cfg.margin_pt ~= nil and tonumber(cfg.margin_pt) or 0,
+    min_cols = cfg.min_cols ~= nil and tonumber(cfg.min_cols) or 8,
+  }
+end
+
+local function flow_block_layout(bufnr, ctx, config)
+  local state = require("math-conceal.image.state")
+  local cfg = flow_block_config(ctx)
+  local baseline = baseline_pt(config)
+  local pad_cols = math.max(0, cfg.padding_cols or 0)
+  local right_pad_cols = math.max(0, cfg.right_padding_cols or 1)
+  local min_cols = math.max(1, cfg.min_cols or 8)
+  local win_cols = state.visible_text_width(bufnr)
+  local usable_cols = math.max(min_cols, win_cols - 2 * pad_cols - right_pad_cols)
+  local cell_w, cell_h = state.cell_size()
+  local cell_w_pt
+  if cell_w ~= nil and cell_h ~= nil then
+    cell_w_pt = baseline * (cell_w / cell_h)
+  else
+    cell_w_pt = baseline * 0.55
+  end
+  return {
+    baseline = baseline,
+    pad_cols = pad_cols,
+    right_pad_cols = right_pad_cols,
+    margin_pt = math.max(0, cfg.margin_pt or 0),
+    min_cols = min_cols,
+    win_cols = win_cols,
+    usable_cols = usable_cols,
+    cell_w = cell_w,
+    cell_h = cell_h,
+    page_w_pt = usable_cols * cell_w_pt,
+  }
+end
+
+function M.flow_block_wrap(bufnr, ctx, config)
+  local layout = flow_block_layout(bufnr, ctx, config or {})
   return string.format(
     "#context {\n"
       .. "  set page(width: %gpt, height: auto, margin: (x: 0pt, y: 0pt), fill: none)\n"
+      .. "  set text(size: %gpt)\n"
+      .. "  set align(left)\n"
       .. "  block(width: 100%%, inset: (x: %gpt, y: 0pt))[\n",
-    page_w_pt,
-    margin_pt
+    layout.page_w_pt,
+    layout.baseline,
+    layout.margin_pt
   ),
     "  ]\n}\n"
 end
 
---- Wrapper dispatch: wrapper choice comes only from semantics.constraint_kind.
---- Missing semantics fall back to inline sizing for internal placeholders.
---- @param item table
---- @param source_rows integer
---- @return string prefix, string suffix
-function M.build_wrapper(item, source_rows)
-  if item.skip_wrapper == true then
-    return "", ""
+local function code_render_policy(track)
+  if (track.object_kind or track.node_type) ~= "code" then
+    return nil
   end
-  local semantics = item.semantics or {}
-  if semantics.constraint_kind == "flow" then
-    return M.make_flow_block_wrap(item.bufnr)
-  else
-    return M.make_inline_sizing_wrap(source_rows)
+  local facts = track.source_facts or {}
+  if facts.render_policy ~= nil and facts.render_policy ~= "" then
+    return facts.render_policy
   end
+  if track.source_display_kind == "inline" then
+    return "inline_naturalized"
+  end
+  if track.source_display_kind == "block" then
+    return "block_constrained"
+  end
+  return nil
 end
 
---- Build a single item fragment suitable for `#include` into an existing Typst document.
---- Unlike build_batch_document, this omits document-level header/preamble/page setup.
---- @param item table
---- @param buf_dir string|nil
---- @param source_root string|nil
---- @param effective_root string|nil
---- @param prelude_chunks string[]|nil
---- @return string
-function M.build_item_fragment(item, buf_dir, source_root, effective_root, prelude_chunks)
-  prelude_chunks = prelude_chunks or state.runtime_preludes
-
-  local do_rewrite = buf_dir ~= nil and source_root ~= nil and effective_root ~= nil
-  local pr = do_rewrite and require("math-conceal.image.path-rewrite") or nil
-  local function maybe_rewrite(text)
-    if pr == nil then
-      return text
-    end
-    return pr.rewrite_paths(text, {
-      bufnr = item.bufnr,
-      buf_dir = buf_dir,
-      source_root = source_root,
-      effective_root = effective_root,
-    })
+function M.render_layout_key(track, ctx, config)
+  local render_policy = code_render_policy(track)
+  if render_policy == "block_constrained" or render_policy == "block" then
+    local layout = flow_block_layout(track.bufnr, ctx, config or {})
+    return table.concat({
+      "code-block-flow-v7",
+      tostring(layout.baseline),
+      tostring(layout.pad_cols),
+      tostring(layout.right_pad_cols),
+      tostring(layout.margin_pt),
+      tostring(layout.min_cols),
+      tostring(layout.win_cols),
+      tostring(layout.usable_cols),
+      tostring(layout.cell_w or ""),
+      tostring(layout.cell_h or ""),
+      tostring(layout.page_w_pt),
+    }, "\0")
   end
-
-  local parts = {}
-  if item.requires_mitex == true then
-    parts[#parts + 1] = mitex_import_line()
+  if render_policy == "inline_naturalized" then
+    return "code-inline-naturalized-v1"
   end
-  for i = 1, item.prelude_count or 0 do
-    parts[#parts + 1] = maybe_rewrite(prelude_chunks[i] or "")
-  end
-
-  local source_rows = item.range[3] - item.range[1] + 1
-  local wrap_prefix, wrap_suffix = M.build_wrapper(item, source_rows)
-  if wrap_prefix ~= "" then
-    parts[#parts + 1] = wrap_prefix
-  end
-  parts[#parts + 1] = maybe_rewrite(normalize_item_str(item))
-  if wrap_suffix ~= "" then
-    parts[#parts + 1] = wrap_suffix
-  else
-    parts[#parts + 1] = "\n"
-  end
-
-  return table.concat(parts)
+  return ""
 end
 
---- Build one full-render slot sidecar. The returned map covers only the user
---- body inside the generated sidecar; wrapper/prelude errors intentionally stay
---- attributed to the sidecar file.
---- @param item table
---- @param buf_dir string|nil
---- @param source_root string|nil
---- @param effective_root string|nil
---- @param prelude_chunks string[]|nil
---- @return string, table|nil
-function M.build_slot_document(item, buf_dir, source_root, effective_root, prelude_chunks)
-  if item.is_tombstone == true then
-    return "#box(width: 1pt, height: 1pt)[]\n", nil
+local function inline_naturalize_prelude(enabled)
+  if enabled ~= true then
+    return ""
+  end
+  return [[#let __math_conceal_natural_box(it) = {
+  let __w = it.width
+  let __relative = type(__w) == relative and __w.ratio != 0%
+  let __fraction = type(__w) == fraction
+  if __relative or __fraction {
+    box(
+      fill: it.fill,
+      stroke: it.stroke,
+      radius: it.radius,
+      inset: it.inset,
+      outset: it.outset,
+      baseline: it.baseline,
+      clip: it.clip,
+    )[#it.body]
+  } else {
+    it
+  }
+}
+#show box: __math_conceal_natural_box
+]]
+end
+
+function M.inline_wrap(config, source_rows, opts)
+  opts = opts or {}
+  local state = require("math-conceal.image.state")
+  local cell_w, cell_h = state.cell_size()
+  local baseline = baseline_pt(config)
+  local naturalize = inline_naturalize_prelude(opts.naturalize == true)
+  if cell_h ~= nil and cell_w ~= nil then
+    local cell_w_pt = baseline * (cell_w / cell_h)
+    if source_rows == 1 then
+      return "#context { let __it = [" .. naturalize,
+        string.format(
+          "]; let __d = measure(__it); let __mh = %gpt; let __mw = %gpt;"
+            .. " let __rows = __d.height / __mh;"
+            .. " if __rows <= 1.5 { block(width: __d.width, height: __mh, clip: true, align(horizon, __it)) }"
+            .. " else { let __r = calc.max(1, calc.ceil(__rows - 0.001));"
+            .. " block(width: __d.width, height: __r * __mh, align(horizon, __it)) } }\n",
+          baseline,
+          cell_w_pt
+        )
+    end
+
+    return "#context { let __it = [" .. naturalize,
+      string.format(
+        "]; let __d = measure(__it); let __mh = %gpt; let __mw = %gpt;"
+          .. " let __rows = calc.max(1, calc.ceil(__d.height / __mh - 0.001));"
+          .. " let __cols = calc.max(1, calc.ceil(__d.width / __mw - 0.001));"
+          .. " let __th = __rows * __mh; let __tw = __cols * __mw;"
+          .. " block(width: __tw, height: __th, align(horizon, __it)) }\n",
+        baseline,
+        cell_w_pt
+      )
+  end
+  return "", ""
+end
+
+local markdown_delimiters = {
+  dollar_inline = { open = "$", close = "$", display_kind = "inline" },
+  dollar_block = { open = "$$", close = "$$", display_kind = "block" },
+  paren_inline = { open = "\\(", close = "\\)", display_kind = "inline" },
+  bracket_block = { open = "\\[", close = "\\]", display_kind = "block" },
+}
+
+local function markdown_math_content(track)
+  local source = track.source or ""
+  local facts = track.source_facts or {}
+  local delimiter = markdown_delimiters[facts.delimiter]
+  if delimiter == nil then
+    return source, facts.display_kind or track.source_display_kind or "inline"
   end
 
-  prelude_chunks = prelude_chunks or state.runtime_preludes
+  local content = source
+  if source:sub(1, #delimiter.open) == delimiter.open and source:sub(-#delimiter.close) == delimiter.close then
+    content = source:sub(#delimiter.open + 1, #source - #delimiter.close)
+  end
+  if delimiter.display_kind == "block" then
+    content = content:gsub("^\n", ""):gsub("\n$", "")
+  end
+  return content, delimiter.display_kind
+end
 
-  local do_rewrite = buf_dir ~= nil and source_root ~= nil and effective_root ~= nil
-  local pr = do_rewrite and require("math-conceal.image.path-rewrite") or nil
-  local function maybe_rewrite(text)
-    if pr == nil then
-      return text
+local function render_input(track, ctx)
+  if (track.object_kind or track.node_type) == "code" then
+    local source = rewrite(ctx, track.bufnr, track.source or "")
+    if track.source_display_kind == "inline" then
+      source = source:gsub("[ \t\r]*\n[ \t\r]*", " ")
+      source = source:gsub("%[%s+", "["):gsub("%s+%]", "]")
     end
-    return pr.rewrite_paths(text, {
-      bufnr = item.bufnr,
-      buf_dir = buf_dir,
-      source_root = source_root,
-      effective_root = effective_root,
+    return source
+  end
+
+  if ctx.wrapper ~= "mitex" then
+    return rewrite(ctx, track.bufnr, track.source or "")
+  end
+
+  local content, display_kind = markdown_math_content(track)
+  local call = display_kind == "block" and "mitex" or "mi"
+  return "#" .. call .. "(" .. typst_string_literal(content) .. ")"
+end
+
+function M.build_slot_document(track, ctx, config)
+  local parts = {}
+  local cur_line, cur_col = 1, 1
+  local function append(text)
+    parts[#parts + 1] = text
+    cur_line, cur_col = advance_pos(text, cur_line, cur_col)
+  end
+
+  if ctx.wrapper == "mitex" then
+    append(mitex_import_line(ctx))
+  end
+
+  local prelude_count = math.max(0, math.min(track.prelude_count or 0, #(ctx.context_units or {})))
+  for idx = 1, prelude_count do
+    append(rewrite(ctx, track.bufnr, ctx.context_units[idx].source or ""))
+    if not (parts[#parts] or ""):match("\n$") then
+      append("\n")
+    end
+  end
+
+  local source_rows = track.source_rows or math.max(1, track.end_row - track.row + 1)
+  local render_policy = code_render_policy(track)
+  local is_code_block = render_policy == "block_constrained" or render_policy == "block"
+  local prefix, suffix = "", ""
+  if is_code_block then
+    prefix, suffix = M.flow_block_wrap(track.bufnr, ctx, config)
+  else
+    prefix, suffix = M.inline_wrap(config, source_rows, {
+      naturalize = render_policy == "inline_naturalized",
     })
   end
-
-  local parts = {}
-  local cur_line = 1
-  local cur_col = 1
-  local function append(chunk)
-    parts[#parts + 1] = chunk
-    cur_line, cur_col = advance_pos(chunk, cur_line, cur_col)
+  if prefix ~= "" then
+    append(prefix)
   end
 
-  if item.requires_mitex == true then
-    append(mitex_import_line())
-  end
+  append(M.editor_size_prelude(config))
 
-  for i = 1, item.prelude_count or 0 do
-    append(maybe_rewrite(prelude_chunks[i] or ""))
-  end
-
-  local source_rows = item.range[3] - item.range[1] + 1
-  local wrap_prefix, wrap_suffix = M.build_wrapper(item, source_rows)
-  if wrap_prefix ~= "" then
-    append(wrap_prefix)
-  end
-
-  local item_text = maybe_rewrite(normalize_item_str(item))
   local gen_start = cur_line
   local gen_start_col = cur_col
-  local gen_end_line, gen_end_col_next = advance_pos(item_text, gen_start, gen_start_col)
-  append(item_text)
+  local source = render_input(track, ctx)
+  local gen_end, gen_end_col_next = advance_pos(source, gen_start, gen_start_col)
+  append(source)
 
-  if wrap_suffix ~= "" then
-    append(wrap_suffix)
+  if suffix ~= "" then
+    append(suffix)
   else
     append("\n")
   end
@@ -344,166 +358,54 @@ function M.build_slot_document(item, buf_dir, source_root, effective_root, prelu
   return table.concat(parts),
     {
       gen_start = gen_start,
-      gen_end = gen_end_line,
+      gen_end = gen_end,
       gen_start_col = gen_start_col,
       gen_end_col = math.max(1, gen_end_col_next - 1),
-      bufnr = item.bufnr,
-      src_start = item.range[1] + 1,
-      src_end = item.range[3] + 1,
-      src_start_col = item.range[2] + 1,
-      src_end_col = item.range[4] + 1,
-      item_idx = item.item_idx,
-      slot_id = item.slot_id,
+      bufnr = track.bufnr,
+      src_start = track.row + 1,
+      src_end = track.end_row + 1,
+      src_start_col = track.col + 1,
+      src_end_col = track.end_col + 1,
+      item_idx = track.track_id,
     }
 end
 
---- Build multi-page Typst source for a batch render session.
---- @param items table[]
---- @param buf_dir string|nil   source buffer directory (for path rewriting)
---- @param source_root string|nil  source/project root used for `/...` semantics
---- @param effective_root string|nil  actual Typst root used by the compiler service
---- @param kind "full"|nil  session kind forwarded to get_preamble_file
---- @param prelude_chunks string[]|nil  snapshot of runtime preludes aligned with item.prelude_count
---- @param preamble_include_line string|nil
---- @param build_line_map boolean|nil
---- @param cache table|nil
---- @return string, table
-function M.build_batch_document(
-  items,
-  buf_dir,
-  source_root,
-  effective_root,
-  kind,
-  prelude_chunks,
-  preamble_include_line,
-  build_line_map,
-  cache
-)
-  local main = require("math-conceal.image")
-  local config = main.config
-  local doc = {}
-  local line_map = build_line_map == false and nil or {}
-  local cur_line = 1
-  local cur_col = 1
-  local rep_bufnr = (items[1] and items[1].bufnr) or 0
-  prelude_chunks = prelude_chunks or state.runtime_preludes
-
-  local do_rewrite = buf_dir ~= nil and source_root ~= nil and effective_root ~= nil
-  local pr = do_rewrite and require("math-conceal.image.path-rewrite") or nil
-  local function maybe_rewrite(text)
-    if pr == nil then
-      return text
+function M.build_flow_source(track, ctx)
+  local parts = {}
+  local len = 0
+  local function append(text)
+    text = text or ""
+    parts[#parts + 1] = text
+    len = len + #text
+    if not text:match("\n$") then
+      parts[#parts + 1] = "\n"
+      len = len + 1
     end
-    return pr.rewrite_paths(text, {
-      bufnr = rep_bufnr,
-      buf_dir = buf_dir,
-      source_root = source_root,
-      effective_root = effective_root,
-    })
-  end
-  local function append_chunk(chunk)
-    doc[#doc + 1] = chunk
-    cur_line, cur_col = advance_pos(chunk, cur_line, cur_col)
   end
 
-  cache = cache or {}
-  cache.item_fragments = cache.item_fragments or {}
-  local rewrite_signature = table.concat({
-    buf_dir or "",
-    source_root or "",
-    effective_root or "",
-  }, "\0")
-
-  local header_key = table.concat({
-    rewrite_signature,
-    config.header or "",
-    main._styling_prelude or "",
-    preamble_include_line or "",
-  }, "\0")
-  local header_text = cache.header_key == header_key and cache.header_text or nil
-  if header_text == nil then
-    header_text = build_header_text(config, main, maybe_rewrite, preamble_include_line)
-    cache.header_key = header_key
-    cache.header_text = header_text
-  end
-  append_chunk(header_text)
-  if header_text ~= "" then
-    append_chunk("#pagebreak(weak: true)\n")
+  local prelude_count = math.max(0, math.min(track.prelude_count or 0, #(ctx.context_units or {})))
+  for idx = 1, prelude_count do
+    append(rewrite(ctx, track.bufnr, ctx.context_units[idx].source or ""))
   end
 
-  for idx, item in ipairs(items) do
-    if idx > 1 then
-      append_chunk("#pagebreak()\n")
-    end
-
-    local source_rows = item.range[3] - item.range[1] + 1
-    local wrap_prefix, wrap_suffix = M.build_wrapper(item, source_rows)
-    local suffix_text = wrap_suffix ~= "" and wrap_suffix or "\n"
-    local item_import = item.requires_mitex == true and mitex_import_line() or ""
-    local item_key = table.concat({
-      rewrite_signature,
-      tostring(prelude_chunks),
-      tostring(item.prelude_count or 0),
-      item_import,
-      wrap_prefix,
-      suffix_text,
-      normalize_item_str(item),
-    }, "\0")
-    local item_cache = cache.item_fragments[item_key]
-    if item_cache == nil then
-      local prefix_parts = {}
-      if item_import ~= "" then
-        prefix_parts[#prefix_parts + 1] = item_import
-      end
-      for i = 1, item.prelude_count do
-        prefix_parts[#prefix_parts + 1] = maybe_rewrite(prelude_chunks[i] or "")
-      end
-      if wrap_prefix ~= "" then
-        prefix_parts[#prefix_parts + 1] = wrap_prefix
-      end
-      local item_text = item.skip_path_rewrite == true and normalize_item_str(item)
-        or maybe_rewrite(normalize_item_str(item))
-      item_cache = {
-        prefix = table.concat(prefix_parts),
-        item_text = item_text,
-        suffix = suffix_text,
-      }
-      cache.item_fragments[item_key] = item_cache
-    end
-
-    if item_cache.prefix ~= "" then
-      append_chunk(item_cache.prefix)
-    end
-
-    local gen_start = cur_line
-    local gen_start_col = cur_col
-    local gen_end_line, gen_end_col_next = advance_pos(item_cache.item_text, gen_start, gen_start_col)
-    local gen_end = gen_end_line
-    append_chunk(item_cache.item_text)
-
-    local src_start_col = item.range[2] + 1
-    local src_end_col = item.range[4] + 1
-    local gen_end_col = math.max(1, gen_end_col_next - 1)
-
-    if line_map ~= nil then
-      line_map[#line_map + 1] = {
-        gen_start = gen_start,
-        gen_end = gen_end,
-        gen_start_col = gen_start_col,
-        gen_end_col = gen_end_col,
-        bufnr = item.bufnr,
-        src_start = item.range[1] + 1,
-        src_end = item.range[3] + 1,
-        src_start_col = src_start_col,
-        src_end_col = src_end_col,
-        item_idx = idx,
-      }
-    end
-
-    append_chunk(item_cache.suffix)
+  -- Flow/layout probes must be syntactically self-contained.  Context units
+  -- above provide the Typst prelude, but arbitrary buffer prefixes can contain
+  -- half-open math/code delimiters and must not be replayed into the probe.
+  local prefix = "x "
+  local source = render_input(track, ctx)
+  parts[#parts + 1] = prefix
+  len = len + #prefix
+  local target_start = len
+  parts[#parts + 1] = source
+  len = len + #source
+  local target_end = len
+  if not source:match("\n$") then
+    parts[#parts + 1] = "\n"
   end
-
-  return table.concat(doc), line_map
+  return table.concat(parts), {
+    target_start = target_start,
+    target_end = target_end,
+  }
 end
 
 return M
