@@ -1,3 +1,4 @@
+local placement_backend = require("math-conceal.image.placement.snacks")
 local projection = require("math-conceal.image.projection")
 local state = require("math-conceal.image.state")
 local tracker = require("math-conceal.image.tracker")
@@ -58,7 +59,7 @@ local defaults = {
   formula_worker_count = 2,
   do_diagnostics = true,
   conceal_in_normal = false,
-  live_preview_enabled = true,
+  live_preview_enabled = false,
   block_padding_cols = 0,
   renderers = {
     typst = {
@@ -348,6 +349,11 @@ function M.attach_buf(bufnr)
   local spec = M.config.renderers[kind]
   local ctx = buffer_context(bufnr, kind)
   if path_excluded(spec, ctx) then
+    M.disable_buf(bufnr)
+    return false
+  end
+
+  if not placement_backend.assert_ready(bufnr) then
     M.disable_buf(bufnr)
     return false
   end

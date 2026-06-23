@@ -89,12 +89,24 @@ Consumer-owned state derived from tracker output and keyed by a track reference.
 _Avoid_: Tracker attachment, image data on tracks
 
 **Image Projection**:
-A track projection representing the graphical reading form of a tracked object. It stores a track reference and late-binds a live TrackView from tracker when it needs current source position; it owns only image-rendering and display state.
-_Avoid_: Image data on tracks, cached track snapshots on projections, provider node, overlay node
+A track projection representing the graphical reading form of a tracked object. It stores a track reference and late-binds a live TrackView from tracker when it needs current source position; it owns image-rendering and displayable asset state, not terminal placement state.
+_Avoid_: Image data on tracks, cached track snapshots on projections, provider node, overlay node, placement backend
+
+**Image Placement Backend**:
+A projection-facing UI adapter that binds a displayable image asset to an editor presentation surface. It owns terminal image placement, placeholder binding, placement lifecycle, UI coordination, and any backend-local source conceal needed to reconcile a placement range with the tracked source range; it must not discover tracked objects, own track identity, or replace tracker-derived geometry.
+_Avoid_: Renderer Binding, image binding API, tracker, render asset projection
+
+**Snacks Placement Backend**:
+The required graphical Image Placement Backend that uses Snacks image library placement primitives for already tracked math-conceal render assets. It must not use Snacks document scanning or let Snacks create tracked-object identity from a buffer.
+_Avoid_: Snacks document renderer, Snacks scanner, fallback renderer
 
 **Typst Display Projection**:
-A buffer-level projection that decides how Typst formula and code tracks share the editor reading surface. It may sample source text, editor display facts, layout facts, and editor width context inside tracker-derived display scopes, but it does not own track identity, discover objects by scanning source, own per-object render state, or obtain current object geometry from anything except `TrackRef -> TrackView`.
+A buffer-level projection that decides which Typst formula and code tracks should have a graphical reading form on the editor surface and communicates those display intents to an Image Placement Backend. It may sample source text, editor display facts, layout facts, and editor width context inside tracker-derived display scopes, but it does not own track identity, discover objects by scanning source, own per-object render state, own terminal image placement, or obtain current object geometry from anything except `TrackRef -> TrackView`.
 _Avoid_: Formula Display Projection, placeholder consumer, extmark renderer, line-run manager, image projection display
+
+**Display Intent**:
+A projection-owned request for an Image Placement Backend to present, update, hide, or source-reveal the graphical reading form of a tracked object, optionally carrying source range, preferred position, maximum dimensions, or preferred cell dimensions derived from render asset pixels and terminal cell metrics. It is derived from tracker output, displayability, cursor or selection state, and projection policy; it is not object identity, render asset state, terminal placement lifecycle, or image metadata ownership.
+_Avoid_: Track, render asset, placement, backend state, image metadata
 
 **Row-Attachable Formula**:
 A single-line inline formula whose rendered reading form may stay attached to a real source row even when the cursor is on that row. Formula shapes that are not row-attachable use source reveal when the cursor touches their source row.
@@ -109,20 +121,20 @@ The node-revealable formula whose source range currently contains the cursor. On
 _Avoid_: Cursor line formula, hovered formula, selected render node
 
 **Node Slot**:
-A Typst Display Projection display artifact for one tracked object. It consists of a source-anchored node-slot extmark in the display namespace plus object-local conceal span or conceal-row extmarks in the auxiliary namespace. It presents the object's rendered asset while ordinary text remains drawn by Neovim.
-_Avoid_: Display line run, redraw carrier, render node, placeholder run
+The historical custom-placement display artifact for one tracked object in the pre-Snacks Typst display model. Its source-access motivation survives as display-intent policy, but concrete source-anchored placeholder extmarks and conceal-row ownership belong to the legacy custom placement design rather than the Snacks Placement Backend target.
+_Avoid_: Display line run, redraw carrier, render node, placeholder run, display intent
 
 **Source Row Slot**:
-A node slot whose first rendered image row is attached to a real source fragment row. Inline slots use inline virtual text at the first fragment column. Isolated block slots use overlay virtual text at the first fragment column and carry remaining image rows through `virt_lines`.
-_Avoid_: Cursor-row placeholder, row carrier, line-run landing row
+A historical custom node-slot shape whose first rendered image row was attached to a real source fragment row. It is retained as legacy language for ADR-0007-era placement details; the Snacks Placement Backend target should express source access through display intents rather than requiring this exact extmark shape.
+_Avoid_: Cursor-row placeholder, row carrier, line-run landing row, placement intent
 
 **Block Node Slot**:
-A block-shaped node slot whose anchor follows the object's source boundary shape. Suffix-only blocks anchor above the end boundary row, prefix-only and multi-line both-boundary blocks anchor after the start boundary row, isolated blocks use a source row slot, and single-line sandwich blocks source-reveal.
-_Avoid_: Display line run, block carrier, whole-row redraw
+A historical custom node-slot shape for block objects whose anchor followed source boundary shape. Its exact suffix, prefix, isolated, and sandwich placement rules are legacy placement details after the Snacks Placement Backend decision; only the higher-level source-access and source-reveal policy remains part of the active display-intent language.
+_Avoid_: Display line run, block carrier, whole-row redraw, Snacks placement
 
 **Kitty Placeholder Row Alignment**:
-The invariant that every placeholder row for one Kitty image id starts at the same visual text column. If an isolated block's first row is overlaid at an indented source fragment column while the remaining rows are `virt_lines`, those `virt_lines` must be prefixed by the source prefix display width so indentation is preserved without horizontally tearing the image.
-_Avoid_: Image reupload fix, renderer scaling fix, moving indented blocks to column zero
+A legacy custom-placement invariant from the hand-written Kitty placeholder renderer: every placeholder row for one Kitty image id had to start at the same visual text column. Under the Snacks Placement Backend target, terminal placeholder alignment is backend-owned rather than a Typst Display Projection invariant.
+_Avoid_: Image reupload fix, renderer scaling fix, moving indented blocks to column zero, display intent
 
 **Legacy Display Line Run**:
 The pre-node-local Typst display model that folded consecutive source rows behind a carrier extmark and reconstructed ordinary source plus image atoms. It is retained only as historical language; active Typst main-buffer display uses node slots instead.
@@ -168,6 +180,10 @@ _Avoid_: Context on tracks, provider session
 The renderer-owned source text derived from a tracked object's source and projection facts for graphical rendering. It may normalize delimiters, wrap source for a rendering backend, or provide a constrained editor-width context for layout-dependent code, but it is not object identity and must not replace tracker source.
 _Avoid_: Track source, scanner output, object identity
 
+**Render Asset**:
+A projection-owned result from the math-conceal render service for a tracked object, including the rendered file path, render key, diagnostics mapping, and service metadata needed by Image Projection. A render asset is consumed by an Image Placement Backend but is not produced by Snacks and does not own placement state or final cell geometry.
+_Avoid_: Placement, terminal image, Snacks image, track
+
 **Projection Reconciliation**:
 The act of aligning consumer-owned projections with the current tracker snapshot. It may update, create, stale, or retire projections, but it does not create tracker identity.
 _Avoid_: Provider sync, overlay reconciliation
@@ -209,9 +225,9 @@ Image, Typst display, diagnostics, and live-preview consumers may store track re
 _Avoid_: Consumer-owned geometry, stale snapshot rows, placeholder extmark as position source
 
 **No-Blank Swap**:
-An image projection update that keeps the previous visible asset in place until the replacement asset is uploaded and ready to bind. It prevents graphical conceal from disappearing during asynchronous renders.
+An image projection update that keeps the previous display intent pointed at the last displayable asset until the replacement asset is ready for the Image Placement Backend. It prevents graphical conceal from disappearing during asynchronous renders without requiring the projection to own terminal placeholder extmarks.
 _Avoid_: Clear-then-render, blank refresh
 
 **Source Reveal**:
-The projection state where graphical display leaves a tracked object's source text directly visible. Missing render assets, render failures, unknown code flow, and cursor-protected editing use source reveal instead of keeping an invalid image over the source.
-_Avoid_: Failed image overlay, hidden error source
+A display intent where graphical display leaves a tracked object's source text directly visible by asking the Image Placement Backend to hide, pause, or close that object's placement and clear backend-local source conceal. Missing render assets, render failures, unknown code flow, and cursor- or selection-protected editing use source reveal instead of keeping an invalid or obstructive image over the source.
+_Avoid_: Failed image overlay, hidden error source, projection-owned conceal extmarks

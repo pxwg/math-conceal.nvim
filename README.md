@@ -125,6 +125,7 @@ return {
   "pxwg/math-conceal.nvim",
   event = "VeryLazy",
   main = "math-conceal",
+  dependencies = { "folke/snacks.nvim" }, -- required for graphical equation placement
   build = "cargo build --release --manifest-path service/Cargo.toml", -- required for graphical equation conceal
   --- @type LaTeXConcealOptions
   opts = {
@@ -149,8 +150,14 @@ return {
 `math-conceal.nvim` can also render equations as terminal graphics using the renderer
 migrated from [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer),
 which is a fork of [PartyWumpus/typst-concealer](https://github.com/PartyWumpus/typst-concealer).
-This path uses kitty graphics protocol and works in terminals that support it,
-such as kitty and Ghostty.
+This path uses math-conceal's tracker and Rust render service for formula
+identity/render assets, then uses `snacks.nvim` image placement primitives for
+terminal image UI. Install `folke/snacks.nvim` when `image.enabled = true`.
+Disable Snacks document image auto-rendering for Typst buffers; math-conceal
+uses Snacks as a library backend only and does not coexist with
+`Snacks.image.doc` scanning the same buffer. During the Snacks placement
+migration, graphical live preview is temporarily disabled while Typst
+main-buffer placement is moved first.
 
 Graphical equation conceal supports Typst and Markdown math through
 [MiTeX](https://github.com/mitex-rs/mitex).

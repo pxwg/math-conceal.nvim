@@ -52,6 +52,7 @@ lazy.nvim setup with graphical equation conceal:
   return {
     "pxwg/math-conceal.nvim",
     main = "math-conceal",
+    dependencies = { "folke/snacks.nvim" },
     build = "cargo build --release --manifest-path service/Cargo.toml",
     opts = {
       conceal = { "greek", "script", "math", "font", "delim", "phy" },
@@ -63,8 +64,12 @@ lazy.nvim setup with graphical equation conceal:
   }
 <
 
-The Rust service is required only when graphical equation rendering is enabled.
-If you do not use a plugin manager build hook, build it manually:
+The Rust service and `folke/snacks.nvim` are required only when graphical
+equation rendering is enabled. math-conceal uses Snacks image placement as a
+library backend; disable Snacks document image auto-rendering for Typst buffers
+to avoid duplicate document-scanner placements. Graphical live preview is
+temporarily disabled during the Snacks placement migration. If you do not use a
+plugin manager build hook, build the service manually:
 >
   cargo build --release --manifest-path service/Cargo.toml
 <
@@ -318,14 +323,16 @@ Restrict rendering by path:
 
                                               *math-conceal-image.live_preview_enabled*
 `image.live_preview_enabled`~
-        Boolean. Enables the cursor-following live preview in normal, insert,
-        and visual modes.
-        Default: true.
+        Boolean. Cursor-following graphical live preview is temporarily disabled
+        during the Snacks placement migration; this option is retained for
+        compatibility and currently has no graphical effect.
+        Default: false.
 
                                       *math-conceal-image.renderers.live_debounce*
 `image.renderers.<name>.live_debounce`~
-        Delay in milliseconds for text-change live preview updates for a
-        renderer. Cursor movement preview is immediate. Typst defaults to 0.
+        Historical delay in milliseconds for text-change live preview updates.
+        Graphical live preview is temporarily disabled during the Snacks
+        placement migration. Typst defaults to 0.
 
                                         *math-conceal-image.cursor_hover_throttle_ms*
 `image.cursor_hover_throttle_ms`~

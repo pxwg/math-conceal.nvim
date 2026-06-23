@@ -454,35 +454,41 @@ function M.handle_service_response(bufnr, resp, meta)
   end
 
   local image = require("math-conceal.image")
-  local cols, rows = display.cell_dimensions(display_track, resp.width_px, resp.height_px, image.config)
-  local candidate = {
-    image_id = state.allocate_image_id(bufnr),
-    path = resp.path,
-    width_px = resp.width_px,
-    height_px = resp.height_px,
-    cols = cols,
-    rows = rows,
-    render_key = node_meta.render_key,
-  }
+  local uses_display_projection = uses_formula_display(image.get_binding(bufnr))
+  local candidate
+  if uses_display_projection then
+    candidate = {
+      path = resp.path,
+      width_px = resp.width_px,
+      height_px = resp.height_px,
+      render_key = node_meta.render_key,
+    }
+  else
+    local cols, rows = display.cell_dimensions(display_track, resp.width_px, resp.height_px, image.config)
+    candidate = {
+      image_id = state.allocate_image_id(bufnr),
+      path = resp.path,
+      width_px = resp.width_px,
+      height_px = resp.height_px,
+      cols = cols,
+      rows = rows,
+      render_key = node_meta.render_key,
+    }
 
-  if not terminal.upload(candidate.path, candidate.image_id, candidate.cols, candidate.rows) then
-    cleanup_asset(projection.visible_asset)
-    projection.visible_asset = nil
-    projection.status = "failed"
-    if uses_formula_display(image.get_binding(bufnr)) then
-      set_display_asset(projection, nil, true)
-      repair_formula_display(bufnr, { projection.ref })
-    else
+    if not terminal.upload(candidate.path, candidate.image_id, candidate.cols, candidate.rows) then
+      cleanup_asset(projection.visible_asset)
+      projection.visible_asset = nil
+      projection.status = "failed"
       display.reveal(projection)
+      return
     end
-    return
   end
 
   local old = projection.visible_asset
   projection.visible_asset = candidate
   projection.status = "visible"
 
-  if uses_formula_display(image.get_binding(bufnr)) then
+  if uses_display_projection then
     set_display_asset(projection, candidate, false)
     formula_display.repair_tracks(bufnr, { projection.ref }, image.config)
   elseif cursor_reveals(bufnr, track, image.config) then
@@ -570,7 +576,7 @@ function M.on_layout_change(bufnr)
       local classified = renderable_track(bufnr, track, ctx)
       if classified ~= nil then
         local key = render_key(classified, ctx, image.config)
-        if projection.visible_asset == nil or projection.visible_asset.render_key ~= key then
+        if projection.visible_asset == nil then
           set_display_asset(projection, nil, true)
         end
         to_render[#to_render + 1] = { projection = projection, track = classified }
