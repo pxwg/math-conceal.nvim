@@ -106,14 +106,6 @@ local function apply_window_options(winid)
   })
 end
 
-local function source_prefix_display_width(bufnr, row, col)
-  if row == nil or col == nil or col <= 0 or not valid_buf(bufnr) then
-    return 0
-  end
-  local line = (vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false) or { "" })[1] or ""
-  return math.max(0, vim.fn.strdisplaywidth(line:sub(1, col)))
-end
-
 function M.layout_rows(source_start_row, source_end_row, image_rows)
   source_start_row = math.max(0, math.floor(tonumber(source_start_row) or 0))
   source_end_row = math.max(source_start_row, math.floor(tonumber(source_end_row) or source_start_row))
@@ -223,7 +215,7 @@ local function refresh_placement_geometry(placement)
     return false
   end
 
-  placement.prefix_cols = source_prefix_display_width(placement.bufnr, view.row, view.col)
+  placement.prefix_cols = display.block_left_pad_cols(placement.bufnr, view, placement.cols)
   placement.entries = rows
   placement.tail_image_rows = rows[#rows].tail_image_rows or {}
   if #placement.tail_image_rows > 0 then
