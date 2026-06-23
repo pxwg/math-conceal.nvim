@@ -947,6 +947,16 @@ local function source_text_height(bufnr, plan, max_height)
 end
 
 local function render_source_reveal_spacer(bufnr, plan, extmarks, layout_mode)
+  -- TODO(image-display): Re-evaluate whether source-reveal footprint
+  -- preservation is worth the extra blank area.  The current pure-extmark
+  -- experiments show that removing the image footprint during source reveal
+  -- only causes the expected local conceal/reveal reflow, while the serious
+  -- viewport jump is addressed by the compact-in-wrap layout policy.  Keep the
+  -- previous implementation commented here until we decide whether a
+  -- configurable reveal-footprint policy is needed.
+  return
+
+  --[[
   if plan == nil or plan.block_shape ~= "isolated" or plan.view == nil then
     return
   end
@@ -983,6 +993,7 @@ local function render_source_reveal_spacer(bufnr, plan, extmarks, layout_mode)
     invalidate = true,
     priority = SLOT_PRIORITY,
   })
+  --]]
 end
 
 -- When source reveal transitions back to image conceal while a window topline
