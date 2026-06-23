@@ -672,11 +672,12 @@ local function sync_track_keys(bufnr, fd, plan, keys, config, opts)
 end
 
 local function repair_keys_for_event(event, plan)
-  if event.force == true then
+  if event.force == true or #(event.damage_ranges or {}) > 0 or #(event.geometry_changed_refs or {}) > 0 then
     return all_plan_keys(plan.node_plans)
   end
 
   local keys = repair_event.ref_set(event.checked_refs)
+  merge_keys(keys, repair_event.ref_set(event.geometry_changed_refs))
   merge_keys(keys, repair_event.ref_set(event.born_refs))
   merge_keys(keys, repair_event.ref_set(event.retired_refs))
   merge_keys(keys, repair_event.context_dependent_key_set(event))
@@ -698,7 +699,11 @@ function M.on_tracker_repair(event, config)
     local keys = repair_keys_for_event(event, plan)
     merge_keys(keys, fd.suppressed_track_keys)
     merge_keys(keys, plan.suppressed_keys)
-    sync_track_keys(bufnr, fd, plan, keys, config or {})
+    local sync_opts = {}
+    if event.force == true or #(event.damage_ranges or {}) > 0 or #(event.geometry_changed_refs or {}) > 0 then
+      sync_opts.tracker_geometry_sync = true
+    end
+    sync_track_keys(bufnr, fd, plan, keys, config or {}, sync_opts)
   end
 end
 

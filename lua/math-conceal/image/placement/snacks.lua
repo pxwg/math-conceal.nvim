@@ -45,6 +45,15 @@ local function schedule_repaint(bufnr)
   end, 20)
 end
 
+local function schedule_geometry_dirty(bufnr)
+  local s = state_by_buf[bufnr]
+  if s == nil then
+    return
+  end
+  s.edit_epoch = (s.edit_epoch or 0) + 1
+  s.geometry_dirty = true
+end
+
 local function ensure_scroll_repaint(bufnr, s)
   if s.scroll_repaint_autocmd == true then
     return
@@ -59,6 +68,21 @@ local function ensure_scroll_repaint(bufnr, s)
   })
 end
 
+local function ensure_edit_invalidate(bufnr, s)
+  if s.edit_invalidate_attached == true then
+    return
+  end
+  s.edit_invalidate_attached = true
+  pcall(vim.api.nvim_buf_attach, bufnr, false, {
+    on_lines = function(_, changed_buf)
+      schedule_geometry_dirty(changed_buf)
+    end,
+    on_detach = function()
+      state_by_buf[bufnr] = nil
+    end,
+  })
+end
+
 local function state(bufnr)
   bufnr = normalize_bufnr(bufnr)
   local s = state_by_buf[bufnr]
@@ -68,6 +92,7 @@ local function state(bufnr)
   end
   s.placements = s.placements or {}
   ensure_scroll_repaint(bufnr, s)
+  ensure_edit_invalidate(bufnr, s)
   return s
 end
 
@@ -148,6 +173,7 @@ local function update_placement(placement, opts)
     placement.opts[key] = value
   end
   patch_preserve_size_state(placement)
+  placement._state = nil
   if type(placement.update) == "function" then
     pcall(placement.update, placement)
   end
@@ -410,12 +436,23 @@ end
 function M.repaint(bufnr)
   bufnr = normalize_bufnr(bufnr)
   local s = state_by_buf[bufnr]
-  if s == nil then
+  if s == nil or s.geometry_dirty == true then
     return
   end
   for _, record in pairs(s.placements or {}) do
     repaint_placement(record.active)
     repaint_placement(record.pending)
+  end
+end
+
+function M.invalidate(bufnr)
+  bufnr = normalize_bufnr(bufnr)
+  local s = state_by_buf[bufnr]
+  if s == nil then
+    return
+  end
+  for _, key in ipairs(table_keys(s.placements or {})) do
+    M.close_key(bufnr, key)
   end
 end
 
@@ -439,6 +476,12 @@ function M.sync(bufnr, intents, opts)
     return false
   end
 
+  local geometry_sync = opts.replace_all == true or opts.tracker_geometry_sync == true
+  local existing_state = state_by_buf[bufnr]
+  if existing_state ~= nil and existing_state.geometry_dirty == true and not geometry_sync then
+    return true
+  end
+
   local seen = {}
   for _, intent in ipairs(intents or {}) do
     local key = intent.key
@@ -459,13 +502,18 @@ function M.sync(bufnr, intents, opts)
     end
   end
 
+  local s = state_by_buf[bufnr]
   if opts.replace_all == true then
-    local s = state_by_buf[bufnr]
     for _, key in ipairs(table_keys(s and s.placements or {})) do
       if not seen[key] then
         M.close_key(bufnr, key)
       end
     end
+  end
+  if s ~= nil and geometry_sync then
+    s.geometry_dirty = false
+    s.pending_edit_ranges = nil
+    s.last_sync_epoch = s.edit_epoch or 0
   end
   return true
 end
