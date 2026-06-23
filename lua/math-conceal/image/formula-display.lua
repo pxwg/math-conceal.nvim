@@ -825,6 +825,26 @@ local function render_conceal_line(bufnr, plan, fragment, index, extmarks)
   })
 end
 
+local function render_conceal_line_range(bufnr, plan, start_index, extmarks)
+  local start_fragment = plan.fragments[start_index]
+  local end_fragment = plan.end_fragment
+  if start_fragment == nil or end_fragment == nil then
+    return
+  end
+
+  local key = conceal_row_key(plan.view.key, "tail")
+  extmarks.conceal_rows[key] = vim.api.nvim_buf_set_extmark(bufnr, state.aux_ns, start_fragment.row, 0, {
+    id = extmarks.conceal_rows[key],
+    conceal_lines = "",
+    end_row = end_fragment.row,
+    right_gravity = true,
+    end_right_gravity = true,
+    undo_restore = true,
+    invalidate = true,
+    priority = CONCEAL_PRIORITY,
+  })
+end
+
 local function render_conceal_span(bufnr, plan, fragment, index, extmarks)
   if fragment.end_col <= fragment.col then
     return
@@ -894,6 +914,15 @@ local function render_slot_extmark(bufnr, plan, extmarks, index, fragment, virt_
     opts.virt_lines = add_virt_lines_prefix(slot_opts.virt_lines, slot_opts.virt_lines_prefix_cols)
     opts.virt_lines_overflow = "trunc"
   end
+  if slot_opts.conceal ~= nil then
+    opts.conceal = slot_opts.conceal
+  end
+  if slot_opts.end_row ~= nil then
+    opts.end_row = slot_opts.end_row
+  end
+  if slot_opts.end_col ~= nil then
+    opts.end_col = slot_opts.end_col
+  end
   extmarks.node_slots[key] = vim.api.nvim_buf_set_extmark(bufnr, state.display_ns, fragment.row, fragment.col, opts)
 end
 
@@ -924,9 +953,9 @@ local function render_inline_slot(bufnr, plan, extmarks)
   render_source_row_slot(bufnr, plan, extmarks, { virt_text_pos = "inline" })
 end
 
-local function render_isolated_slot(bufnr, plan, extmarks)
+local function render_isolated_projection(bufnr, plan, extmarks)
   local rows = image_cell_rows(bufnr, plan.view)
-  if rows == nil or #rows == 0 or plan.start_fragment == nil then
+  if rows == nil or #rows == 0 or plan.start_fragment == nil or plan.end_fragment == nil then
     return
   end
   if not ensure_slot_image_placed(plan.view.asset) then
@@ -950,17 +979,26 @@ local function render_isolated_slot(bufnr, plan, extmarks)
       end
     end
 
-    render_slot_extmark(bufnr, plan, extmarks, index, fragment, virt_text, {
+    local slot_opts = {
       virt_text_pos = "overlay",
       virt_lines = tail_rows,
       virt_lines_prefix_cols = prefix_cols,
-    })
+    }
+    if index == 1 then
+      slot_opts.conceal = ""
+      slot_opts.end_row = plan.end_fragment.row
+      slot_opts.end_col = plan.end_fragment.end_col
+    end
+    render_slot_extmark(bufnr, plan, extmarks, index, fragment, virt_text, slot_opts)
+  end
+
+  if carrier_count < #plan.fragments then
+    render_conceal_line_range(bufnr, plan, carrier_count + 1, extmarks)
   end
 end
 
 local function render_block_slot(bufnr, plan, extmarks)
   if plan.block_shape == "isolated" then
-    render_isolated_slot(bufnr, plan, extmarks)
     return
   end
 
@@ -997,6 +1035,11 @@ local function render_node_slot(bufnr, plan, extmarks)
 end
 
 local function render_node_projection(bufnr, plan, extmarks)
+  if plan.view.object.inline ~= true and plan.block_shape == "isolated" then
+    render_isolated_projection(bufnr, plan, extmarks)
+    return
+  end
+
   render_conceal_fragments(bufnr, plan, extmarks)
   render_node_slot(bufnr, plan, extmarks)
 end

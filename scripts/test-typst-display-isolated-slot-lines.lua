@@ -46,6 +46,17 @@ local function count_aux_kinds(marks)
   return spans, conceal_lines
 end
 
+local function count_display_conceals(marks)
+  local conceals = 0
+  for _, mark in ipairs(marks) do
+    local details = mark[4] or {}
+    if details.conceal ~= nil then
+      conceals = conceals + 1
+    end
+  end
+  return conceals
+end
+
 local function run()
   add_repo_to_path()
 
@@ -128,8 +139,11 @@ local function run()
   assert_eq("S>I display row count", #display_marks, 2)
   assert_eq("S>I source rows carry first image rows", mark_rows(display_marks), "0,1")
   local span_count, line_count = count_aux_kinds(aux_marks)
-  assert_eq("S>I carrier source rows use range conceal", span_count, 2)
-  assert_eq("S>I surplus source rows use conceal_lines", line_count, 2)
+  assert_eq("S>I uses one primary display conceal", count_display_conceals(display_marks), 1)
+  assert_eq("S>I primary conceal spans whole source range", display_marks[1][4].end_row, 3)
+  assert_eq("S>I primary conceal reaches source end col", display_marks[1][4].end_col, 3)
+  assert_eq("S>I uses no per-carrier aux range conceal", span_count, 0)
+  assert_eq("S>I surplus source rows use one conceal_lines range", line_count, 1)
   assert_eq("S>I no tail virt_lines", display_marks[#display_marks][4].virt_lines, nil)
 
   set_asset(5)
@@ -139,7 +153,10 @@ local function run()
   assert_eq("S<I display row count", #display_marks, 4)
   assert_eq("S<I all source rows carry image rows", mark_rows(display_marks), "0,1,2,3")
   span_count, line_count = count_aux_kinds(aux_marks)
-  assert_eq("S<I all source rows use range conceal", span_count, 4)
+  assert_eq("S<I uses one primary display conceal", count_display_conceals(display_marks), 1)
+  assert_eq("S<I primary conceal spans whole source range", display_marks[1][4].end_row, 3)
+  assert_eq("S<I primary conceal reaches source end col", display_marks[1][4].end_col, 3)
+  assert_eq("S<I uses no per-carrier aux range conceal", span_count, 0)
   assert_eq("S<I no source row uses conceal_lines", line_count, 0)
   local tail = display_marks[#display_marks][4].virt_lines or {}
   assert_eq("S<I tail image rows are virt_lines", #tail, 1)
