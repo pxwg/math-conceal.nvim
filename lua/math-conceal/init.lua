@@ -31,6 +31,9 @@ local M = {
         typst = {
           filetypes = { "typst" },
           live_debounce = 0,
+          code_render = {
+            allow = {},
+          },
         },
         markdown = {
           filetypes = { "markdown" },
@@ -136,6 +139,7 @@ local M = {
 --- @field header string?: Renderer-scoped Typst header.
 --- @field preamble_file string|fun(ctx: table): string?: Renderer-scoped Typst preamble file.
 --- @field mitex_package string?: Typst package spec for Markdown MiTeX rendering.
+--- @field code_render table?: Typst code rendering policy. `allow` adds global user names to the built-in safe allowlist.
 --- @field render_paths table?: Path filters for renderer attachment.
 
 local function plugin_root()

@@ -134,7 +134,7 @@ require("math-conceal").setup({
 cargo build --release --manifest-path service/Cargo.toml
 ```
 
-`styling_type`、`live_preview_enabled`、renderer 级 `live_debounce`、`render_paths`、`get_root`、`get_inputs`、`get_preamble_file` 等高级渲染选项会透传给迁移后的管线。
+`styling_type`、`live_preview_enabled`、renderer 级 `live_debounce`、`render_paths`、`root`、`inputs`、`preamble_file`、Typst 的 `code_render.allow` 等高级渲染选项会透传给迁移后的管线。Typst code 渲染默认只允许一组内置的可预测 primitive；可以用 `code_render.allow = { "theorem", "lemma" }` 增加全局用户白名单。
 
 ## 待办事项
 

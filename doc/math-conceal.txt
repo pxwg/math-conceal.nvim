@@ -340,6 +340,24 @@ Restrict rendering by path:
 `image.renderers.<name>.header`~
         Renderer-scoped Typst code prepended to generated render documents.
 
+                                  *math-conceal-image.renderers.typst.code_render.allow*
+`image.renderers.typst.code_render.allow`~
+        List or map of global user Typst code names allowed to enter the
+        renderer in addition to math-conceal's built-in predictable Typst code
+        allowlist. Structural code such as `#import`, `#let`, `#set`, and
+        `#show` remains context-only.
+>
+        image = {
+          renderers = {
+            typst = {
+              code_render = {
+                allow = { "theorem", "lemma", "remark" },
+              },
+            },
+          },
+        }
+<
+
                                              *math-conceal-image.renderers.root*
 `image.renderers.<name>.root`~
         String or function returning the Typst root directory passed to the

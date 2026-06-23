@@ -28,6 +28,7 @@ local M = {}
 ---@field header string?
 ---@field preamble_file string|function?
 ---@field mitex_package string?
+---@field code_render { allow?: string[]|table<string, boolean> }?
 ---@field code_block { padding_cols?: integer, right_padding_cols?: integer, margin_pt?: number, min_cols?: integer }?
 ---@field render_paths table
 
@@ -72,6 +73,9 @@ local defaults = {
       inputs = {},
       header = "",
       preamble_file = nil,
+      code_render = {
+        allow = {},
+      },
       code_block = {
         padding_cols = 0,
         right_padding_cols = 1,

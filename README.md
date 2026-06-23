@@ -183,7 +183,27 @@ cargo build --release --manifest-path service/Cargo.toml
 
 Renderer-specific options live under `image.renderers.<name>`, including
 `filetypes`, `service_binary`, `live_debounce`, `root`, `inputs`,
-`preamble_file`, `header`, `render_paths`, and Markdown's `mitex_package`.
+`preamble_file`, `header`, `render_paths`, Typst's `code_render.allow`, and
+Markdown's `mitex_package`.
+
+Typst code rendering is intentionally allowlisted. math-conceal renders a
+built-in set of predictable Typst primitives by default; add project-wide custom
+function names with `code_render.allow`:
+
+```lua
+require("math-conceal").setup({
+  image = {
+    enabled = true,
+    renderers = {
+      typst = {
+        code_render = {
+          allow = { "theorem", "lemma", "remark" },
+        },
+      },
+    },
+  },
+})
+```
 
 ## To-do
 

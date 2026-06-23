@@ -22,6 +22,57 @@ local function source_hash(source)
   return vim.fn.sha256(source or "")
 end
 
+local builtin_code_calls = {
+  align = true,
+  block = true,
+  box = true,
+  circle = true,
+  columns = true,
+  ellipse = true,
+  emph = true,
+  enum = true,
+  figure = true,
+  grid = true,
+  h = true,
+  heading = true,
+  highlight = true,
+  image = true,
+  line = true,
+  linebreak = true,
+  link = true,
+  list = true,
+  lorem = true,
+  ["math.equation"] = true,
+  move = true,
+  overline = true,
+  pad = true,
+  pagebreak = true,
+  parbreak = true,
+  path = true,
+  place = true,
+  polygon = true,
+  quote = true,
+  raw = true,
+  rect = true,
+  rotate = true,
+  scale = true,
+  smallcaps = true,
+  square = true,
+  stack = true,
+  strike = true,
+  strong = true,
+  table = true,
+  terms = true,
+  text = true,
+  underline = true,
+  v = true,
+}
+
+local builtin_code_field_roots = {
+  emoji = true,
+  sym = true,
+}
+
 local function range_source(bufnr, range)
   local lines = vim.api.nvim_buf_get_lines(bufnr, range.row, range.end_row + 1, false)
   if #lines == 0 then
@@ -79,6 +130,155 @@ local function capture_node(match, capture_id)
   return value
 end
 
+local function first_named_child(node)
+  if node == nil then
+    return nil
+  end
+  for child in node:iter_children() do
+    if child:named() then
+      return child
+    end
+  end
+  return nil
+end
+
+local function append_field_path(bufnr, node, out)
+  if node == nil then
+    return
+  end
+  local node_type = node:type()
+  if node_type == "ident" then
+    out[#out + 1] = vim.treesitter.get_node_text(node, bufnr)
+    return
+  end
+  if node_type ~= "field" then
+    return
+  end
+  for child in node:iter_children() do
+    if child:named() and (child:type() == "field" or child:type() == "ident") then
+      append_field_path(bufnr, child, out)
+    end
+  end
+end
+
+local function head_path(bufnr, node)
+  if node == nil then
+    return nil
+  end
+  local node_type = node:type()
+  if node_type == "call" then
+    return head_path(bufnr, first_named_child(node))
+  end
+  if node_type == "ident" then
+    return { vim.treesitter.get_node_text(node, bufnr) }
+  end
+  if node_type == "field" then
+    local path = {}
+    append_field_path(bufnr, node, path)
+    if #path > 0 then
+      return path
+    end
+  end
+  return nil
+end
+
+local function code_candidate(bufnr, node)
+  local path = head_path(bufnr, node)
+  local node_type = node and node:type() or "unknown"
+  local kind = node_type
+  if node_type ~= "call" and node_type ~= "field" and node_type ~= "ident" then
+    kind = "unknown"
+  end
+  return {
+    kind = kind,
+    path = path,
+    root = path and path[1] or nil,
+    name = path and table.concat(path, ".") or nil,
+  }
+end
+
+local function add_allow_name(out, value)
+  if type(value) == "string" and value ~= "" then
+    out[value] = true
+    return
+  end
+  if type(value) ~= "table" then
+    return
+  end
+  for _, key in ipairs({ "name", "call", "field", "ident" }) do
+    if type(value[key]) == "string" and value[key] ~= "" then
+      out[value[key]] = true
+    end
+  end
+end
+
+local function configured_code_allowlist()
+  local ok, image = pcall(require, "math-conceal.image")
+  local renderer_cfg = nil
+  if ok and type(image) == "table" and type(image.config) == "table" and type(image.config.renderers) == "table" then
+    renderer_cfg = image.config.renderers.typst
+  end
+  local code_cfg = type(renderer_cfg) == "table" and renderer_cfg.code_render or nil
+  local allow = type(code_cfg) == "table" and (code_cfg.allow or code_cfg.allowlist or code_cfg.whitelist) or nil
+  local out = {}
+
+  if type(allow) == "string" then
+    add_allow_name(out, allow)
+  elseif type(allow) == "table" then
+    if vim.islist(allow) then
+      for _, value in ipairs(allow) do
+        add_allow_name(out, value)
+      end
+    else
+      for key, value in pairs(allow) do
+        if type(key) == "string" and value == true then
+          add_allow_name(out, key)
+        else
+          add_allow_name(out, value)
+        end
+      end
+    end
+  end
+
+  return out
+end
+
+local function path_uses_with(path)
+  return type(path) == "table" and #path >= 2 and path[2] == "with"
+end
+
+local function exact_allowed_by_names(unit, names)
+  return type(names) == "table" and unit.code_name ~= nil and names[unit.code_name] == true
+end
+
+local function call_allowed_by_names(unit, names)
+  if type(names) ~= "table" or unit.code_kind ~= "call" then
+    return false
+  end
+  if exact_allowed_by_names(unit, names) then
+    return true
+  end
+  if path_uses_with(unit.code_path) and names[unit.code_root] == true then
+    return true
+  end
+  return false
+end
+
+local function is_builtin_renderable_code(unit)
+  if unit.code_kind == "field" and unit.code_root ~= nil and builtin_code_field_roots[unit.code_root] == true then
+    return true
+  end
+  return call_allowed_by_names(unit, builtin_code_calls)
+end
+
+local function is_user_renderable_code(unit, user_allowlist)
+  return call_allowed_by_names(unit, user_allowlist) or exact_allowed_by_names(unit, user_allowlist)
+end
+
+local function is_renderable_code_unit(unit, user_allowlist)
+  return is_builtin_renderable_code(unit) or is_user_renderable_code(unit, user_allowlist)
+end
+
 local function build_match_index(bufnr, root, parsed_query, start_row, end_row)
   local index = {}
 
@@ -116,9 +316,14 @@ local function build_match_index(bufnr, root, parsed_query, start_row, end_row)
       }
 
       if code_node ~= nil then
+        local candidate = code_candidate(bufnr, code_node)
         entry.object_kind = "code"
         entry.node_type = "code"
         entry.code_type = code_node:type()
+        entry.code_kind = candidate.kind
+        entry.code_name = candidate.name
+        entry.code_root = candidate.root
+        entry.code_path = candidate.path
         entry.call_ident = call_ident_node and vim.treesitter.get_node_text(call_ident_node, bufnr) or ""
       end
 
@@ -260,6 +465,9 @@ local function code_source_display_facts(unit)
     {
       source_kind = "typst",
       object_kind = "code",
+      code_kind = unit.code_kind,
+      code_name = unit.code_name,
+      code_path = unit.code_path,
       break_line = source_rows > 1,
     }
 end
@@ -356,6 +564,7 @@ local function build_scan(bufnr)
   local units = collect_top_level_units(root, build_match_index(bufnr, root, parsed_query))
   local nodes = {}
   local context_units = {}
+  local user_code_allowlist = configured_code_allowlist()
 
   for _, unit in ipairs(units) do
     if unit.object_kind == "math" then
@@ -365,7 +574,7 @@ local function build_scan(bufnr)
       local record = context_record(bufnr, unit)
       record.index = #context_units + 1
       context_units[#context_units + 1] = record
-    elseif unit.object_kind == "code" then
+    elseif unit.object_kind == "code" and is_renderable_code_unit(unit, user_code_allowlist) then
       local prefixes = prefix_signatures(context_units)
       nodes[#nodes + 1] = node_record(bufnr, unit, context_units, prefixes)
     end
@@ -404,6 +613,7 @@ local function build_window_scan(bufnr, window, context_units)
   local prefixes = prefix_signatures(context_units or {})
   local nodes = {}
   local local_context_units = {}
+  local user_code_allowlist = configured_code_allowlist()
 
   for _, unit in ipairs(units) do
     if unit.object_kind == "math" and range_intersects(unit, window) then
@@ -412,7 +622,11 @@ local function build_window_scan(bufnr, window, context_units)
       local record = context_record(bufnr, unit)
       record.index = #local_context_units + 1
       local_context_units[#local_context_units + 1] = record
-    elseif unit.object_kind == "code" and range_intersects(unit, window) then
+    elseif
+      unit.object_kind == "code"
+      and range_intersects(unit, window)
+      and is_renderable_code_unit(unit, user_code_allowlist)
+    then
       nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
     end
   end

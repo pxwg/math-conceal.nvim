@@ -33,7 +33,7 @@ A tracker-owned formula instance whose identity follows one complete source-kind
 _Avoid_: Symbol track, sub-formula track, render atom
 
 **Code Track**:
-A tracker-owned Typst code object whose identity follows one top-level renderable code expression, such as a variable reference, content block, or function call. Structural code such as imports, lets, sets, and shows is a context unit instead; nested code or math objects are not code tracks.
+A tracker-owned Typst code object whose identity follows one top-level allowlisted renderable code expression, such as a predictable built-in primitive or a user-allowed project function/reference. Structural code such as imports, lets, sets, and shows is a context unit instead; non-allowlisted custom code remains visible source, and nested code or math objects are not code tracks.
 _Avoid_: Formula track, context unit, scanned code node
 
 **Flow Classification Projection**:
