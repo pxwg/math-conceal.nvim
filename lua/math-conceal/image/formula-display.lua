@@ -399,8 +399,32 @@ local function node_source_cols_for_row(plan, row)
   return 0, math.huge
 end
 
-local function cursor_collides_with_plan(row, col, plan)
+local function block_math_delimiter_only_row(plan, row)
+  local view = plan and plan.view or nil
+  local object = view and view.object or nil
+  if
+    view == nil
+    or object == nil
+    or object.kind ~= "math"
+    or object.inline == true
+    or view.row == view.end_row
+    or (row ~= view.row and row ~= view.end_row)
+  then
+    return false
+  end
+
+  local line = source_line(view.bufnr, row)
+  local start_col = row == view.row and view.col or 0
+  local end_col = row == view.end_row and view.end_col or #line
+  local fragment = line:sub(start_col + 1, end_col)
+  return fragment:match("^%s*%$%s*$") ~= nil
+end
+
+local function cursor_collides_with_plan(row, col, plan, mode)
   if row == nil then
+    return false
+  end
+  if mode == "n" and block_math_delimiter_only_row(plan, row) then
     return false
   end
   local start_col, end_col = node_source_cols_for_row(plan, row)
@@ -489,7 +513,7 @@ local function collision_keys(bufnr, node_plans, config)
 
   local row, col = cursor_for_buf(bufnr)
   for _, plan in ipairs(node_plans) do
-    if cursor_collides_with_plan(row, col, plan) then
+    if cursor_collides_with_plan(row, col, plan, mode) then
       add_key(keys, plan.view.key)
     end
   end
@@ -589,9 +613,17 @@ local function show_intent(bufnr, plan, config)
   local source_range = { view.row + 1, view.col, view.end_row + 1, view.end_col }
   local placement_col = view.col
   local placement_range = nil
+  local collapse_source_lines = false
+  local preserve_size = false
   if object.kind == "math" and object.inline ~= true then
     placement_col = math.max(0, math.floor((state.visible_text_width(bufnr) - width) / 2))
-    placement_range = { view.row + 1, placement_col, view.end_row + 1, placement_col }
+    -- Keep the Snacks placement range on a short anchor line. Snacks refuses
+    -- overlay placement when a ranged source line is wider than the wrapped
+    -- window, and then falls back to unpadded virtual lines. The backend keeps
+    -- the real source range concealed separately while Snacks owns the image.
+    placement_range = { view.row + 1, placement_col, view.row + 1, placement_col }
+    collapse_source_lines = true
+    preserve_size = true
   end
   return {
     key = view.key,
@@ -601,6 +633,8 @@ local function show_intent(bufnr, plan, config)
     pos = { view.row + 1, placement_col },
     range = source_range,
     placement_range = placement_range,
+    collapse_source_lines = collapse_source_lines,
+    preserve_size = preserve_size,
     width = width,
     height = height,
     max_width = max_width,

@@ -3,6 +3,7 @@ local M = {}
 local state_by_buf = {}
 local notified = {}
 local conceal_ns = vim.api.nvim_create_namespace("math-conceal.image.placement.snacks.conceal")
+local augroup = vim.api.nvim_create_augroup("math-conceal.image.placement.snacks", { clear = true })
 
 local function table_keys(tbl)
   local keys = {}
@@ -29,6 +30,35 @@ local function notify_once(key, message, level)
   end)
 end
 
+local function schedule_repaint(bufnr)
+  local s = state_by_buf[bufnr]
+  if s == nil or s.repaint_scheduled then
+    return
+  end
+  s.repaint_scheduled = true
+  vim.defer_fn(function()
+    local current = state_by_buf[bufnr]
+    if current ~= nil then
+      current.repaint_scheduled = false
+      M.repaint(bufnr)
+    end
+  end, 20)
+end
+
+local function ensure_scroll_repaint(bufnr, s)
+  if s.scroll_repaint_autocmd == true then
+    return
+  end
+  s.scroll_repaint_autocmd = true
+  pcall(vim.api.nvim_create_autocmd, { "WinScrolled", "BufWinEnter" }, {
+    group = augroup,
+    buffer = bufnr,
+    callback = function()
+      schedule_repaint(bufnr)
+    end,
+  })
+end
+
 local function state(bufnr)
   bufnr = normalize_bufnr(bufnr)
   local s = state_by_buf[bufnr]
@@ -37,6 +67,7 @@ local function state(bufnr)
     state_by_buf[bufnr] = s
   end
   s.placements = s.placements or {}
+  ensure_scroll_repaint(bufnr, s)
   return s
 end
 
@@ -60,6 +91,54 @@ local function show_placement(placement)
   end
 end
 
+local function delete_terminal_placement(placement)
+  local ok_terminal, terminal = pcall(require, "snacks.image.terminal")
+  if not ok_terminal or placement == nil or placement.img == nil or placement.img.id == nil or placement.id == nil then
+    return
+  end
+  pcall(terminal.request, { a = "d", d = "i", i = placement.img.id, p = placement.id })
+end
+
+local function repaint_placement(placement)
+  if placement == nil or placement.closed == true then
+    return
+  end
+  -- Kitty unicode-placeholder placements can leave stale terminal images on
+  -- scroll when their virtual-text placeholders move out of the viewport,
+  -- especially for wrapped inline math. Delete only the terminal placement,
+  -- keep Snacks' extmark lifecycle intact, and force Snacks to re-emit the
+  -- placement request against the currently visible placeholder grid.
+  delete_terminal_placement(placement)
+  placement._state = nil
+  if type(placement.update) == "function" then
+    pcall(placement.update, placement)
+  end
+end
+
+local function patch_preserve_size_state(placement)
+  if placement == nil or placement._math_conceal_preserve_size_patched == true then
+    return
+  end
+  if type(placement.state) ~= "function" then
+    return
+  end
+  local base_state = placement.state
+  placement._math_conceal_preserve_size_patched = true
+  placement.state = function(self)
+    local placement_state = base_state(self)
+    local opts = self.opts or {}
+    if opts.math_conceal_preserve_size == true and placement_state ~= nil and placement_state.loc ~= nil then
+      if opts.width ~= nil then
+        placement_state.loc.width = math.max(1, math.floor(tonumber(opts.width) or placement_state.loc.width or 1))
+      end
+      if opts.height ~= nil then
+        placement_state.loc.height = math.max(1, math.floor(tonumber(opts.height) or placement_state.loc.height or 1))
+      end
+    end
+    return placement_state
+  end
+end
+
 local function update_placement(placement, opts)
   if placement == nil then
     return
@@ -68,6 +147,7 @@ local function update_placement(placement, opts)
   for key, value in pairs(opts or {}) do
     placement.opts[key] = value
   end
+  patch_preserve_size_state(placement)
   if type(placement.update) == "function" then
     pcall(placement.update, placement)
   end
@@ -130,6 +210,7 @@ local function placement_opts(intent, on_update)
     max_height = intent.max_height,
     type = intent.type or "math",
     auto_resize = intent.auto_resize ~= false,
+    math_conceal_preserve_size = intent.preserve_size == true,
     on_update = on_update,
   }
 end
@@ -173,7 +254,9 @@ local function render_source_conceal(bufnr, record, intent)
   local start_row = math.max(0, (tonumber(range[1]) or 1) - 1)
   local end_row = math.max(start_row, (tonumber(range[3]) or range[1] or 1) - 1)
   local ids = {}
-  for row = start_row, end_row do
+  local can_collapse_tail = intent.collapse_source_lines == true and vim.fn.has("nvim-0.11.4") == 1
+  local conceal_until = can_collapse_tail and start_row or end_row
+  for row = start_row, conceal_until do
     local col = row == start_row and math.max(0, tonumber(range[2]) or 0) or 0
     local end_col = row == end_row and math.max(0, tonumber(range[4]) or 0) or line_len(bufnr, row)
     if end_col > col then
@@ -185,6 +268,14 @@ local function render_source_conceal(bufnr, record, intent)
         invalidate = true,
       })
     end
+  end
+  if can_collapse_tail and end_row > start_row then
+    ids[#ids + 1] = vim.api.nvim_buf_set_extmark(bufnr, conceal_ns, start_row + 1, 0, {
+      end_row = end_row,
+      conceal_lines = "",
+      priority = 4095,
+      invalidate = true,
+    })
   end
   record.source_conceal_ids = ids
 end
@@ -224,6 +315,7 @@ local function create_pending(bufnr, key, intent, record, placement_mod)
     )
     return false
   end
+  patch_preserve_size_state(placement)
   record.pending = placement
   record.pending_key = asset_key(intent.asset)
   if record.hidden then
@@ -283,6 +375,7 @@ local function show_intent(bufnr, key, intent, placement_mod)
       )
       return
     end
+    patch_preserve_size_state(placement)
     record.pending = placement
     record.pending_key = key_now
     show_placement(record.pending)
@@ -312,6 +405,18 @@ function M.close_key(bufnr, key)
   close_placement(record.pending)
   clear_source_conceal(bufnr, record)
   s.placements[key] = nil
+end
+
+function M.repaint(bufnr)
+  bufnr = normalize_bufnr(bufnr)
+  local s = state_by_buf[bufnr]
+  if s == nil then
+    return
+  end
+  for _, record in pairs(s.placements or {}) do
+    repaint_placement(record.active)
+    repaint_placement(record.pending)
+  end
 end
 
 function M.sync(bufnr, intents, opts)
