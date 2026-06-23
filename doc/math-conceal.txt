@@ -145,6 +145,8 @@ Graphical equation conceal is configured under the top-level `image` table:
   require("math-conceal").setup({
     image = {
       enabled = true,
+      compact_in_wrap = true,
+      -- Wrapped image windows use compact layout and window-local 'smoothscroll'.
     },
   })
 <
@@ -255,6 +257,18 @@ Restrict rendering by path:
                                                          *math-conceal-image.enabled*
 `image.enabled`~
         Boolean. Enables graphical equation conceal. Default: false.
+
+                                                 *math-conceal-image.compact_in_wrap*
+`image.compact_in_wrap`~
+        Boolean. Default: true.
+        When false and a visible image window has 'wrap' enabled, Formula
+        Display Projection uses a non-compact range-conceal layout that keeps
+        source rows line-addressable and does not change 'smoothscroll'.
+        When true, wrapped image windows use the compact conceal_lines layout;
+        math-conceal sets window-local 'smoothscroll' for those windows to
+        avoid viewport jumps from conceal_lines + virt_lines_above. Windows
+        with 'nowrap' use compact layout regardless of this option and do not
+        need 'smoothscroll'.
 
                                                        *math-conceal-image.renderers*
 `image.renderers`~

@@ -9,6 +9,7 @@ math-conceal-image-api	math-conceal.txt	/*math-conceal-image-api*
 math-conceal-image-examples	math-conceal.txt	/*math-conceal-image-examples*
 math-conceal-image-options	math-conceal.txt	/*math-conceal-image-options*
 math-conceal-image.color	math-conceal.txt	/*math-conceal-image.color*
+math-conceal-image.compact_in_wrap	math-conceal.txt	/*math-conceal-image.compact_in_wrap*
 math-conceal-image.conceal_in_normal	math-conceal.txt	/*math-conceal-image.conceal_in_normal*
 math-conceal-image.cursor_hover_throttle_ms	math-conceal.txt	/*math-conceal-image.cursor_hover_throttle_ms*
 math-conceal-image.enabled	math-conceal.txt	/*math-conceal-image.enabled*

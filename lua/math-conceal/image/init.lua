@@ -43,6 +43,7 @@ local M = {}
 ---@field do_diagnostics boolean
 ---@field conceal_in_normal boolean
 ---@field live_preview_enabled boolean
+---@field compact_in_wrap boolean
 ---@field block_padding_cols integer
 
 local defaults = {
@@ -58,6 +59,7 @@ local defaults = {
   do_diagnostics = true,
   conceal_in_normal = false,
   live_preview_enabled = true,
+  compact_in_wrap = true,
   block_padding_cols = 0,
   renderers = {
     typst = {
@@ -448,6 +450,28 @@ local function setup_autocmds()
     callback = function(ev)
       if M._buffers[ev.buf] ~= nil then
         projection.sync_cursor(ev.buf, { preview_immediate = true })
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "WinEnter", "BufWinEnter" }, {
+    group = augroup_id,
+    desc = "sync math-conceal image window-local display options",
+    callback = function(ev)
+      if M._buffers[ev.buf] ~= nil then
+        projection.sync_cursor(ev.buf, { preview_immediate = false })
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("OptionSet", {
+    group = augroup_id,
+    pattern = "wrap",
+    desc = "refresh math-conceal image compact layout after wrap changes",
+    callback = function()
+      local bufnr = vim.api.nvim_get_current_buf()
+      if M._buffers[bufnr] ~= nil then
+        projection.sync_cursor(bufnr, { preview_immediate = false })
       end
     end,
   })

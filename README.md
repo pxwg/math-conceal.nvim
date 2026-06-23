@@ -33,7 +33,11 @@ return {
   opts = {
     conceal = { "greek", "script", "math", "font", "delim", "phy" },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
-    image = { enabled = true },
+    image = {
+      enabled = true,
+      compact_in_wrap = true, -- recommended: keeps image display compact under 'wrap'.
+                              -- For wrapped image windows this sets window-local 'smoothscroll'.
+    },
   },
 }
 ```
@@ -139,6 +143,7 @@ return {
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
     image = {
       enabled = false, -- set true to enable graphical equation conceal
+      compact_in_wrap = true, -- recommended when image conceal is enabled; wrapped image windows use window-local 'smoothscroll'
     },
   },
 }
@@ -162,6 +167,12 @@ Enable it from the same setup table:
 require("math-conceal").setup({
   image = {
     enabled = true,
+    compact_in_wrap = true,
+    -- Keeps image display compact when a window has 'wrap' enabled.
+    -- To avoid Neovim viewport jumps from conceal_lines + virt_lines_above,
+    -- math-conceal sets window-local 'smoothscroll' for wrapped image windows.
+    -- Set this to false if you do not want math-conceal to change 'smoothscroll';
+    -- wrapped windows will then use a non-compact range-conceal layout.
     renderers = {
       typst = {
         filetypes = { "typst" },
@@ -184,6 +195,12 @@ cargo build --release --manifest-path service/Cargo.toml
 Renderer-specific options live under `image.renderers.<name>`, including
 `filetypes`, `service_binary`, `live_debounce`, `root`, `inputs`,
 `preamble_file`, `header`, `render_paths`, and Markdown's `mitex_package`.
+
+`image.compact_in_wrap` defaults to `true`. With `wrap` disabled, image display
+uses compact `conceal_lines` layout either way. With `wrap` enabled, `true` keeps
+the compact layout and sets window-local `smoothscroll` for image windows;
+`false` avoids changing `smoothscroll` and uses a non-compact range-conceal
+layout that preserves source row height.
 
 ## To-do
 

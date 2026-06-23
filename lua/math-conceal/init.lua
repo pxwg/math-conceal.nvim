@@ -24,6 +24,7 @@ local M = {
       enabled = false,
       enabled_by_default = true,
       live_preview_enabled = true,
+      compact_in_wrap = true,
       tracker = {
         debug = false,
       },
@@ -116,6 +117,7 @@ local M = {
 --- @field enabled boolean?: Enable image renderer attachment. Default false.
 --- @field enabled_by_default boolean?: Attach matching buffers automatically. Default true.
 --- @field live_preview_enabled boolean?: Enable cursor-following live preview. Default true.
+--- @field compact_in_wrap boolean?: Keep wrapped windows in compact image layout by setting window-local 'smoothscroll'. Default true.
 --- @field tracker MathConcealImageTrackerOptions?: Tracker configuration for the image path.
 --- @field renderers table<string, MathConcealImageRendererOptions>?: Renderer-specific attachment configuration.
 --- Other fields are stored by `math-conceal.image` for the future renderer.
