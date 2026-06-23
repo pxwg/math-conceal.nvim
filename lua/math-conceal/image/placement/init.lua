@@ -24,6 +24,10 @@ function M.refresh_buf(bufnr)
   return fold_grid.refresh_buf(bufnr)
 end
 
+function M.refresh_geometry(bufnr, opts)
+  return fold_grid.refresh_geometry(bufnr, opts)
+end
+
 function M.batch(fn)
   return fold_grid.batch(fn)
 end

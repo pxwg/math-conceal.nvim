@@ -1146,6 +1146,14 @@ function M.on_tracker_repair(event, config)
     merge_keys(keys, fd.suppressed_track_keys)
     merge_keys(keys, plan.suppressed_keys)
     render_track_keys(bufnr, fd, plan, keys)
+
+    -- A repair can move a TrackRef without changing formula identity or rendered
+    -- assets. Fold-grid rows are materialized projection geometry, so refresh
+    -- them from the live TrackView even when no render-trigger key was emitted.
+    local fold_grid_keys = fold_grid_plan_keys(plan)
+    if next(fold_grid_keys) ~= nil then
+      placement.refresh_geometry(bufnr, { keys = fold_grid_keys })
+    end
   end
 
   fd.suppressed_track_keys = plan.suppressed_keys

@@ -230,6 +230,35 @@ local function refresh_placement_geometry(placement)
   return update_tail_extmark(placement)
 end
 
+local function row_list_signature(rows)
+  local parts = {}
+  for _, row in ipairs(rows or {}) do
+    parts[#parts + 1] = tostring(row)
+  end
+  return table.concat(parts, ",")
+end
+
+local function placement_geometry_signature(placement)
+  if placement == nil then
+    return ""
+  end
+
+  local parts = {
+    tostring(placement.prefix_cols or ""),
+    tostring(placement.tail_anchor_row or ""),
+    row_list_signature(placement.tail_image_rows),
+  }
+  for _, entry in ipairs(placement.entries or {}) do
+    parts[#parts + 1] = table.concat({
+      tostring(entry.image_row or ""),
+      tostring(entry.source_start_row or ""),
+      tostring(entry.source_end_row or ""),
+      row_list_signature(entry.tail_image_rows),
+    }, ":")
+  end
+  return table.concat(parts, "|")
+end
+
 local function close_placement(placement)
   if placement == nil or placement.closed then
     return
@@ -733,6 +762,46 @@ function M.refresh_buf(bufnr)
       end
     end
   end)
+end
+
+function M.refresh_geometry(bufnr, opts)
+  bufnr = normalize_bufnr(bufnr)
+  opts = opts or {}
+  local records = placements_by_buf[bufnr]
+  if records == nil then
+    return false
+  end
+
+  local only_keys = opts.keys
+  local keys = {}
+  for key in pairs(records) do
+    if only_keys == nil or only_keys[key] == true then
+      keys[#keys + 1] = key
+    end
+  end
+  table.sort(keys)
+
+  local changed = false
+  with_surface_refresh_batch(function()
+    for _, key in ipairs(keys) do
+      local record = records[key]
+      local active = record and record.active or nil
+      if active ~= nil and not active.closed then
+        local before = placement_geometry_signature(active)
+        if not refresh_placement_geometry(active) then
+          changed = true
+          close_key_internal(bufnr, key, { refresh = false })
+        else
+          local after = placement_geometry_signature(active)
+          if before ~= after then
+            changed = true
+            sync_surfaces_for_key(bufnr, key, active)
+          end
+        end
+      end
+    end
+  end)
+  return changed
 end
 
 function M.batch(fn)
