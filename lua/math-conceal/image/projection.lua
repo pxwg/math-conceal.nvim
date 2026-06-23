@@ -466,9 +466,8 @@ function M.handle_service_response(bufnr, resp, meta)
   }
 
   local binding = image.get_binding(bufnr)
-  local defer_formula_placement = uses_formula_display(binding) and formula_display.uses_fold_grid(bufnr, display_track)
   local uploaded
-  if defer_formula_placement then
+  if uses_formula_display(binding) then
     uploaded = terminal.send_image(candidate.path, candidate.image_id)
   else
     uploaded = terminal.upload(candidate.path, candidate.image_id, candidate.cols, candidate.rows)

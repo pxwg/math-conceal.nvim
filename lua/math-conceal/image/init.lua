@@ -473,6 +473,28 @@ local function setup_autocmds()
     end,
   })
 
+  vim.api.nvim_create_autocmd("BufWinEnter", {
+    group = augroup_id,
+    desc = "refresh math-conceal image display strategy for new windows",
+    callback = function(ev)
+      if M._buffers[ev.buf] ~= nil then
+        projection.on_layout_change(ev.buf)
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("OptionSet", {
+    group = augroup_id,
+    pattern = { "wrap", "number", "relativenumber", "signcolumn" },
+    desc = "refresh math-conceal image display strategy after window option changes",
+    callback = function()
+      local bufnr = vim.api.nvim_get_current_buf()
+      if M._buffers[bufnr] ~= nil then
+        projection.on_layout_change(bufnr)
+      end
+    end,
+  })
+
   vim.api.nvim_create_autocmd("VimResized", {
     group = augroup_id,
     desc = "rerender math-conceal images when terminal cell metrics change",
