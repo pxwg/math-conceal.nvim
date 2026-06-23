@@ -694,8 +694,12 @@ local function build_projection_plan(bufnr, snapshots, config)
   return plan
 end
 
-local function node_slot_key(track_key)
-  return "slot:" .. track_key
+local function node_slot_prefix(track_key)
+  return "slot:" .. track_key .. ":"
+end
+
+local function node_slot_key(track_key, index)
+  return node_slot_prefix(track_key) .. tostring(index or 1)
 end
 
 local function conceal_span_key(track_key, index)
@@ -715,7 +719,8 @@ local function clear_group_prefix(bufnr, group, ns, prefix)
 end
 
 local function clear_artifacts_for_track_key(bufnr, fd, track_key)
-  delete_group_extmark(bufnr, fd.extmarks.node_slots, state.display_ns, node_slot_key(track_key))
+  delete_group_extmark(bufnr, fd.extmarks.node_slots, state.display_ns, "slot:" .. track_key)
+  clear_group_prefix(bufnr, fd.extmarks.node_slots, state.display_ns, node_slot_prefix(track_key))
   clear_group_prefix(bufnr, fd.extmarks.conceal_spans, state.aux_ns, "conceal:" .. track_key .. ":")
   clear_group_prefix(bufnr, fd.extmarks.conceal_rows, state.aux_ns, "conceal-line:" .. track_key .. ":")
 end
@@ -747,6 +752,14 @@ local function image_cell_rows(bufnr, view)
     out[#out + 1] = { { pad_text .. display.placeholder_row(row, cols), hl } }
   end
   return out
+end
+
+local function image_cell_row_count(view)
+  local asset = view and view.asset or nil
+  if asset == nil then
+    return 0
+  end
+  return math.max(1, math.floor(tonumber(asset.rows) or 1))
 end
 
 local function ensure_slot_image_placed(asset)
@@ -781,13 +794,17 @@ local function block_slot_position(plan)
   return nil, false
 end
 
-local function fragment_carries_node_slot(bufnr, plan, fragment)
+local function fragment_carries_node_slot(bufnr, plan, fragment, index)
   if fragment == nil then
     return false
   end
 
-  if plan.view.object.inline or plan.block_shape == "isolated" then
+  if plan.view.object.inline then
     return fragment == plan.start_fragment
+  end
+
+  if plan.block_shape == "isolated" then
+    return index ~= nil and index <= image_cell_row_count(plan.view)
   end
 
   local anchor_row = block_slot_position(plan)
@@ -824,7 +841,7 @@ local function render_conceal_span(bufnr, plan, fragment, index, extmarks)
 end
 
 local function render_conceal_fragment(bufnr, plan, fragment, index, extmarks)
-  if fragment.fragment_only and not fragment_carries_node_slot(bufnr, plan, fragment) then
+  if fragment.fragment_only and not fragment_carries_node_slot(bufnr, plan, fragment, index) then
     render_conceal_line(bufnr, plan, fragment, index, extmarks)
     return
   end
@@ -856,6 +873,30 @@ local function add_virt_lines_prefix(virt_lines, prefix_cols)
   return out
 end
 
+local function add_virt_line_prefix(line, prefix_cols)
+  return add_virt_lines_prefix({ line }, prefix_cols)[1]
+end
+
+local function render_slot_extmark(bufnr, plan, extmarks, index, fragment, virt_text, slot_opts)
+  if fragment == nil or virt_text == nil then
+    return
+  end
+  slot_opts = slot_opts or {}
+  local key = node_slot_key(plan.view.key, index)
+  local opts = {
+    id = extmarks.node_slots[key],
+    virt_text = virt_text,
+    virt_text_pos = slot_opts.virt_text_pos or "inline",
+    invalidate = true,
+    priority = SLOT_PRIORITY,
+  }
+  if slot_opts.virt_lines ~= nil and #slot_opts.virt_lines > 0 then
+    opts.virt_lines = add_virt_lines_prefix(slot_opts.virt_lines, slot_opts.virt_lines_prefix_cols)
+    opts.virt_lines_overflow = "trunc"
+  end
+  extmarks.node_slots[key] = vim.api.nvim_buf_set_extmark(bufnr, state.display_ns, fragment.row, fragment.col, opts)
+end
+
 local function render_source_row_slot(bufnr, plan, extmarks, slot_opts)
   slot_opts = slot_opts or {}
   local fragment = plan.start_fragment
@@ -872,19 +913,11 @@ local function render_source_row_slot(bufnr, plan, extmarks, slot_opts)
     extra_rows[#extra_rows + 1] = rows[index]
   end
 
-  local key = node_slot_key(plan.view.key)
-  local opts = {
-    id = extmarks.node_slots[key],
-    virt_text = rows[1],
+  render_slot_extmark(bufnr, plan, extmarks, 1, fragment, rows[1], {
     virt_text_pos = slot_opts.virt_text_pos or "inline",
-    invalidate = true,
-    priority = SLOT_PRIORITY,
-  }
-  if #extra_rows > 0 then
-    opts.virt_lines = add_virt_lines_prefix(extra_rows, slot_opts.virt_lines_prefix_cols)
-    opts.virt_lines_overflow = "trunc"
-  end
-  extmarks.node_slots[key] = vim.api.nvim_buf_set_extmark(bufnr, state.display_ns, fragment.row, fragment.col, opts)
+    virt_lines = extra_rows,
+    virt_lines_prefix_cols = slot_opts.virt_lines_prefix_cols,
+  })
 end
 
 local function render_inline_slot(bufnr, plan, extmarks)
@@ -892,12 +925,37 @@ local function render_inline_slot(bufnr, plan, extmarks)
 end
 
 local function render_isolated_slot(bufnr, plan, extmarks)
-  local fragment = plan.start_fragment
-  local prefix_cols = fragment and source_prefix_display_width(bufnr, fragment.row, fragment.col) or 0
-  render_source_row_slot(bufnr, plan, extmarks, {
-    virt_text_pos = "overlay",
-    virt_lines_prefix_cols = prefix_cols,
-  })
+  local rows = image_cell_rows(bufnr, plan.view)
+  if rows == nil or #rows == 0 or plan.start_fragment == nil then
+    return
+  end
+  if not ensure_slot_image_placed(plan.view.asset) then
+    return
+  end
+
+  local prefix_cols = source_prefix_display_width(bufnr, plan.start_fragment.row, plan.start_fragment.col)
+  local carrier_count = math.min(#rows, #plan.fragments)
+  for index = 1, carrier_count do
+    local fragment = plan.fragments[index]
+    local virt_text = rows[index]
+    if index > 1 then
+      virt_text = add_virt_line_prefix(virt_text, prefix_cols)
+    end
+
+    local tail_rows = nil
+    if index == carrier_count and #rows > carrier_count then
+      tail_rows = {}
+      for image_row = carrier_count + 1, #rows do
+        tail_rows[#tail_rows + 1] = rows[image_row]
+      end
+    end
+
+    render_slot_extmark(bufnr, plan, extmarks, index, fragment, virt_text, {
+      virt_text_pos = "overlay",
+      virt_lines = tail_rows,
+      virt_lines_prefix_cols = prefix_cols,
+    })
+  end
 end
 
 local function render_block_slot(bufnr, plan, extmarks)
@@ -919,7 +977,7 @@ local function render_block_slot(bufnr, plan, extmarks)
     return
   end
 
-  local key = node_slot_key(plan.view.key)
+  local key = node_slot_key(plan.view.key, 1)
   extmarks.node_slots[key] = vim.api.nvim_buf_set_extmark(bufnr, state.display_ns, anchor_row, 0, {
     id = extmarks.node_slots[key],
     virt_lines = rows,
