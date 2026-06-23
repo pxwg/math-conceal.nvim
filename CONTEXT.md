@@ -109,27 +109,87 @@ The node-revealable formula whose source range currently contains the cursor. On
 _Avoid_: Cursor line formula, hovered formula, selected render node
 
 **Node Slot**:
-A Typst Display Projection display artifact for one tracked object. It consists of a source-anchored node-slot extmark in the display namespace plus object-local conceal span or conceal-row extmarks in the auxiliary namespace. It presents the object's rendered asset while ordinary text remains drawn by Neovim.
-_Avoid_: Display line run, redraw carrier, render node, placeholder run
+A Typst Display Projection display artifact for one tracked object outside the isolated-block fold-grid route. It presents a rendered asset from tracker-owned geometry while ordinary text remains drawn by Neovim.
+_Avoid_: Display line run, redraw carrier, render node, isolated block fold grid
 
 **Source Row Slot**:
-A node slot whose first rendered image row is attached to a real source fragment row. Inline slots use inline virtual text at the first fragment column. Isolated block slots use overlay virtual text at the first fragment column and carry remaining image rows through `virt_lines`.
-_Avoid_: Cursor-row placeholder, row carrier, line-run landing row
+A node slot whose first rendered image row is attached to a real source fragment row. Inline slots use inline virtual text at the first fragment column, and non-isolated block behavior follows the existing Typst Display Projection policy.
+_Avoid_: Cursor-row placeholder, row carrier, line-run landing row, isolated block surface
 
 **Block Node Slot**:
-A block-shaped node slot whose anchor follows the object's source boundary shape. Suffix-only blocks anchor above the end boundary row, prefix-only and multi-line both-boundary blocks anchor after the start boundary row, isolated blocks use a source row slot, and single-line sandwich blocks source-reveal.
-_Avoid_: Display line run, block carrier, whole-row redraw
+A block-shaped node slot for block placements that are not routed to a Fold Grid Placement Surface. Existing Typst Display Projection policy decides whether non-isolated block shapes use a node slot or source reveal.
+_Avoid_: Display line run, block carrier, whole-row redraw, isolated block placement
+
+**Fold Grid Placement Surface**:
+An Image Placement Backend owned display surface for isolated block-shaped Typst placements. It maps live tracker geometry and a rendered image grid into folded source rows plus optional trailing virtual image rows, preserving rendered image height while source reveal restores the original tracked source.
+_Avoid_: Node slot replacement, source row slot replacement, block node slot replacement, display line run, fold-owned track, mixed-row block surface
+
+**Managed Fold Window Surface**:
+The window-local fold option ownership used to materialize Fold Grid Placement Surfaces. A buffer-level placement may have window-specific folded surfaces because Neovim fold expression, fold text, fold level, and fold enablement are window-local editor state. It saves and restores prior window fold options rather than composing with user folds.
+_Avoid_: Buffer-global fold state, user fold composition, tracker-owned fold option
+
+**Fold Grid Height Invariant**:
+The concealed visible height of a Fold Grid Placement Surface equals the rendered image height, not the source height. If the source range is taller than the rendered image, the final visible fold consumes the remaining source rows; if the rendered image is taller than the source range, trailing virtual image rows extend the surface from the last folded source row.
+_Avoid_: Source-height preservation, blank tail rows, scale-to-source-height
+
+**Rendered Grid Dimensions**:
+The Image Projection owned cell dimensions of a rendered asset, such as placeholder columns and image rows. They are render asset facts, not source geometry, and combine with live TrackRef-derived source geometry when a Fold Grid Placement Surface is materialized.
+_Avoid_: Tracker source geometry, intent source range, backend image measurement
+
+**Fold Grid Tail Rows**:
+The trailing virtual image rows of a Fold Grid Placement Surface when the rendered image is taller than its source range. They are anchored to the last folded source row so the rendered grid remains one continuous surface and source reveal can remove the whole placement at once.
+_Avoid_: Post-block anchor, detached image tail, independent virtual-line placement
+
+**Fold Grid Placement Identity**:
+The terminal identity shape for a Fold Grid Placement Surface. One rendered asset uses one image id and one placement id across all folded placeholder rows and trailing virtual image rows, so the terminal binds the whole placeholder grid as one image placement.
+_Avoid_: Per-row placement id, split image placement, row-local terminal identity
+
+**Fold Grid No-Blank Swap**:
+The no-blank update behavior for Fold Grid Placement Surfaces. The active placement remains visible while a pending placement for a newly ready asset is materialized; after the pending surface is ready, it is promoted and the old placement is closed. If the new rendered image height differs, the visible height changes at promotion according to the Fold Grid Height Invariant. Source reveal closes placement surfaces instead of using no-blank swap.
+_Avoid_: Clear-then-fold, blank image refresh, source reveal as hidden placement, topfill compensation
+
+**Neovim-Owned Fold Grid Scrolling**:
+The scrolling model for Fold Grid Placement Surfaces. Neovim's fold layout owns viewport position, visible rows, topline, and topfill; backend scroll handlers only perform placement hygiene such as fold refresh, terminal placement re-emission, and stale placement cleanup.
+_Avoid_: Screen-coordinate image scrolling, scroll-driven intent recompute, tracker repair on scroll
+
+**Repair-Driven Fold Grid Sync**:
+The synchronization relationship between tracker repair and Fold Grid Placement Surfaces. Tracker repair events prompt Typst Display Projection to rebuild placement intents and Image Placement Backend to synchronize fold-grid surfaces, while tracker core remains responsible only for identity, current source geometry, damage, and repair facts.
+_Avoid_: Tracker-owned fold state, foldexpr in tracker core, scroll-triggered tracker repair
+
+**Late-Bound Fold Grid Rows**:
+The source-row entries used by a Managed Fold Window Surface. They are materialized from a Placement Intent by resolving its TrackRef to a live TrackView; fold expression lookup may use a backend-local row cache, but stale intent rows or invalid TrackViews must not keep rows folded.
+_Avoid_: Snapshot fold rows, cached repair geometry, fold-owned source position, anchor-only geometry
+
+**Invalid Fold Grid Recovery**:
+The recovery behavior when a Fold Grid Placement Surface can no longer be materialized from live tracker geometry or its isolated-block display role. The backend closes the placement surface and leaves source visible until repair-driven sync provides a new valid placement intent.
+_Avoid_: Row-cache repair, backend source reclassification, stale fold preservation
+
+**Fold Grid Source Reveal**:
+The source reveal behavior for a Fold Grid Placement Surface. Cursor collision with any folded source row, including a multi-row tail fold, or visual selection overlap with any part of the tracked source range reveals the entire tracked source range and closes the whole placement surface; it never reveals only one folded grid row.
+_Avoid_: Per-row reveal, half-image state, partial folded source
+
+**Fold Grid Normal Conceal Policy**:
+The Fold Grid Placement Surface behavior when normal-mode graphical conceal is enabled for a buffer. Normal-mode cursor collision may keep the fold-grid surface visible, while insert-like editing and visual selection still use source reveal according to the active buffer conceal policy.
+_Avoid_: Mode-blind reveal, CopilotChat policy regression, always-open normal cursor row
+
+**Window-Local Fold Grid Reveal**:
+The per-window reveal state for Fold Grid Placement Surfaces. A cursor or selection collision in one window reveals the tracked source range in that window without forcing other windows showing the same buffer to close their placement surfaces.
+_Avoid_: Buffer-global reveal state, cross-window fold teardown, shared cursor collision
+
+**Non-Isolated Block Policy Preservation**:
+The Typst display behavior for block-shaped objects that are not isolated blocks. Fold Grid migration does not change their existing Typst Display Projection policy, including whether they use node slots or source reveal.
+_Avoid_: Prefix fold grid, suffix fold grid, sandwich fold grid, policy rewrite during fold-grid migration
 
 **Kitty Placeholder Row Alignment**:
 The invariant that every placeholder row for one Kitty image id starts at the same visual text column. If an isolated block's first row is overlaid at an indented source fragment column while the remaining rows are `virt_lines`, those `virt_lines` must be prefixed by the source prefix display width so indentation is preserved without horizontally tearing the image.
 _Avoid_: Image reupload fix, renderer scaling fix, moving indented blocks to column zero
 
 **Legacy Display Line Run**:
-The pre-node-local Typst display model that folded consecutive source rows behind a carrier extmark and reconstructed ordinary source plus image atoms. It is retained only as historical language; active Typst main-buffer display uses node slots instead.
+The historical Typst display model that folded consecutive source rows behind a carrier extmark and reconstructed ordinary source plus image atoms. It is retained only as historical language; active Typst main-buffer display should use node slots or backend-owned placement surfaces instead.
 _Avoid_: Active display shape, node slot, current landing model
 
 **Editor Display Fact**:
-An editor-side presentation fact attached to source text, including editor-owned highlight, conceal, semantic token, inline decoration layers, and math-conceal ASCII/Unicode display marks. Active node-local Typst display generally leaves ordinary source text to Neovim instead of reconstructing it from these facts.
+An editor-side presentation fact attached to source text, including editor-owned highlight, conceal, semantic token, inline decoration layers, and math-conceal ASCII/Unicode display marks. Active Typst display generally leaves ordinary source text to Neovim instead of reconstructing it from these facts.
 _Avoid_: Source fact, render asset, tracker decoration
 
 **Display Repair Scope**:

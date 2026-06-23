@@ -465,11 +465,19 @@ function M.handle_service_response(bufnr, resp, meta)
     render_key = node_meta.render_key,
   }
 
-  if not terminal.upload(candidate.path, candidate.image_id, candidate.cols, candidate.rows) then
+  local binding = image.get_binding(bufnr)
+  local defer_formula_placement = uses_formula_display(binding) and formula_display.uses_fold_grid(bufnr, display_track)
+  local uploaded
+  if defer_formula_placement then
+    uploaded = terminal.send_image(candidate.path, candidate.image_id)
+  else
+    uploaded = terminal.upload(candidate.path, candidate.image_id, candidate.cols, candidate.rows)
+  end
+  if not uploaded then
     cleanup_asset(projection.visible_asset)
     projection.visible_asset = nil
     projection.status = "failed"
-    if uses_formula_display(image.get_binding(bufnr)) then
+    if uses_formula_display(binding) then
       set_display_asset(projection, nil, true)
       repair_formula_display(bufnr, { projection.ref })
     else
@@ -482,7 +490,7 @@ function M.handle_service_response(bufnr, resp, meta)
   projection.visible_asset = candidate
   projection.status = "visible"
 
-  if uses_formula_display(image.get_binding(bufnr)) then
+  if uses_formula_display(binding) then
     set_display_asset(projection, candidate, false)
     formula_display.repair_tracks(bufnr, { projection.ref }, image.config)
   elseif cursor_reveals(bufnr, track, image.config) then

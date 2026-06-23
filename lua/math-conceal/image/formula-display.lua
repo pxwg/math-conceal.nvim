@@ -1,5 +1,6 @@
 local display = require("math-conceal.image.display")
 local flow_classification = require("math-conceal.image.flow-classification")
+local placement = require("math-conceal.image.placement")
 local repair_event = require("math-conceal.image.repair-event")
 local state = require("math-conceal.image.state")
 local tracker = require("math-conceal.image.tracker")
@@ -263,23 +264,6 @@ local function cursor_for_buf(bufnr)
     return nil, nil
   end
   return cursor[1] - 1, cursor[2]
-end
-
-local function window_text_width(winid)
-  local info = vim.fn.getwininfo(winid)[1] or {}
-  local textoff = tonumber(info.textoff) or 0
-  return math.max(1, vim.api.nvim_win_get_width(winid) - textoff)
-end
-
-local function wrapping_text_width(bufnr)
-  local width = nil
-  for _, winid in ipairs(vim.fn.win_findbuf(bufnr)) do
-    if vim.api.nvim_win_is_valid(winid) and vim.wo[winid].wrap then
-      local win_width = window_text_width(winid)
-      width = width == nil and win_width or math.min(width, win_width)
-    end
-  end
-  return width
 end
 
 local function visual_selection()
@@ -563,13 +547,17 @@ end
 local function build_projection_plan(bufnr, snapshots, config)
   local views = resolve_views(bufnr, snapshots)
   local node_plans, plans_by_key = build_node_plans(bufnr, views)
-  local suppressed_keys = source_reveal_keys(node_plans)
+  local source_keys = source_reveal_keys(node_plans)
+  local suppressed_keys = {}
+  merge_keys(suppressed_keys, source_keys)
   local cursor_keys, collision_key = collision_keys(bufnr, node_plans, config or {})
   merge_keys(suppressed_keys, cursor_keys)
   return {
     views = views,
     node_plans = node_plans,
     plans_by_key = plans_by_key,
+    source_reveal_keys = source_keys,
+    collision_keys = cursor_keys,
     suppressed_keys = suppressed_keys,
     key = collision_key .. "|" .. key_set_key(suppressed_keys),
   }
@@ -645,39 +633,8 @@ local function block_slot_position(plan)
   return nil, false
 end
 
-local function source_row_wraps(bufnr, row)
-  local text_width = wrapping_text_width(bufnr)
-  if text_width == nil then
-    return false
-  end
-  return vim.fn.strdisplaywidth(source_line(bufnr, row)) > text_width
-end
-
--- UNSAFE: temporary wrap workaround for long single-row isolated blocks.
--- This deliberately allows the source fragment row to stop carrying the node
--- slot and later receive conceal_lines. That weakens the node-local display
--- invariant that the slot row remains a visible cursor-addressable landing
--- surface. Cursor collision should still source-reveal if the editor lands on
--- the concealed row, but visual reachability is weaker and may regress in some
--- navigation or multi-window cases. Prefer replacing this with a safer
--- source-reveal fallback or a proven Neovim/Kitty-safe landing model.
-local function isolated_block_slot_detached(bufnr, plan)
-  return plan.block_shape == "isolated"
-    and plan.view.object.inline ~= true
-    and plan.start_fragment ~= nil
-    and source_row_wraps(bufnr, plan.start_fragment.row)
-end
-
 local function fragment_carries_node_slot(bufnr, plan, fragment)
   if fragment == nil then
-    return false
-  end
-
-  if isolated_block_slot_detached(bufnr, plan) then
-    -- UNSAFE: returning false lets render_conceal_fragment() height-collapse
-    -- the source fragment row with conceal_lines even though it is logically
-    -- the node's own landing row. This is only to avoid wrap-splitting Kitty
-    -- placeholders on long concealed carrier rows.
     return false
   end
 
@@ -733,14 +690,6 @@ local function render_conceal_fragments(bufnr, plan, extmarks)
   end
 end
 
-local function source_prefix_display_width(bufnr, fragment)
-  if fragment == nil or fragment.col <= 0 then
-    return 0
-  end
-  local line = source_line(bufnr, fragment.row)
-  return math.max(0, vim.fn.strdisplaywidth(line:sub(1, fragment.col)))
-end
-
 local function add_virt_lines_prefix(virt_lines, prefix_cols)
   prefix_cols = math.max(0, math.floor(tonumber(prefix_cols) or 0))
   if prefix_cols == 0 then
@@ -791,69 +740,8 @@ local function render_inline_slot(bufnr, plan, extmarks)
   render_source_row_slot(bufnr, plan, extmarks, { virt_text_pos = "inline" })
 end
 
-local function detached_block_anchor(bufnr, plan)
-  if plan.view.row > 0 then
-    return plan.view.row - 1, false
-  end
-  if plan.view.end_row + 1 < vim.api.nvim_buf_line_count(bufnr) then
-    return plan.view.end_row + 1, true
-  end
-  return nil, nil
-end
-
--- UNSAFE: detached isolated slots are not truly node-local. The rendered image
--- is attached to a neighboring row while the tracked source row is concealed as
--- a line. This preserves visual image integrity under 'wrap' for long source
--- rows, but can make the source location less discoverable than an on-row slot.
-local function render_detached_isolated_block_slot(bufnr, plan, extmarks)
-  local rows = image_cell_rows(bufnr, plan.view)
-  if rows == nil or #rows == 0 then
-    return
-  end
-
-  local anchor_row, virt_lines_above = detached_block_anchor(bufnr, plan)
-  if anchor_row == nil then
-    render_source_row_slot(bufnr, plan, extmarks, {
-      virt_text_pos = "overlay",
-      virt_lines_prefix_cols = source_prefix_display_width(bufnr, plan.start_fragment),
-    })
-    return
-  end
-
-  local key = node_slot_key(plan.view.key)
-  extmarks.node_slots[key] = vim.api.nvim_buf_set_extmark(bufnr, state.display_ns, anchor_row, 0, {
-    id = extmarks.node_slots[key],
-    virt_lines = add_virt_lines_prefix(rows, source_prefix_display_width(bufnr, plan.start_fragment)),
-    virt_lines_above = virt_lines_above,
-    virt_lines_overflow = "trunc",
-    invalidate = true,
-    priority = SLOT_PRIORITY,
-  })
-end
-
-local function render_isolated_block_slot(bufnr, plan, extmarks)
-  if isolated_block_slot_detached(bufnr, plan) then
-    -- UNSAFE: concealed long source lines still consume wrap rows in Neovim.
-    -- Rendering adjacent virtual lines avoids splitting Kitty placeholder rows,
-    -- but height-collapsing the source row may make the source less visually
-    -- reachable until cursor collision reveals it.
-    render_detached_isolated_block_slot(bufnr, plan, extmarks)
-    return
-  end
-
-  -- Isolated block rows do not need to shift suffix text. Overlay keeps
-  -- concealed carrier text from contributing to image width. Extra virtual
-  -- lines still start at window column zero, so prefix them to the same
-  -- visual source column as the first overlaid image row.
-  render_source_row_slot(bufnr, plan, extmarks, {
-    virt_text_pos = "overlay",
-    virt_lines_prefix_cols = source_prefix_display_width(bufnr, plan.start_fragment),
-  })
-end
-
 local function render_block_slot(bufnr, plan, extmarks)
   if plan.block_shape == "isolated" then
-    render_isolated_block_slot(bufnr, plan, extmarks)
     return
   end
 
@@ -891,11 +779,49 @@ local function render_node_projection(bufnr, plan, extmarks)
   render_node_slot(bufnr, plan, extmarks)
 end
 
+local function fold_grid_intent_for_plan(plan)
+  if
+    plan == nil
+    or plan.view == nil
+    or plan.view.object == nil
+    or plan.view.object.inline == true
+    or plan.block_shape ~= "isolated"
+    or plan.view.asset == nil
+    or plan.view.ref == nil
+  then
+    return nil
+  end
+
+  return {
+    key = plan.view.key,
+    ref = plan.view.ref,
+    asset = plan.view.asset,
+    display_role = "block",
+    block_role = "isolated",
+  }
+end
+
+local function fold_grid_plan_keys(plan)
+  local keys = {}
+  for _, node_plan in ipairs(plan.node_plans or {}) do
+    if fold_grid_intent_for_plan(node_plan) ~= nil and not plan.suppressed_keys[node_plan.view.key] then
+      add_key(keys, node_plan.view.key)
+    end
+  end
+  return keys
+end
+
 local function render_track_keys(bufnr, fd, plan, keys)
   for _, key in ipairs(sorted_keys(keys)) do
     clear_artifacts_for_track_key(bufnr, fd, key)
     local node_plan = plan.plans_by_key[key]
-    if node_plan ~= nil and not plan.suppressed_keys[key] then
+    local fold_grid_intent = fold_grid_intent_for_plan(node_plan)
+    if fold_grid_intent ~= nil and not plan.suppressed_keys[key] then
+      placement.sync(bufnr, fold_grid_intent)
+    else
+      placement.close_key(bufnr, key)
+    end
+    if node_plan ~= nil and fold_grid_intent == nil and not plan.suppressed_keys[key] then
       render_node_projection(bufnr, node_plan, fd.extmarks)
     end
   end
@@ -922,6 +848,16 @@ local function repair_keys_for_event(event, plan)
   return keys
 end
 
+function M.uses_fold_grid(bufnr, snapshot)
+  bufnr = normalize_bufnr(bufnr)
+  local view = view_from_snapshot(bufnr, snapshot)
+  if view == nil then
+    return false
+  end
+  local plan = build_node_plan(bufnr, view)
+  return fold_grid_intent_for_plan(plan) ~= nil or (plan.block_shape == "isolated" and view.object.inline ~= true)
+end
+
 function M.on_tracker_repair(event, config)
   if event == nil or event.bufnr == nil or not vim.api.nvim_buf_is_valid(event.bufnr) then
     return
@@ -934,6 +870,7 @@ function M.on_tracker_repair(event, config)
   if event.initial == true then
     clear_all_artifacts(bufnr, fd)
     render_track_keys(bufnr, fd, plan, all_plan_keys(plan.node_plans))
+    placement.reconcile(bufnr, fold_grid_plan_keys(plan))
   else
     local keys = repair_keys_for_event(event, plan)
     merge_keys(keys, fd.suppressed_track_keys)
@@ -991,12 +928,14 @@ function M.refresh(bufnr, config)
   local plan = build_projection_plan(bufnr, nil, config or {})
   clear_all_artifacts(bufnr, fd)
   render_track_keys(bufnr, fd, plan, all_plan_keys(plan.node_plans))
+  placement.reconcile(bufnr, fold_grid_plan_keys(plan))
   fd.suppressed_track_keys = plan.suppressed_keys
   fd.reconcile_key = plan.key
 end
 
 function M.detach(bufnr)
   bufnr = normalize_bufnr(bufnr)
+  placement.close_all(bufnr)
   if vim.api.nvim_buf_is_valid(bufnr) then
     pcall(vim.api.nvim_buf_clear_namespace, bufnr, state.display_ns, 0, -1)
     pcall(vim.api.nvim_buf_clear_namespace, bufnr, state.aux_ns, 0, -1)

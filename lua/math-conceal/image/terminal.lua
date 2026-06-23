@@ -40,26 +40,69 @@ function M.flush()
   write(data)
 end
 
-function M.upload(path, image_id, cols, rows)
+function M.send_image(path, image_id)
   if type(path) ~= "string" or path == "" then
     return false
   end
 
-  cols = math.max(1, math.floor(tonumber(cols) or 1))
-  rows = math.max(1, math.floor(tonumber(rows) or 1))
   queue("q=2,f=100,t=t,i=" .. image_id .. ";" .. vim.base64.encode(path))
-  queue("q=2,a=p,U=1,i=" .. image_id .. ",c=" .. cols .. ",r=" .. rows)
   M.flush()
   return true
 end
 
-function M.delete(image_id)
+function M.place_image(image_id, placement_id, cols, rows, opts)
+  opts = opts or {}
+  cols = math.max(1, math.floor(tonumber(cols) or 1))
+  rows = math.max(1, math.floor(tonumber(rows) or 1))
+  local parts = {
+    "q=2",
+    "a=p",
+    "U=1",
+    "i=" .. image_id,
+  }
+  if placement_id ~= nil then
+    parts[#parts + 1] = "p=" .. placement_id
+  end
+  parts[#parts + 1] = "c=" .. cols
+  parts[#parts + 1] = "r=" .. rows
+  if opts.C ~= nil then
+    parts[#parts + 1] = "C=" .. tostring(opts.C)
+  end
+  if opts.z ~= nil then
+    parts[#parts + 1] = "z=" .. tostring(opts.z)
+  end
+  queue(table.concat(parts, ","))
+  M.flush()
+  return true
+end
+
+function M.upload(path, image_id, cols, rows)
+  if not M.send_image(path, image_id) then
+    return false
+  end
+  return M.place_image(image_id, nil, cols, rows)
+end
+
+function M.delete_placement(image_id, placement_id)
+  if image_id == nil or placement_id == nil then
+    return
+  end
+  queue("q=2,a=d,d=i,i=" .. image_id .. ",p=" .. placement_id)
+  state.release_placement_id(placement_id)
+  M.flush()
+end
+
+function M.delete_image(image_id)
   if image_id == nil then
     return
   end
   queue("q=2,a=d,d=i,i=" .. image_id)
   state.release_image_id(image_id)
   M.flush()
+end
+
+function M.delete(image_id)
+  M.delete_image(image_id)
 end
 
 return M

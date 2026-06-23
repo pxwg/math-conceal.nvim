@@ -3,6 +3,7 @@ local M = {}
 M.display_ns = vim.api.nvim_create_namespace("math-conceal.image.display")
 M.aux_ns = vim.api.nvim_create_namespace("math-conceal.image.display.aux")
 M.preview_ns = vim.api.nvim_create_namespace("math-conceal.image.preview")
+M.placement_ns = vim.api.nvim_create_namespace("math-conceal.image.placement")
 
 M._cell_px_w = nil
 M._cell_px_h = nil
@@ -11,9 +12,11 @@ M._render_ppi = nil
 M.buffers = {}
 M.render_diagnostics = {}
 M.image_id_to_bufnr = {}
+M.placement_id_to_bufnr = {}
 
 M.pid = vim.fn.getpid() % 256
 M.next_image_counter = 1
+M.next_placement_counter = 1
 
 local function normalize_bufnr(bufnr)
   if bufnr == nil or bufnr == 0 then
@@ -93,9 +96,41 @@ function M.release_image_id(image_id)
   M.image_id_to_bufnr[image_id] = nil
 end
 
+function M.allocate_placement_id(bufnr)
+  for _ = 1, 0xFFFF do
+    local counter = M.next_placement_counter
+    M.next_placement_counter = M.next_placement_counter + 1
+    if M.next_placement_counter > 0xFFFF then
+      M.next_placement_counter = 1
+    end
+
+    local id = M.pid * 0x10000 + counter
+    if M.placement_id_to_bufnr[id] == nil then
+      M.placement_id_to_bufnr[id] = bufnr
+      return id
+    end
+  end
+
+  error("math-conceal.image exhausted kitty placeholder placement ids")
+end
+
+function M.release_placement_id(placement_id)
+  M.placement_id_to_bufnr[placement_id] = nil
+end
+
 function M.image_hl_group(image_id)
   local hl = "math-conceal-image-id-" .. tostring(image_id)
   vim.api.nvim_set_hl(0, hl, { fg = string.format("#%06X", image_id), nocombine = true })
+  return hl
+end
+
+function M.placement_hl_group(image_id, placement_id)
+  local hl = "math-conceal-image-placement-" .. tostring(image_id) .. "-" .. tostring(placement_id)
+  vim.api.nvim_set_hl(0, hl, {
+    fg = string.format("#%06X", image_id),
+    sp = string.format("#%06X", placement_id),
+    nocombine = true,
+  })
   return hl
 end
 
