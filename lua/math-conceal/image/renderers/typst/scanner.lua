@@ -217,9 +217,20 @@ local function context_kind(unit)
   return nil
 end
 
-local function is_context_unit(_, unit)
+local function is_selectorless_show_source(source)
+  return (source or ""):match("^%s*#%s*show%s*:") ~= nil
+end
+
+local function is_selectorless_show_unit(bufnr, unit)
+  return context_kind(unit) == "show" and is_selectorless_show_source(range_source(bufnr, unit))
+end
+
+local function is_context_unit(bufnr, unit)
   local kind = context_kind(unit)
   if kind == nil then
+    return false
+  end
+  if is_selectorless_show_unit(bufnr, unit) then
     return false
   end
   return true
@@ -365,7 +376,7 @@ local function build_scan(bufnr)
       local record = context_record(bufnr, unit)
       record.index = #context_units + 1
       context_units[#context_units + 1] = record
-    elseif unit.object_kind == "code" then
+    elseif unit.object_kind == "code" and not is_selectorless_show_unit(bufnr, unit) then
       local prefixes = prefix_signatures(context_units)
       nodes[#nodes + 1] = node_record(bufnr, unit, context_units, prefixes)
     end
@@ -412,7 +423,11 @@ local function build_window_scan(bufnr, window, context_units)
       local record = context_record(bufnr, unit)
       record.index = #local_context_units + 1
       local_context_units[#local_context_units + 1] = record
-    elseif unit.object_kind == "code" and range_intersects(unit, window) then
+    elseif
+      unit.object_kind == "code"
+      and range_intersects(unit, window)
+      and not is_selectorless_show_unit(bufnr, unit)
+    then
       nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
     end
   end
