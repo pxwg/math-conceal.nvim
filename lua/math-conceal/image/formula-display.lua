@@ -812,19 +812,21 @@ local function fold_grid_plan_keys(plan)
 end
 
 local function render_track_keys(bufnr, fd, plan, keys)
-  for _, key in ipairs(sorted_keys(keys)) do
-    clear_artifacts_for_track_key(bufnr, fd, key)
-    local node_plan = plan.plans_by_key[key]
-    local fold_grid_intent = fold_grid_intent_for_plan(node_plan)
-    if fold_grid_intent ~= nil and not plan.suppressed_keys[key] then
-      placement.sync(bufnr, fold_grid_intent)
-    else
-      placement.close_key(bufnr, key)
+  placement.batch(function()
+    for _, key in ipairs(sorted_keys(keys)) do
+      clear_artifacts_for_track_key(bufnr, fd, key)
+      local node_plan = plan.plans_by_key[key]
+      local fold_grid_intent = fold_grid_intent_for_plan(node_plan)
+      if fold_grid_intent ~= nil and not plan.suppressed_keys[key] then
+        placement.sync(bufnr, fold_grid_intent)
+      else
+        placement.close_key(bufnr, key)
+      end
+      if node_plan ~= nil and fold_grid_intent == nil and not plan.suppressed_keys[key] then
+        render_node_projection(bufnr, node_plan, fd.extmarks)
+      end
     end
-    if node_plan ~= nil and fold_grid_intent == nil and not plan.suppressed_keys[key] then
-      render_node_projection(bufnr, node_plan, fd.extmarks)
-    end
-  end
+  end)
 end
 
 local function ensure_conceal_options(bufnr)

@@ -24,6 +24,8 @@ local placements_by_buf = {}
 local surfaces_by_win = {}
 local augroup_id = nil
 local provider_attached = false
+local refresh_batch_depth = 0
+local dirty_surfaces = {}
 
 local function normalize_bufnr(bufnr)
   if bufnr == nil or bufnr == 0 then
@@ -317,7 +319,6 @@ local function ensure_surface(winid, bufnr)
     }
     surfaces_by_win[winid] = surface
   end
-  apply_window_options(winid)
   return surface
 end
 
@@ -327,6 +328,82 @@ end
 
 local refresh_surface
 local schedule_surface
+
+local function mark_surface_dirty(surface)
+  if surface == nil or surface.closed then
+    return
+  end
+  if refresh_batch_depth > 0 then
+    dirty_surfaces[surface] = true
+    return
+  end
+  refresh_surface(surface)
+end
+
+local function flush_dirty_surfaces()
+  local surfaces = {}
+  for surface in pairs(dirty_surfaces) do
+    surfaces[#surfaces + 1] = surface
+  end
+  dirty_surfaces = {}
+
+  for _, surface in ipairs(surfaces) do
+    refresh_surface(surface)
+  end
+end
+
+local function with_surface_refresh_batch(fn)
+  refresh_batch_depth = refresh_batch_depth + 1
+  local result = { pcall(fn) }
+  refresh_batch_depth = refresh_batch_depth - 1
+  if refresh_batch_depth == 0 then
+    flush_dirty_surfaces()
+  end
+  if not result[1] then
+    error(result[2])
+  end
+  return unpack(result, 2)
+end
+
+local function current_viewport(surface)
+  if surface ~= nil and surface.viewport ~= nil then
+    return surface.viewport.topline, surface.viewport.botline
+  end
+  if surface == nil or not valid_win(surface.win) then
+    return nil, nil
+  end
+
+  local top, bot
+  local ok = pcall(function()
+    vim.api.nvim_win_call(surface.win, function()
+      top = math.max(0, (tonumber(vim.fn.line("w0")) or 1) - 1)
+      bot = math.max(top, (tonumber(vim.fn.line("w$")) or top + 1) - 1)
+    end)
+  end)
+  if not ok then
+    return nil, nil
+  end
+  return top, bot
+end
+
+local function placement_intersects_viewport(placement, top, bot)
+  if top == nil or bot == nil then
+    return true
+  end
+
+  top = math.max(0, top - 2)
+  bot = bot + 2
+  for _, entry in ipairs(placement.entries or {}) do
+    local start_row = entry.source_start_row
+    local end_row = entry.source_end_row or start_row
+    if start_row ~= nil and end_row ~= nil and end_row >= top and start_row <= bot then
+      return true
+    end
+  end
+
+  local tail_anchor = placement.tail_anchor_row
+  return tail_anchor ~= nil and tail_anchor >= top and tail_anchor <= bot
+end
 
 local function repaint_surface(surface)
   if surface == nil or surface.closed then
@@ -341,8 +418,9 @@ local function repaint_surface(surface)
     return
   end
 
+  local top, bot = current_viewport(surface)
   for _, placement in pairs(surface.placements or {}) do
-    if not placement.closed then
+    if not placement.closed and placement_intersects_viewport(placement, top, bot) then
       terminal.place_image(placement.image_id, placement.placement_id, placement.cols, placement.rows, { C = 1 })
     end
   end
@@ -373,7 +451,7 @@ local function remove_key_from_surfaces(bufnr, key, opts)
       if surface_empty(surface) then
         close_surface(surface)
       elseif opts.refresh ~= false then
-        refresh_surface(surface)
+        mark_surface_dirty(surface)
       end
     end
   end
@@ -496,7 +574,7 @@ local function sync_surfaces_for_key(bufnr, key, placement)
     local surface = ensure_surface(winid, bufnr)
     if surface ~= nil then
       surface.placements[key] = placement
-      refresh_surface(surface)
+      mark_surface_dirty(surface)
     end
   end
 end
@@ -578,7 +656,9 @@ function M.close_key(bufnr, key)
   if key == nil then
     return
   end
-  close_key_internal(bufnr, key)
+  with_surface_refresh_batch(function()
+    close_key_internal(bufnr, key)
+  end)
 end
 
 function M.close_all(bufnr)
@@ -597,11 +677,13 @@ function M.reconcile(bufnr, keep_keys)
   bufnr = normalize_bufnr(bufnr)
   keep_keys = keep_keys or {}
   local records = placements_by_buf[bufnr] or {}
-  for key in pairs(vim.deepcopy(records)) do
-    if keep_keys[key] ~= true then
-      close_key_internal(bufnr, key)
+  with_surface_refresh_batch(function()
+    for key in pairs(vim.deepcopy(records)) do
+      if keep_keys[key] ~= true then
+        close_key_internal(bufnr, key)
+      end
     end
-  end
+  end)
 end
 
 function M.foldexpr(lnum)
@@ -652,11 +734,20 @@ function M.refresh_buf(bufnr)
   if records == nil then
     return
   end
-  for key, record in pairs(records) do
-    if record.active ~= nil and not record.active.closed then
-      sync_surfaces_for_key(bufnr, key, record.active)
+  with_surface_refresh_batch(function()
+    for key, record in pairs(records) do
+      if record.active ~= nil and not record.active.closed then
+        sync_surfaces_for_key(bufnr, key, record.active)
+      end
     end
+  end)
+end
+
+function M.batch(fn)
+  if type(fn) ~= "function" then
+    return
   end
+  return with_surface_refresh_batch(fn)
 end
 
 function M.refresh_all()
@@ -739,6 +830,7 @@ function M._state()
   return {
     placements_by_buf = placements_by_buf,
     provider_attached = provider_attached,
+    refresh_batch_depth = refresh_batch_depth,
     surfaces_by_win = surfaces_by_win,
   }
 end

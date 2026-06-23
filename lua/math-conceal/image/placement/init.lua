@@ -24,6 +24,10 @@ function M.refresh_buf(bufnr)
   return fold_grid.refresh_buf(bufnr)
 end
 
+function M.batch(fn)
+  return fold_grid.batch(fn)
+end
+
 function M.foldexpr(lnum)
   return fold_grid.foldexpr(lnum)
 end
