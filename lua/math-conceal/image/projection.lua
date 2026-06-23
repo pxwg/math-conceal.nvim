@@ -1,15 +1,13 @@
 local context = require("math-conceal.image.context")
-local display = require("math-conceal.image.display")
-local flow_classification = require("math-conceal.image.flow-classification")
-local formula_display = require("math-conceal.image.formula-display")
+local display = require("math-conceal.image.generic-display")
 local quickfix = require("math-conceal.image.quickfix")
 local repair_event = require("math-conceal.image.repair-event")
 local session = require("math-conceal.image.session")
 local state = require("math-conceal.image.state")
+local surface = require("math-conceal.image.surface")
 local terminal = require("math-conceal.image.terminal")
 local track_view = require("math-conceal.image.track-view")
 local tracker = require("math-conceal.image.tracker")
-local wrapper = require("math-conceal.image.wrapper")
 
 local M = {}
 
@@ -21,6 +19,7 @@ local function normalize_bufnr(bufnr)
 end
 
 local function render_key(track, ctx, config)
+  local renderer = ctx.renderer_module
   local parts = {
     tracker.track_ref_key(track),
     tostring(track.rev or 0),
@@ -29,11 +28,12 @@ local function render_key(track, ctx, config)
     ctx.context_id or "",
     tostring(ctx.context_rev or 0),
     tostring(state.render_ppi(config)),
-    wrapper.render_size_key(config),
+    renderer.render_size_key(config),
     tostring(track.source_display_kind or ""),
     tostring(track.render_whole_line == true),
   }
-  local layout_key = wrapper.render_layout_key(track, ctx, config)
+  local layout_key = type(renderer.render_layout_key) == "function" and renderer.render_layout_key(track, ctx, config)
+    or ""
   if layout_key ~= "" then
     parts[#parts + 1] = layout_key
   end
@@ -60,8 +60,21 @@ local function ensure_projection(bs, bufnr, track)
   return projection, key
 end
 
-local function uses_formula_display(binding)
-  return binding ~= nil and (binding.kind == "typst" or binding.source_kind == "typst" or binding.scanner == "typst")
+local function display_projection(binding)
+  return binding and binding.renderer and binding.renderer.display_projection or nil
+end
+
+local function flow_projection(binding)
+  return binding and binding.renderer and binding.renderer.flow or nil
+end
+
+local function surface_config(config, binding)
+  if binding == nil or binding.code_block == nil then
+    return config
+  end
+  local merged = vim.deepcopy(config or {})
+  merged.code_block = binding.code_block
+  return merged
 end
 
 local function in_range(row, col, range)
@@ -113,11 +126,12 @@ local function clear_display_asset(projection)
   end
 end
 
-local function repair_formula_display(bufnr, refs)
+local function repair_display_projection(bufnr, refs)
   local image = require("math-conceal.image")
   local binding = image.get_binding(bufnr)
-  if uses_formula_display(binding) then
-    formula_display.repair_tracks(bufnr, refs, image.config)
+  local display_proj = display_projection(binding)
+  if display_proj ~= nil then
+    display_proj.repair_tracks(bufnr, refs, image.config)
   end
 end
 
@@ -199,16 +213,17 @@ local function request_id(bufnr)
 end
 
 local function service_cache_key(ctx, config)
+  local renderer = ctx.renderer_module
   return table.concat({
-    "typst",
+    ctx.renderer or "",
     ctx and ctx.context_id or "",
     tostring(ctx and ctx.context_rev or 0),
-    wrapper.render_size_key(config),
+    renderer.render_size_key(config),
   }, ":")
 end
 
 local function make_node(projection, track, ctx, config)
-  local source, line_map = wrapper.build_slot_document(track, ctx, config)
+  local source, line_map = ctx.renderer_module.build_slot_document(track, ctx, config)
   local key = render_key(track, ctx, config)
   return {
     node = {
@@ -234,15 +249,22 @@ local function make_node(projection, track, ctx, config)
   }
 end
 
-local function renderable_track(bufnr, track, ctx)
+local function renderable_track(bufnr, binding, track, ctx)
+  if track == nil then
+    return nil
+  end
   if (track.object_kind or track.node_type) ~= "code" then
     return track
   end
-  local entry = flow_classification.classification(bufnr, track, ctx)
+  local flow = flow_projection(binding)
+  if flow == nil then
+    return track
+  end
+  local entry = flow.classification(bufnr, track, ctx)
   if entry == nil then
     return nil
   end
-  return flow_classification.apply_role(track, entry.layout_role or entry.flow_role, {
+  return flow.apply_role(track, entry.layout_role or entry.flow_role, {
     flow_role = entry.flow_role,
     render_policy = entry.render_policy,
     reason = entry.layout_reason,
@@ -250,6 +272,7 @@ local function renderable_track(bufnr, track, ctx)
 end
 
 local function render_affected(bufnr, binding, ctx, config, render_items)
+  local display_proj = display_projection(binding)
   local nodes = {}
   local node_meta = {}
   local ready_refs = {}
@@ -260,7 +283,7 @@ local function render_affected(bufnr, binding, ctx, config, render_items)
     if projection.visible_asset and projection.visible_asset.render_key == key then
       projection.pending_key = nil
       projection.status = "visible"
-      if uses_formula_display(binding) then
+      if display_proj ~= nil then
         set_display_asset(projection, projection.visible_asset, false)
         ready_refs[#ready_refs + 1] = projection.ref
       end
@@ -273,8 +296,8 @@ local function render_affected(bufnr, binding, ctx, config, render_items)
     end
   end
 
-  if #ready_refs > 0 then
-    formula_display.repair_tracks(bufnr, ready_refs, config)
+  if #ready_refs > 0 and display_proj ~= nil then
+    display_proj.repair_tracks(bufnr, ready_refs, config)
   end
 
   if #nodes == 0 then
@@ -312,15 +335,15 @@ local function render_affected(bufnr, binding, ctx, config, render_items)
       local projection = item.projection
       projection.pending_key = nil
       projection.status = "failed"
-      if uses_formula_display(binding) then
+      if display_proj ~= nil then
         set_display_asset(projection, nil, true)
         failed_refs[#failed_refs + 1] = projection.ref
       else
         display.reveal(projection)
       end
     end
-    if #failed_refs > 0 then
-      formula_display.repair_tracks(bufnr, failed_refs, config)
+    if #failed_refs > 0 and display_proj ~= nil then
+      display_proj.repair_tracks(bufnr, failed_refs, config)
     end
   end
 end
@@ -346,6 +369,8 @@ function M.on_tracker_repair(event)
 
   local bs = state.get_buf_state(bufnr)
   local ctx = context.resolve(bufnr, binding, event.context, image.config)
+  local display_proj = display_projection(binding)
+  local flow = flow_projection(binding)
   local by_key = repair_event.tracks_by_key(event)
   local render_keys = render_trigger_keys(event)
 
@@ -357,7 +382,9 @@ function M.on_tracker_repair(event)
       bs.projections[key] = nil
     end
   end
-  flow_classification.clear_refs(bufnr, event.retired_refs or {})
+  if flow ~= nil then
+    flow.clear_refs(bufnr, event.retired_refs or {})
+  end
 
   local to_render = {}
   local to_classify = {}
@@ -367,14 +394,18 @@ function M.on_tracker_repair(event)
     if track.invalid then
       cleanup_projection(projection)
     elseif render_keys[key] then
-      if (track.object_kind or track.node_type) == "code" then
-        local classified = renderable_track(bufnr, track, ctx)
+      if (track.object_kind or track.node_type) == "code" and flow ~= nil then
+        local classified = renderable_track(bufnr, binding, track, ctx)
         if classified ~= nil then
           to_render[#to_render + 1] = { projection = projection, track = classified }
         else
           projection.pending_key = nil
           projection.status = "flow_pending"
-          set_display_asset(projection, nil, true)
+          if display_proj ~= nil then
+            set_display_asset(projection, nil, true)
+          else
+            display.reveal(projection)
+          end
           to_classify[#to_classify + 1] = track
         end
       else
@@ -383,12 +414,12 @@ function M.on_tracker_repair(event)
     end
   end
 
-  if #to_classify > 0 then
-    flow_classification.request(bufnr, binding, ctx, to_classify)
+  if #to_classify > 0 and flow ~= nil then
+    flow.request(bufnr, binding, ctx, to_classify)
   end
   render_affected(bufnr, binding, ctx, image.config, to_render)
-  if uses_formula_display(binding) then
-    formula_display.on_tracker_repair(event, image.config)
+  if display_proj ~= nil then
+    display_proj.on_tracker_repair(event, image.config)
     require("math-conceal.image.preview").schedule(bufnr, { immediate = true })
     return
   end
@@ -401,7 +432,11 @@ function M.handle_service_response(bufnr, resp, meta)
     return
   end
   if meta ~= nil and meta.kind == "flow_classification" then
-    flow_classification.handle_service_response(bufnr, resp, meta)
+    local image = require("math-conceal.image")
+    local flow = flow_projection(image.get_binding(bufnr))
+    if flow ~= nil then
+      flow.handle_service_response(bufnr, resp, meta)
+    end
     return
   end
 
@@ -444,9 +479,9 @@ function M.handle_service_response(bufnr, resp, meta)
     projection.visible_asset = nil
     projection.status = "failed"
     local image = require("math-conceal.image")
-    if uses_formula_display(image.get_binding(bufnr)) then
+    if display_projection(image.get_binding(bufnr)) ~= nil then
       set_display_asset(projection, nil, true)
-      repair_formula_display(bufnr, { projection.ref })
+      repair_display_projection(bufnr, { projection.ref })
     else
       display.reveal(projection)
     end
@@ -454,7 +489,9 @@ function M.handle_service_response(bufnr, resp, meta)
   end
 
   local image = require("math-conceal.image")
-  local cols, rows = display.cell_dimensions(display_track, resp.width_px, resp.height_px, image.config)
+  local binding = image.get_binding(bufnr)
+  local cols, rows =
+    surface.cell_dimensions(display_track, resp.width_px, resp.height_px, surface_config(image.config, binding))
   local candidate = {
     image_id = state.allocate_image_id(bufnr),
     path = resp.path,
@@ -469,9 +506,9 @@ function M.handle_service_response(bufnr, resp, meta)
     cleanup_asset(projection.visible_asset)
     projection.visible_asset = nil
     projection.status = "failed"
-    if uses_formula_display(image.get_binding(bufnr)) then
+    if display_projection(binding) ~= nil then
       set_display_asset(projection, nil, true)
-      repair_formula_display(bufnr, { projection.ref })
+      repair_display_projection(bufnr, { projection.ref })
     else
       display.reveal(projection)
     end
@@ -482,9 +519,10 @@ function M.handle_service_response(bufnr, resp, meta)
   projection.visible_asset = candidate
   projection.status = "visible"
 
-  if uses_formula_display(image.get_binding(bufnr)) then
+  local display_proj = display_projection(binding)
+  if display_proj ~= nil then
     set_display_asset(projection, candidate, false)
-    formula_display.repair_tracks(bufnr, { projection.ref }, image.config)
+    display_proj.repair_tracks(bufnr, { projection.ref }, image.config)
   elseif cursor_reveals(bufnr, track, image.config) then
     display.reveal(projection)
   else
@@ -499,8 +537,9 @@ function M.sync_cursor(bufnr, opts)
   opts = opts or {}
   local image = require("math-conceal.image")
   local binding = image.get_binding(bufnr)
-  if uses_formula_display(binding) then
-    formula_display.sync_cursor(bufnr, image.config)
+  local display_proj = display_projection(binding)
+  if display_proj ~= nil then
+    display_proj.sync_cursor(bufnr, image.config)
     require("math-conceal.image.preview").schedule(bufnr, { immediate = opts.preview_immediate == true })
     return
   end
@@ -526,8 +565,9 @@ function M.refresh(bufnr)
   bufnr = normalize_bufnr(bufnr)
   local image = require("math-conceal.image")
   local binding = image.get_binding(bufnr)
-  if uses_formula_display(binding) then
-    formula_display.refresh(bufnr, image.config)
+  local display_proj = display_projection(binding)
+  if display_proj ~= nil then
+    display_proj.refresh(bufnr, image.config)
     require("math-conceal.image.preview").refresh(bufnr)
     return
   end
@@ -553,7 +593,9 @@ function M.on_layout_change(bufnr)
   if binding == nil then
     return
   end
-  if not uses_formula_display(binding) then
+  local display_proj = display_projection(binding)
+  local flow = flow_projection(binding)
+  if display_proj == nil then
     M.refresh(bufnr)
     return
   end
@@ -566,8 +608,8 @@ function M.on_layout_change(bufnr)
     local track = track_view.for_projection(projection, { require_valid = true })
     if track == nil then
       cleanup_projection(projection)
-    elseif (track.object_kind or track.node_type) == "code" then
-      local classified = renderable_track(bufnr, track, ctx)
+    elseif (track.object_kind or track.node_type) == "code" and flow ~= nil then
+      local classified = renderable_track(bufnr, binding, track, ctx)
       if classified ~= nil then
         local key = render_key(classified, ctx, image.config)
         if projection.visible_asset == nil or projection.visible_asset.render_key ~= key then
@@ -583,11 +625,11 @@ function M.on_layout_change(bufnr)
     end
   end
 
-  if #to_classify > 0 then
-    flow_classification.request(bufnr, binding, ctx, to_classify)
+  if #to_classify > 0 and flow ~= nil then
+    flow.request(bufnr, binding, ctx, to_classify)
   end
   render_affected(bufnr, binding, ctx, image.config, to_render)
-  formula_display.refresh(bufnr, image.config)
+  display_proj.refresh(bufnr, image.config)
   require("math-conceal.image.preview").refresh(bufnr)
 end
 
@@ -606,7 +648,7 @@ function M.render_refs_after_flow(bufnr, refs)
     local key = tracker.track_ref_key(ref)
     local projection = bs.projections[key]
     local track = tracker.resolve_ref(ref)
-    local classified = renderable_track(bufnr, track, ctx)
+    local classified = renderable_track(bufnr, binding, track, ctx)
     if projection ~= nil and classified ~= nil then
       to_render[#to_render + 1] = { projection = projection, track = classified }
     end
@@ -632,8 +674,9 @@ function M.repair_source_reveal_refs(bufnr, refs)
   end
   if #repair_refs > 0 then
     local image = require("math-conceal.image")
-    if uses_formula_display(image.get_binding(bufnr)) then
-      formula_display.repair_tracks(bufnr, repair_refs, image.config)
+    local display_proj = display_projection(image.get_binding(bufnr))
+    if display_proj ~= nil then
+      display_proj.repair_tracks(bufnr, repair_refs, image.config)
     end
   end
 end
@@ -669,8 +712,17 @@ end
 function M.detach(bufnr)
   bufnr = normalize_bufnr(bufnr)
   local bs = state.get_buf_state(bufnr)
+  local image = require("math-conceal.image")
+  local binding = image.get_binding(bufnr)
   require("math-conceal.image.preview").detach(bufnr)
-  formula_display.detach(bufnr)
+  local display_proj = display_projection(binding)
+  if display_proj ~= nil and type(display_proj.detach) == "function" then
+    display_proj.detach(bufnr)
+  end
+  local flow = flow_projection(binding)
+  if flow ~= nil and type(flow.detach) == "function" then
+    flow.detach(bufnr)
+  end
   for _, projection in pairs(bs.projections or {}) do
     cleanup_projection(projection)
   end

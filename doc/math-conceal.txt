@@ -154,6 +154,8 @@ Graphical equation conceal is configured under the top-level `image` table:
 Renderer bindings are configured under `image.renderers`. The default bindings
 enable Typst buffers through `renderers.typst` and Markdown buffers through
 `renderers.markdown`.
+Renderer names are fixed by the built-in renderer set. Unknown renderer names
+are unsupported and are skipped instead of being inferred from other fields.
 
 Graphical equation conceal and ASCII conceal can be enabled together. ASCII
 conceal still uses `ft`; graphical equation rendering uses
@@ -284,6 +286,8 @@ Restrict rendering by path:
           },
         }
 <
+        Renderer names are fixed by the built-in renderer set. Unknown names
+        are unsupported.
 
                                         *math-conceal-image.renderers.filetypes*
 `image.renderers.<name>.filetypes`~
@@ -425,13 +429,6 @@ Query helpers:
   image.source_kind_for_bufnr(bufnr)
   image.is_supported_bufnr(bufnr)
   image.is_render_allowed(bufnr)
-<
-
-Advanced integrations can use the runtime directly:
->
-  local runtime = require("math-conceal.image.machine.runtime")
-  runtime.render_buf(bufnr)
-  runtime.refresh_visible_overlays(bufnr, { force_reupload_blocks = true })
 <
 
 ==============================================================================

@@ -1,11 +1,10 @@
 local context = require("math-conceal.image.context")
-local display = require("math-conceal.image.display")
 local session = require("math-conceal.image.session")
 local state = require("math-conceal.image.state")
+local surface = require("math-conceal.image.surface")
 local terminal = require("math-conceal.image.terminal")
 local track_view = require("math-conceal.image.track-view")
 local tracker = require("math-conceal.image.tracker")
-local wrapper = require("math-conceal.image.wrapper")
 
 local M = {}
 
@@ -134,149 +133,18 @@ local function range_object(track)
   }
 end
 
-local function track_contains_range(track, start_row, start_col, end_row, end_col)
-  if track == nil then
-    return false
+local function count_lines(text)
+  if text == nil or text == "" then
+    return 0
   end
-  local start_ok = start_row > track.row or (start_row == track.row and start_col >= track.col)
-  local end_ok = end_row < track.end_row or (end_row == track.end_row and end_col <= track.end_col)
-  return start_ok and end_ok and (start_row < end_row or start_col <= end_col)
+  local _, n = text:gsub("\n", "\n")
+  if text:sub(-1) ~= "\n" then
+    n = n + 1
+  end
+  return n
 end
 
-local function track_relative_col(track, row, col)
-  if row == track.row then
-    return col - track.col
-  end
-  return col
-end
-
-local function track_source_slice(track, start_row, start_col, end_row, end_col)
-  local source = track and track.source or ""
-  if source == "" or not track_contains_range(track, start_row, start_col, end_row, end_col) then
-    return nil
-  end
-
-  local lines = vim.split(source, "\n", { plain = true })
-  local start_idx = start_row - track.row + 1
-  local end_idx = end_row - track.row + 1
-  if start_idx < 1 or end_idx > #lines or start_idx > end_idx then
-    return nil
-  end
-
-  local rel_start_col = math.max(0, track_relative_col(track, start_row, start_col))
-  local rel_end_col = math.max(0, track_relative_col(track, end_row, end_col))
-  if start_idx == end_idx then
-    local line = lines[start_idx] or ""
-    rel_start_col = math.min(rel_start_col, #line)
-    rel_end_col = math.max(rel_start_col, math.min(rel_end_col, #line))
-    return line:sub(rel_start_col + 1, rel_end_col)
-  end
-
-  local out = {}
-  local first = lines[start_idx] or ""
-  local last = lines[end_idx] or ""
-  out[#out + 1] = first:sub(math.min(rel_start_col, #first) + 1)
-  for idx = start_idx + 1, end_idx - 1 do
-    out[#out + 1] = lines[idx] or ""
-  end
-  out[#out + 1] = last:sub(1, math.min(rel_end_col, #last))
-  return table.concat(out, "\n")
-end
-
-local function get_math_symbol_span_at_pos(track, row, col)
-  if not cursor_in_range(track, row, col, { include_right_edge = false }) then
-    return nil
-  end
-
-  local ok_parser, parser = pcall(vim.treesitter.get_parser, track.bufnr, "typst")
-  if not ok_parser or parser == nil then
-    return nil
-  end
-
-  local trees = parser:parse()
-  local tree = trees and trees[1] or nil
-  if tree == nil then
-    return nil
-  end
-
-  local root = tree:root()
-  local node = root:named_descendant_for_range(row, col, row, col + 1)
-  if node == nil then
-    return nil
-  end
-
-  local formula_node = nil
-  local target = node
-  while target ~= nil do
-    if target:type() == "formula" then
-      formula_node = target
-      break
-    end
-    target = target:parent()
-  end
-  if formula_node == nil then
-    return nil
-  end
-
-  target = node
-  while target ~= nil do
-    local parent = target:parent()
-    if parent == nil then
-      return nil
-    end
-    if parent:id() == formula_node:id() then
-      break
-    end
-    target = parent
-  end
-
-  local sr, sc, er, ec = target:range()
-  if not cursor_in_range(track, sr, sc, { include_right_edge = false }) then
-    return nil
-  end
-  if er < sr or (er == sr and ec < sc) then
-    return nil
-  end
-
-  local text = track_source_slice(track, sr, sc, er, ec)
-  if text == nil or text == "" or text:match("^%s+$") then
-    return nil
-  end
-
-  return {
-    start_row = sr,
-    start_col = sc,
-    end_row = er,
-    end_col = ec,
-  }
-end
-
-local function get_math_symbol_span_at_cursor(track, row, col, mode)
-  if track == nil or track.node_type ~= "math" then
-    return nil
-  end
-
-  local candidates = {}
-  if cursor_in_range(track, row, col, { include_right_edge = false }) then
-    candidates[#candidates + 1] = col
-  end
-  if is_insert_like_mode(mode) and col > 0 then
-    local left_col = col - 1
-    if cursor_in_range(track, row, left_col, { include_right_edge = false }) then
-      candidates[#candidates + 1] = left_col
-    end
-  end
-
-  for _, candidate_col in ipairs(candidates) do
-    local span = get_math_symbol_span_at_pos(track, row, candidate_col)
-    if span ~= nil then
-      return span
-    end
-  end
-  return nil
-end
-
-local function make_highlighted_preview_source(track, cursor_row, cursor_col, mode)
+local function preview_source_for_renderer(binding, track, cursor_row, cursor_col, mode)
   if track == nil or track.node_type ~= "math" then
     return nil, nil, nil
   end
@@ -286,29 +154,12 @@ local function make_highlighted_preview_source(track, cursor_row, cursor_col, mo
     return nil, nil, nil
   end
 
-  local source_kind = track.source_kind or (track.source_facts and track.source_facts.source_kind) or track.kind
-  if source_kind ~= nil and source_kind ~= "typst" then
-    return source_text, source_text, nil
+  local preview = binding and binding.renderer and binding.renderer.preview or nil
+  if preview ~= nil and type(preview.transform_source) == "function" then
+    return preview.transform_source(track, cursor_row, cursor_col, mode)
   end
 
-  local span = get_math_symbol_span_at_cursor(track, cursor_row, cursor_col, mode)
-  if span == nil then
-    return source_text, source_text, nil
-  end
-
-  if not cursor_in_range(track, span.start_row, span.start_col, { include_right_edge = false }) then
-    return source_text, source_text, nil
-  end
-
-  local prefix = track_source_slice(track, track.row, track.col, span.start_row, span.start_col)
-  local highlighted = track_source_slice(track, span.start_row, span.start_col, span.end_row, span.end_col)
-  local suffix = track_source_slice(track, span.end_row, span.end_col, track.end_row, track.end_col)
-  if prefix == nil or highlighted == nil or suffix == nil then
-    return source_text, source_text, nil
-  end
-
-  local replacement = "#text(red)[$" .. highlighted .. "$];"
-  return prefix .. replacement .. suffix, source_text, span
+  return source_text, source_text, nil
 end
 
 local function preview_render_key(
@@ -331,7 +182,7 @@ local function preview_render_key(
     ctx.context_id or "",
     tostring(ctx.context_rev or 0),
     tostring(state.render_ppi(config)),
-    wrapper.render_size_key(config),
+    ctx.renderer_module.render_size_key(config),
     tostring(cursor_row),
     tostring(cursor_col),
     source_text or "",
@@ -357,7 +208,7 @@ local function preview_service_cache_key(projection, track, ctx, config)
     tostring(ctx.context_rev or 0),
     ctx.effective_root or "",
     tostring(state.render_ppi(config)),
-    wrapper.render_size_key(config),
+    ctx.renderer_module.render_size_key(config),
   }
   return "preview:" .. vim.fn.sha256(table.concat(parts, "\0"))
 end
@@ -375,7 +226,7 @@ local function cleanup_asset(asset)
 end
 
 local function clear_visible_preview(preview, bufnr)
-  display.clear_preview(preview, bufnr)
+  surface.clear_preview(preview, bufnr)
   cleanup_asset(preview.visible_asset)
   preview.visible_asset = nil
   preview.render_key = nil
@@ -398,7 +249,7 @@ local function replace_preview_asset(bufnr, preview, track, asset, opts)
   preview.source_range = opts.source_range
   preview.handoff_key = opts.handoff_key
 
-  if not display.show_preview(bufnr, preview, track, asset) then
+  if not surface.show_preview(bufnr, preview, track, asset) then
     preview.visible_asset = old
     preview.render_key = old_render_key
     preview.track_key = old_track_key
@@ -427,7 +278,7 @@ local function seed_continuity_preview(bufnr, preview, projection, track, previe
   end
 
   local source_asset = projection.visible_asset
-  local cols, rows = display.preview_cell_dimensions(source_asset.width_px, source_asset.height_px)
+  local cols, rows = surface.preview_cell_dimensions(source_asset.width_px, source_asset.height_px)
   local asset = {
     image_id = state.allocate_image_id(bufnr),
     path = source_asset.path,
@@ -502,7 +353,7 @@ local function render_projection_preview(bufnr, projection, track, cursor_row, c
     seed_continuity_preview(bufnr, preview, projection, track, nil)
   end
 
-  local preview_source, source_text, span = make_highlighted_preview_source(track, cursor_row, cursor_col, mode)
+  local preview_source, source_text, span = preview_source_for_renderer(binding, track, cursor_row, cursor_col, mode)
   if preview_source == nil or source_text == nil then
     M.clear(bufnr)
     return
@@ -513,12 +364,12 @@ local function render_projection_preview(bufnr, projection, track, cursor_row, c
     preview_render_key(projection, track, ctx, source_text, preview_source, cursor_row, cursor_col, span, image.config)
 
   if preview.render_key == key and preview.visible_asset ~= nil then
-    display.show_preview(bufnr, preview, track, preview.visible_asset)
+    surface.show_preview(bufnr, preview, track, preview.visible_asset)
     return
   end
   if preview.pending_key == key then
     if preview.visible_asset ~= nil and preview.track_key == projection.key then
-      display.show_preview(bufnr, preview, track, preview.visible_asset)
+      surface.show_preview(bufnr, preview, track, preview.visible_asset)
     else
       seed_continuity_preview(bufnr, preview, projection, track, key)
     end
@@ -533,9 +384,10 @@ local function render_projection_preview(bufnr, projection, track, cursor_row, c
   local preview_track = vim.deepcopy(track)
   preview_track.source = preview_source
   preview_track.source_hash = vim.fn.sha256(preview_source)
-  preview_track.source_rows = math.max(1, wrapper.count_lines(preview_source))
+  local line_counter = binding.renderer.count_lines or count_lines
+  preview_track.source_rows = math.max(1, line_counter(preview_source))
 
-  local slot_source, line_map = wrapper.build_slot_document(preview_track, ctx, image.config)
+  local slot_source, line_map = binding.renderer.build_slot_document(preview_track, ctx, image.config)
   local node_id = "preview:" .. projection.key
   local req_id = request_id(bufnr)
   local payload = {
@@ -586,7 +438,7 @@ local function render_projection_preview(bufnr, projection, track, cursor_row, c
       M.clear(bufnr)
     end
   elseif preview.visible_asset ~= nil and preview.track_key == projection.key then
-    display.show_preview(bufnr, preview, track, preview.visible_asset)
+    surface.show_preview(bufnr, preview, track, preview.visible_asset)
   end
 end
 
@@ -681,7 +533,7 @@ function M.refresh(bufnr)
     M.clear(bufnr)
     return
   end
-  display.show_preview(bufnr, preview, track, preview.visible_asset)
+  surface.show_preview(bufnr, preview, track, preview.visible_asset)
 end
 
 function M.handle_service_response(bufnr, resp, meta)
@@ -719,7 +571,7 @@ function M.handle_service_response(bufnr, resp, meta)
     return
   end
 
-  local cols, rows = display.preview_cell_dimensions(resp.width_px, resp.height_px)
+  local cols, rows = surface.preview_cell_dimensions(resp.width_px, resp.height_px)
   local asset = {
     image_id = state.allocate_image_id(bufnr),
     path = resp.path,

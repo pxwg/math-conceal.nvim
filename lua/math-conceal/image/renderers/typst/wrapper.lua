@@ -27,22 +27,6 @@ local function advance_pos(text, line, col)
   end
 end
 
-local function typst_string_literal(value)
-  value = value or ""
-  value = value:gsub("\\", "\\\\")
-  value = value:gsub('"', '\\"')
-  value = value:gsub("\n", "\\n")
-  return '"' .. value .. '"'
-end
-
-local function mitex_import_line(ctx)
-  local package = ctx.mitex_package or "@preview/mitex:0.2.7"
-  if package == "" then
-    return ""
-  end
-  return '#import "' .. package .. '": mitex, mi\n'
-end
-
 local function rewrite(ctx, bufnr, text)
   if text == nil or text == "" then
     return text or ""
@@ -65,9 +49,6 @@ function M.build_context_document(config, ctx)
     parts[#parts + 1] = rewrite(ctx, ctx.bufnr, ctx.header) .. "\n"
   end
   parts[#parts + 1] = config._styling_prelude or ""
-  if ctx.wrapper == "mitex" then
-    parts[#parts + 1] = mitex_import_line(ctx)
-  end
   if type(ctx.preamble_include_line) == "string" and ctx.preamble_include_line ~= "" then
     parts[#parts + 1] = ctx.preamble_include_line
   end
@@ -78,9 +59,6 @@ function M.build_flow_context_document(ctx)
   local parts = {}
   if type(ctx.header) == "string" and ctx.header ~= "" then
     parts[#parts + 1] = rewrite(ctx, ctx.bufnr, ctx.header) .. "\n"
-  end
-  if ctx.wrapper == "mitex" then
-    parts[#parts + 1] = mitex_import_line(ctx)
   end
   if type(ctx.preamble_include_line) == "string" and ctx.preamble_include_line ~= "" then
     parts[#parts + 1] = ctx.preamble_include_line
@@ -262,31 +240,6 @@ function M.inline_wrap(config, source_rows, opts)
   return "", ""
 end
 
-local markdown_delimiters = {
-  dollar_inline = { open = "$", close = "$", display_kind = "inline" },
-  dollar_block = { open = "$$", close = "$$", display_kind = "block" },
-  paren_inline = { open = "\\(", close = "\\)", display_kind = "inline" },
-  bracket_block = { open = "\\[", close = "\\]", display_kind = "block" },
-}
-
-local function markdown_math_content(track)
-  local source = track.source or ""
-  local facts = track.source_facts or {}
-  local delimiter = markdown_delimiters[facts.delimiter]
-  if delimiter == nil then
-    return source, facts.display_kind or track.source_display_kind or "inline"
-  end
-
-  local content = source
-  if source:sub(1, #delimiter.open) == delimiter.open and source:sub(-#delimiter.close) == delimiter.close then
-    content = source:sub(#delimiter.open + 1, #source - #delimiter.close)
-  end
-  if delimiter.display_kind == "block" then
-    content = content:gsub("^\n", ""):gsub("\n$", "")
-  end
-  return content, delimiter.display_kind
-end
-
 local function render_input(track, ctx)
   if (track.object_kind or track.node_type) == "code" then
     local source = rewrite(ctx, track.bufnr, track.source or "")
@@ -297,13 +250,7 @@ local function render_input(track, ctx)
     return source
   end
 
-  if ctx.wrapper ~= "mitex" then
-    return rewrite(ctx, track.bufnr, track.source or "")
-  end
-
-  local content, display_kind = markdown_math_content(track)
-  local call = display_kind == "block" and "mitex" or "mi"
-  return "#" .. call .. "(" .. typst_string_literal(content) .. ")"
+  return rewrite(ctx, track.bufnr, track.source or "")
 end
 
 function M.build_slot_document(track, ctx, config)
@@ -312,10 +259,6 @@ function M.build_slot_document(track, ctx, config)
   local function append(text)
     parts[#parts + 1] = text
     cur_line, cur_col = advance_pos(text, cur_line, cur_col)
-  end
-
-  if ctx.wrapper == "mitex" then
-    append(mitex_import_line(ctx))
   end
 
   local prelude_count = math.max(0, math.min(track.prelude_count or 0, #(ctx.context_units or {})))

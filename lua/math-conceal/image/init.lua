@@ -1,4 +1,5 @@
 local projection = require("math-conceal.image.projection")
+local renderers = require("math-conceal.image.renderers")
 local state = require("math-conceal.image.state")
 local tracker = require("math-conceal.image.tracker")
 
@@ -20,7 +21,7 @@ local M = {}
 ---@field service_binary string
 ---@field live_debounce integer
 ---@field source_kind string?
----@field scanner string?
+---@field scanner string|table?
 ---@field backend string?
 ---@field wrapper string?
 ---@field root? string|MathConcealImageRootResolver
@@ -106,6 +107,7 @@ local defaults = {
 
 M.config = vim.deepcopy(defaults)
 M._ft_to_renderer = {}
+M._resolved_renderers = {}
 M._buffers = {}
 
 local augroup_name = "math-conceal.image"
@@ -240,9 +242,14 @@ end
 
 local function build_filetype_index()
   M._ft_to_renderer = {}
+  M._resolved_renderers = {}
   for kind, spec in pairs(M.config.renderers or {}) do
-    for _, ft in ipairs(spec.filetypes or {}) do
-      M._ft_to_renderer[ft] = kind
+    local renderer = renderers.resolve_or_notify(kind, spec)
+    if renderer ~= nil then
+      M._resolved_renderers[kind] = renderer
+      for _, ft in ipairs(spec.filetypes or {}) do
+        M._ft_to_renderer[ft] = kind
+      end
     end
   end
 end
@@ -274,15 +281,16 @@ local function path_excluded(spec, ctx)
   return false
 end
 
-local function make_binding(kind, spec, ctx)
-  local source_kind = spec.source_kind or spec.scanner or kind
+local function make_binding(kind, spec, renderer, ctx)
+  local source_kind = spec.source_kind or renderer.source_kind or kind
   return {
     bufnr = ctx.bufnr,
     kind = kind,
     source_kind = source_kind,
-    scanner = spec.scanner or source_kind,
-    backend = spec.backend or "typst",
-    wrapper = spec.wrapper or kind,
+    scanner = renderer.scanner,
+    backend = spec.backend or renderer.backend or "typst",
+    wrapper = spec.wrapper or renderer.wrapper or kind,
+    renderer = renderer,
     filetype = ctx.filetype,
     path = ctx.path,
     enabled = true,
@@ -317,18 +325,22 @@ end
 
 function M.source_kind_for_bufnr(bufnr)
   local kind = M.renderer_kind_for_bufnr(bufnr)
-  local spec = kind and M.config.renderers[kind] or nil
-  return spec and (spec.source_kind or spec.scanner or kind) or nil
+  local renderer = kind and M._resolved_renderers[kind] or nil
+  return renderer and (renderer.source_kind or kind) or nil
 end
 
 function M.is_supported_bufnr(bufnr)
-  return M.renderer_kind_for_bufnr(bufnr) ~= nil
+  local kind = M.renderer_kind_for_bufnr(bufnr)
+  return kind ~= nil and M._resolved_renderers[kind] ~= nil
 end
 
 function M.is_render_allowed(bufnr)
   bufnr = normalize_bufnr(bufnr)
   local kind = M.renderer_kind_for_bufnr(bufnr)
   if kind == nil then
+    return false
+  end
+  if M._resolved_renderers[kind] == nil then
     return false
   end
   local spec = M.config.renderers[kind]
@@ -344,16 +356,22 @@ function M.attach_buf(bufnr)
   end
 
   local spec = M.config.renderers[kind]
+  local renderer = M._resolved_renderers[kind]
+  if renderer == nil then
+    M.disable_buf(bufnr)
+    return false
+  end
   local ctx = buffer_context(bufnr, kind)
   if path_excluded(spec, ctx) then
     M.disable_buf(bufnr)
     return false
   end
 
-  local binding = make_binding(kind, spec, ctx)
+  local binding = make_binding(kind, spec, renderer, ctx)
   M._buffers[bufnr] = binding
   tracker.attach(bufnr, {
-    kind = binding.scanner or binding.source_kind or kind,
+    kind = binding.source_kind or kind,
+    scanner = binding.scanner,
     debug = tracker_debug_enabled(),
     on_repair = projection.on_tracker_repair,
   })
@@ -536,6 +554,7 @@ function M.setup(cfg)
     error("math-conceal image styling_type must be one of colorscheme, simple, none")
   end
   M._buffers = {}
+  M._resolved_renderers = {}
   setup_prelude()
   state.refresh_cell_px_size(M.config)
   build_filetype_index()

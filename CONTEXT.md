@@ -92,6 +92,10 @@ _Avoid_: Tracker attachment, image data on tracks
 A track projection representing the graphical reading form of a tracked object. It stores a track reference and late-binds a live TrackView from tracker when it needs current source position; it owns only image-rendering and display state.
 _Avoid_: Image data on tracks, cached track snapshots on projections, provider node, overlay node
 
+**Image Surface**:
+The low-level presentation surface for already-rendered image assets, including terminal placeholder and cell-footprint semantics shared by projections. It is not a display projection and does not decide language-specific main-buffer display policy.
+_Avoid_: Unified display projection, Typst display owner, renderer owner
+
 **Typst Display Projection**:
 A buffer-level projection that decides how Typst formula and code tracks share the editor reading surface. It may sample source text, editor display facts, layout facts, and editor width context inside tracker-derived display scopes, but it does not own track identity, discover objects by scanning source, own per-object render state, or obtain current object geometry from anything except `TrackRef -> TrackView`.
 _Avoid_: Formula Display Projection, placeholder consumer, extmark renderer, line-run manager, image projection display
@@ -136,9 +140,13 @@ _Avoid_: Source fact, render asset, tracker decoration
 The bounded part of Typst Display Projection that must be recomputed after tracker, asset, cursor, visual-selection, or layout changes. In the node-local model it is track/object-local and keyed by track references and stable extmark keys, not by neighboring display line-run boundaries.
 _Avoid_: Full-buffer display plan, global rerender, line-run repair
 
+**Renderer**:
+A configured graphical image-path capability for one source and render-input family. It may define source scanning and render-input defaults, but it remains a consumer of tracker and projection ownership rather than an owner of tracked object identity, live geometry, or image assets.
+_Avoid_: Language provider, provider pipeline, source adapter, renderer core
+
 **Renderer Binding**:
 The buffer-level image-path choice that associates a supported buffer with a source kind, scanner, and render-context family. It does not own object identity and must not discover tracked objects itself.
-_Avoid_: Renderer core, source adapter, backend, formula owner
+_Avoid_: Renderer core, source adapter, backend, formula owner, provider
 
 **Markdown Math Source**:
 A Markdown-family source kind whose formulas are written with LaTeX-style inline or display delimiters and consumed through the image path. It is distinct from a LaTeX source kind even when its formula text uses LaTeX syntax.

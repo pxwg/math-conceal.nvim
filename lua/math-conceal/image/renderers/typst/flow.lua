@@ -2,7 +2,7 @@ local quickfix = require("math-conceal.image.quickfix")
 local session = require("math-conceal.image.session")
 local state = require("math-conceal.image.state")
 local tracker = require("math-conceal.image.tracker")
-local wrapper = require("math-conceal.image.wrapper")
+local wrapper = require("math-conceal.image.renderers.typst.wrapper")
 
 local M = {}
 
@@ -223,6 +223,15 @@ function M.clear_refs(bufnr, refs)
     fs.requested[key] = nil
     clear_report(bufnr, key)
   end
+end
+
+function M.detach(bufnr)
+  bufnr = normalize_bufnr(bufnr)
+  local bs = state.get_buf_state(bufnr)
+  bs.flow_classification = nil
+  state.render_diagnostics[bufnr] = state.render_diagnostics[bufnr] or {}
+  state.render_diagnostics[bufnr].flow_by_node = nil
+  quickfix.rebuild(bufnr)
 end
 
 function M.request(bufnr, binding, ctx, tracks)

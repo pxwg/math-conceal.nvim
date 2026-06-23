@@ -54,18 +54,15 @@ local function range_union(a, b)
 end
 
 local function resolve_scanner(kind, scanner)
-  if scanner ~= nil then
+  if type(scanner) == "table" then
     return scanner
   end
 
-  if kind == "typst" then
-    return require("math-conceal.image.tracker.typst")
-  end
-  if kind == "markdown" then
-    return require("math-conceal.image.tracker.markdown")
+  if scanner ~= nil then
+    return nil, "scanner for tracker kind " .. tostring(kind) .. " must be a scanner table"
   end
 
-  return nil, "unsupported tracker kind: " .. tostring(kind)
+  return nil, "missing scanner for tracker kind: " .. tostring(kind)
 end
 
 local function notify_once(message, level)

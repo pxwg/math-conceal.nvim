@@ -1,7 +1,7 @@
-local display = require("math-conceal.image.display")
-local flow_classification = require("math-conceal.image.flow-classification")
+local flow_classification = require("math-conceal.image.renderers.typst.flow")
 local repair_event = require("math-conceal.image.repair-event")
 local state = require("math-conceal.image.state")
+local surface = require("math-conceal.image.surface")
 local tracker = require("math-conceal.image.tracker")
 
 local M = {}
@@ -646,11 +646,11 @@ local function image_cell_rows(bufnr, view)
   local cols = math.max(1, math.floor(tonumber(asset.cols) or 1))
   local rows = math.max(1, math.floor(tonumber(asset.rows) or 1))
   local hl = state.image_hl_group(asset.image_id)
-  local pad = view.object.inline and 0 or display.block_left_pad_cols(bufnr, view, cols)
+  local pad = view.object.inline and 0 or surface.block_left_pad_cols(bufnr, view, cols)
   local pad_text = pad > 0 and string.rep(" ", pad) or ""
   local out = {}
   for row = 1, rows do
-    out[#out + 1] = { { pad_text .. display.placeholder_row(row, cols), hl } }
+    out[#out + 1] = { { pad_text .. surface.placeholder_row(row, cols), hl } }
   end
   return out
 end

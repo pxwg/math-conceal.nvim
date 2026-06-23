@@ -119,8 +119,8 @@ local M = {
 --- @field live_preview_enabled boolean?: Enable cursor-following live preview. Default true.
 --- @field compact_in_wrap boolean?: Keep wrapped windows in compact image layout by setting window-local 'smoothscroll'. Default true.
 --- @field tracker MathConcealImageTrackerOptions?: Tracker configuration for the image path.
---- @field renderers table<string, MathConcealImageRendererOptions>?: Renderer-specific attachment configuration.
---- Other fields are stored by `math-conceal.image` for the future renderer.
+--- @field renderers table<string, MathConcealImageRendererOptions>?: Renderer-specific attachment configuration. Keys must name supported renderers such as `typst` or `markdown`.
+--- Other fields are forwarded to `math-conceal.image`.
 
 --- @class MathConcealImageTrackerOptions
 --- @field debug boolean?: Show tracker debug projection extmarks. Default false.
@@ -129,10 +129,10 @@ local M = {
 --- @field filetypes string[]?: Neovim filetypes that should attach this renderer.
 --- @field service_binary string?: Renderer service executable path.
 --- @field live_debounce integer?: Text-change live preview debounce in milliseconds for this renderer.
---- @field source_kind string?: Scanner source kind. Defaults to the renderer name.
---- @field scanner string?: Scanner module key. Defaults to source_kind.
---- @field backend string?: Rust service backend. Markdown uses the Typst backend with a MiTeX wrapper.
---- @field wrapper string?: Render input wrapper. Markdown uses "mitex".
+--- @field source_kind string?: Source kind label used by the tracker. Defaults to the renderer name.
+--- @field scanner string|table?: Compatibility scanner override for a supported renderer.
+--- @field backend string?: Rust service backend override. Markdown uses the Typst backend with a MiTeX render input.
+--- @field wrapper string?: Compatibility render-input label for a supported renderer.
 --- @field root string|fun(ctx: table): string?: Project root resolver for the renderer.
 --- @field inputs table<string, string>|fun(ctx: table): table<string, string>?: Typst-like input values.
 --- @field header string?: Renderer-scoped Typst header.

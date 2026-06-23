@@ -195,6 +195,8 @@ cargo build --release --manifest-path service/Cargo.toml
 Renderer-specific options live under `image.renderers.<name>`, including
 `filetypes`, `service_binary`, `live_debounce`, `root`, `inputs`,
 `preamble_file`, `header`, `render_paths`, and Markdown's `mitex_package`.
+Renderer names are fixed by the built-in renderer set; unknown renderer names
+are unsupported and are skipped instead of being inferred from other fields.
 
 `image.compact_in_wrap` defaults to `true`. With `wrap` disabled, image display
 uses compact `conceal_lines` layout either way. With `wrap` enabled, `true` keeps

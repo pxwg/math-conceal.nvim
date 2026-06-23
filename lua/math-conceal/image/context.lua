@@ -1,7 +1,6 @@
 local path_rewrite = require("math-conceal.image.path-rewrite")
 local state = require("math-conceal.image.state")
 local workspace = require("math-conceal.image.workspace")
-local wrapper = require("math-conceal.image.wrapper")
 
 local M = {}
 
@@ -73,6 +72,8 @@ end
 
 function M.resolve(bufnr, binding, tracker_context, config)
   local bstate = state.get_buf_state(bufnr)
+  local renderer = binding.renderer
+  local backend = type(renderer.backend) == "function" and renderer.backend(binding, config) or renderer.backend
   local dir = buf_dir(bufnr)
   local source_root = normalize(binding.root)
     or path_rewrite.get_project_root(dir)
@@ -92,6 +93,7 @@ function M.resolve(bufnr, binding, tracker_context, config)
     workspace = ws,
     inputs = binding.inputs or vim.empty_dict(),
     backend = binding.backend or "typst",
+    renderer_module = renderer,
     wrapper = binding.wrapper or binding.kind,
     renderer = binding.kind,
     source_kind = binding.source_kind or binding.kind,
@@ -102,12 +104,15 @@ function M.resolve(bufnr, binding, tracker_context, config)
     preamble_include_line = resolve_preamble_include_line(bufnr, binding, effective_root),
   }
 
-  ctx.context_source = wrapper.build_context_document(config, ctx)
-  ctx.flow_context_source = wrapper.build_flow_context_document(ctx)
+  ctx.backend = backend or "typst"
+  ctx.context_source = renderer.build_context_document(config, ctx)
+  ctx.flow_context_source = type(renderer.build_flow_context_document) == "function"
+      and renderer.build_flow_context_document(ctx, config)
+    or nil
   ctx.context_signature = signature({
     binding.kind,
     binding.source_kind,
-    binding.backend,
+    ctx.backend,
     binding.wrapper,
     ctx.buf_path,
     ctx.source_root,

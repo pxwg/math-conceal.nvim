@@ -107,7 +107,7 @@ return {
 
 本插件可以通过从 [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer) 迁移进来的渲染管线，将数学公式渲染为终端图形。该 fork 基于 [PartyWumpus/typst-concealer](https://github.com/PartyWumpus/typst-concealer)。该功能依赖 kitty graphics protocol，适用于 kitty、Ghostty 等兼容终端。
 
-图形化公式 conceal 支持 Typst、通过 [MiTeX](https://github.com/mitex-rs/mitex) 渲染数学公式的 Markdown，以及实验性的 LaTeX 渲染。Markdown 数学公式支持 `$...$`、`$$...$$`、`\(...\)` 和 `\[...\]` 分隔符。
+图形化公式 conceal 支持 Typst，以及通过 [MiTeX](https://github.com/mitex-rs/mitex) 渲染数学公式的 Markdown。Markdown 数学公式支持 `$...$`、`$$...$$`、`\(...\)` 和 `\[...\]` 分隔符。
 
 统一配置入口如下：
 
@@ -115,13 +115,13 @@ return {
 require("math-conceal").setup({
   image = {
     enabled = true,
-    filetypes = { "typst", "markdown" },
-    -- 可选；未设置时会优先查找当前插件内的 release 二进制：
-    -- service/target/release/typst-concealer-service
-    service_binary = "typst-concealer-service",
-    backends = {
-      latex = {
-        enabled = false, -- 实验性支持
+    renderers = {
+      typst = {
+        filetypes = { "typst" },
+      },
+      markdown = {
+        filetypes = { "markdown" },
+        mitex_package = "@preview/mitex:0.2.7",
       },
     },
   },
@@ -134,7 +134,7 @@ require("math-conceal").setup({
 cargo build --release --manifest-path service/Cargo.toml
 ```
 
-`styling_type`、`live_preview_enabled`、renderer 级 `live_debounce`、`render_paths`、`get_root`、`get_inputs`、`get_preamble_file` 等高级渲染选项会透传给迁移后的管线。
+renderer 配置位于 `image.renderers.<name>`；内置 renderer 名称包括 `typst` 和 `markdown`，未知 renderer 名称不受支持。`styling_type`、`live_preview_enabled`、renderer 级 `live_debounce`、`render_paths`、`root`、`inputs`、`preamble_file` 等高级渲染选项会透传给对应 renderer。
 
 ## 待办事项
 
