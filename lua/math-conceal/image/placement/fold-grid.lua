@@ -648,6 +648,8 @@ function M.sync(bufnr, intent)
   local active = record.active
   if active ~= nil and not active.closed and active.image_id == intent.asset.image_id then
     active.ref = vim.deepcopy(intent.ref)
+    active.cols = math.max(1, math.floor(tonumber(intent.asset.cols) or 1))
+    active.rows = math.max(1, math.floor(tonumber(intent.asset.rows) or 1))
     active.render_key = intent.asset.render_key
     if refresh_placement_geometry(active) then
       record.active = active

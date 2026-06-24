@@ -325,6 +325,26 @@ local function render_affected(bufnr, binding, ctx, config, render_items)
   end
 end
 
+local function refresh_asset_cell_geometry(projection, track, config)
+  local asset = projection and projection.visible_asset or nil
+  if asset == nil or asset.width_px == nil or asset.height_px == nil then
+    return false
+  end
+  if track == nil or track.source_display_kind ~= "block" then
+    return false
+  end
+
+  local cols, rows = display.cell_dimensions(track, asset.width_px, asset.height_px, config)
+  if asset.cols == cols and asset.rows == rows then
+    return false
+  end
+
+  asset.cols = cols
+  asset.rows = rows
+  set_display_asset(projection, asset, false)
+  return true
+end
+
 local function render_trigger_keys(event)
   if event.initial == true or event.force == true then
     return repair_event.current_track_key_set(event)
@@ -587,6 +607,8 @@ function M.on_layout_change(bufnr)
         set_display_asset(projection, nil, true)
         to_classify[#to_classify + 1] = track
       end
+    else
+      refresh_asset_cell_geometry(projection, track, image.config)
     end
   end
 
