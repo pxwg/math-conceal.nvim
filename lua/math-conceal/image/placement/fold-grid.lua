@@ -426,7 +426,7 @@ local function placement_intersects_viewport(placement, top, bot)
   return tail_anchor ~= nil and tail_anchor >= top and tail_anchor <= bot
 end
 
-local function repaint_surface(surface)
+local function repaint_surface(surface, keys)
   if surface == nil or surface.closed then
     return
   end
@@ -440,21 +440,50 @@ local function repaint_surface(surface)
   end
 
   local top, bot = current_viewport(surface)
-  for _, placement in pairs(surface.placements or {}) do
-    if not placement.closed and placement_intersects_viewport(placement, top, bot) then
+  local function repaint_placement(placement)
+    if placement ~= nil and not placement.closed and placement_intersects_viewport(placement, top, bot) then
       terminal.place_image(placement.image_id, placement.placement_id, placement.cols, placement.rows, { C = 1 })
     end
   end
+
+  if keys ~= nil then
+    for key in pairs(keys) do
+      repaint_placement(surface.placements and surface.placements[key] or nil)
+    end
+    return
+  end
+
+  for _, placement in pairs(surface.placements or {}) do
+    repaint_placement(placement)
+  end
 end
 
-local function schedule_repaint(surface)
-  if surface == nil or surface.closed or surface.repaint_scheduled then
+local function schedule_repaint(surface, key)
+  if surface == nil or surface.closed then
+    return
+  end
+
+  if key == nil then
+    surface.repaint_full = true
+    surface.repaint_keys = nil
+  elseif not surface.repaint_full then
+    surface.repaint_keys = surface.repaint_keys or {}
+    surface.repaint_keys[key] = true
+  end
+
+  if surface.repaint_scheduled then
     return
   end
   surface.repaint_scheduled = true
   vim.schedule(function()
     surface.repaint_scheduled = false
-    repaint_surface(surface)
+    local keys = nil
+    if not surface.repaint_full then
+      keys = surface.repaint_keys
+    end
+    surface.repaint_full = false
+    surface.repaint_keys = nil
+    repaint_surface(surface, keys)
   end)
 end
 
@@ -748,6 +777,11 @@ function M.foldtext()
 
   local placement = wrapped.placement
   placement.hl = state.placement_hl_group(placement.image_id, placement.placement_id)
+  -- Redrawing foldtext can overwrite Kitty placeholder cells without changing
+  -- the viewport. Re-emit the terminal placement after the fold row has been
+  -- materialized so cursor/mode redraws do not leave an otherwise valid
+  -- fold-grid surface visually blank.
+  schedule_repaint(surface, placement.key)
   return with_prefix(placeholder_line(placement, wrapped.entry.image_row), placement.prefix_cols)
 end
 
