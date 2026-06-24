@@ -184,6 +184,10 @@ local function track_snapshot(state, track)
     render_whole_line = track.render_whole_line == true,
     prelude_count = track.prelude_count or 0,
     prelude_signature = track.prelude_signature,
+    cursor_nested = track.cursor_nested == true,
+    parent_key = track.parent_key,
+    cursor_nested_depth = track.cursor_nested_depth,
+    cursor_nested_root_key = track.cursor_nested_root_key,
   }
 end
 
@@ -195,6 +199,10 @@ local function track_ref(state, track)
     track_id = track.id,
     id = track.id,
   }
+end
+
+local function ref_key(ref)
+  return table.concat({ ref.bufnr, ref.tracker_generation or ref.generation, ref.track_id or ref.id }, ":")
 end
 
 local function sorted_tracks(state, predicate)
@@ -449,6 +457,10 @@ local function new_track(state, node)
     prelude_signature = node.prelude_signature,
     object_kind = node.object_kind or node.node_type or "math",
     node_type = node.node_type,
+    cursor_nested = node.cursor_nested == true,
+    parent_key = node.parent_key,
+    cursor_nested_depth = node.cursor_nested_depth,
+    cursor_nested_root_key = node.cursor_nested_root_key,
   }
 end
 
@@ -732,6 +744,10 @@ local function inherit_track(bufnr, track, node, opts)
   end
   track.object_kind = node.object_kind or node.node_type or "math"
   track.node_type = node.node_type
+  track.cursor_nested = node.cursor_nested == true
+  track.parent_key = node.parent_key
+  track.cursor_nested_depth = node.cursor_nested_depth
+  track.cursor_nested_root_key = node.cursor_nested_root_key
   if identity_changed then
     track.rev = track.rev + 1
   end
@@ -885,6 +901,194 @@ local function reconcile_window(bufnr, state, window, report)
   end
 
   return true, result
+end
+
+local function point_in_range(row, col, range)
+  if row == nil or col == nil or range == nil then
+    return false
+  end
+  if row < range.row or row > range.end_row then
+    return false
+  end
+  if range.row == range.end_row then
+    return col >= range.col and col < range.end_col
+  end
+  return (row == range.row and col >= range.col)
+    or (row == range.end_row and col < range.end_col)
+    or (row > range.row and row < range.end_row)
+end
+
+local function cursor_for_buf(bufnr)
+  local win = vim.fn.bufwinid(bufnr)
+  if win == -1 or not vim.api.nvim_win_is_valid(win) then
+    return nil, nil
+  end
+  local ok, cursor = pcall(vim.api.nvim_win_get_cursor, win)
+  if not ok or cursor == nil then
+    return nil, nil
+  end
+  return cursor[1] - 1, cursor[2]
+end
+
+local function range_bytes(bufnr, range)
+  return math.max(0, byte_at(bufnr, range.end_row, range.end_col) - byte_at(bufnr, range.row, range.col))
+end
+
+local function cursor_root_track(bufnr, state, row, col)
+  local root = nil
+  local root_size = nil
+  for _, track in ipairs(live_tracks(state)) do
+    if
+      track.cursor_nested ~= true
+      and track.state == "valid"
+      and track.invalid ~= true
+      and point_in_range(row, col, track)
+    then
+      local size = range_bytes(bufnr, track)
+      if root == nil or size < root_size or (size == root_size and track.id > root.id) then
+        root = track
+        root_size = size
+      end
+    end
+  end
+  return root
+end
+
+local function cursor_child_track(bufnr, tracks, row, col)
+  local child = nil
+  local child_size = nil
+  for _, track in ipairs(tracks or {}) do
+    if track.state == "valid" and track.invalid ~= true and point_in_range(row, col, track) then
+      local size = range_bytes(bufnr, track)
+      if child == nil or size < child_size or (size == child_size and track.id > child.id) then
+        child = track
+        child_size = size
+      end
+    end
+  end
+  return child
+end
+
+local function sorted_child_tracks(tracks)
+  table.sort(tracks, function(a, b)
+    if a.row ~= b.row or a.col ~= b.col then
+      return lt(a.row, a.col, b.row, b.col)
+    end
+    return a.id < b.id
+  end)
+  return tracks
+end
+
+local function nested_tracks_for_parent(state, parent_key)
+  local tracks = {}
+  for _, track in ipairs(live_tracks(state)) do
+    if track.cursor_nested == true and track.parent_key == parent_key then
+      tracks[#tracks + 1] = track
+    end
+  end
+  return sorted_child_tracks(tracks)
+end
+
+local function decorate_nested_node(state, node, parent, root, depth)
+  node.cursor_nested = true
+  node.parent_key = ref_key(track_ref(state, parent))
+  node.cursor_nested_root_key = ref_key(track_ref(state, root))
+  node.cursor_nested_depth = depth
+  return node
+end
+
+local function scan_nested_nodes(bufnr, state, parent)
+  if type(state.scanner.scan_nested) ~= "function" then
+    return {}
+  end
+
+  local ok, result = pcall(state.scanner.scan_nested, bufnr, track_snapshot(state, parent), state.context_units)
+  if not ok then
+    notify_once(tostring(result), vim.log.levels.WARN)
+    return nil
+  end
+  if type(result) == "table" and result.nodes ~= nil then
+    return result.nodes
+  end
+  return result or {}
+end
+
+local function reconcile_nested_children(bufnr, state, parent, root, depth, report, keep_ids)
+  local parent_key = ref_key(track_ref(state, parent))
+  local nodes = scan_nested_nodes(bufnr, state, parent)
+  if nodes == nil then
+    return nil
+  end
+
+  for _, node in ipairs(nodes) do
+    decorate_nested_node(state, node, parent, root, depth)
+  end
+
+  local tracks = nested_tracks_for_parent(state, parent_key)
+  local children = {}
+  while #tracks > 0 and #nodes > 0 do
+    local pair = best_pair(bufnr, tracks, nodes)
+    if pair == nil or pair.score <= 0 then
+      break
+    end
+
+    local track = remove_at(tracks, pair.track_index)
+    local node = remove_at(nodes, pair.node_index)
+    local before_range = track_range(track)
+    local repair_reasons = dirty_reasons(track)
+    local identity_changed = inherit_track(bufnr, track, node)
+    record_checked_pair(report, state, track, before_range, repair_reasons, identity_changed)
+    keep_ids[track.id] = true
+    children[#children + 1] = track
+  end
+
+  for _, track in ipairs(tracks) do
+    record_retired(report, state, track)
+    retire(bufnr, track)
+  end
+
+  for _, node in ipairs(nodes) do
+    local track = new_track(state, node)
+    state.tracks[track.id] = track
+    set_core_extmark(bufnr, track)
+    record_born(report, state, track)
+    keep_ids[track.id] = true
+    children[#children + 1] = track
+  end
+
+  return sorted_child_tracks(children)
+end
+
+local function retire_cursor_nested_except(bufnr, state, keep_ids, report)
+  for _, track in ipairs(live_tracks(state)) do
+    if track.cursor_nested == true and keep_ids[track.id] ~= true then
+      record_retired(report, state, track)
+      retire(bufnr, track)
+    end
+  end
+end
+
+local function report_has_track_changes(report)
+  return #report.born_refs > 0
+    or #report.retired_refs > 0
+    or #report.identity_changed_refs > 0
+    or #report.geometry_changed_refs > 0
+end
+
+local function emit_cursor_nested_repair(state, report, old_context_units, repair_range)
+  if not report_has_track_changes(report) then
+    refresh_debug(state)
+    return true
+  end
+
+  emit_repair(
+    state,
+    repair_event(state, report, old_context_units, state.context_units, {
+      tracks = track_snapshots(state),
+      repair_ranges = repair_range ~= nil and { repair_range } or {},
+    })
+  )
+  return true
 end
 
 local function schedule_repair(bufnr, state)
@@ -1086,6 +1290,64 @@ function M.sync(bufnr)
 end
 
 ---@param bufnr integer?
+---@param opts {enabled: boolean?, max_depth: integer?}?
+---@return boolean
+function M.sync_cursor_nested(bufnr, opts)
+  bufnr = normalize_bufnr(bufnr)
+  opts = opts or {}
+  local state = state_by_buf[bufnr]
+  if state == nil or not valid_loaded_buffer(bufnr) then
+    return false
+  end
+
+  sync_tracks(bufnr, state)
+  sync_context_units(bufnr, state)
+
+  local old_context_units = vim.deepcopy(state.context_units or {})
+  local report = empty_repair_report()
+  local keep_ids = {}
+
+  if opts.enabled == false or type(state.scanner.scan_nested) ~= "function" then
+    retire_cursor_nested_except(bufnr, state, keep_ids, report)
+    return emit_cursor_nested_repair(state, report, old_context_units)
+  end
+
+  local cursor_row, cursor_col = cursor_for_buf(bufnr)
+  local root = cursor_root_track(bufnr, state, cursor_row, cursor_col)
+  if root == nil then
+    retire_cursor_nested_except(bufnr, state, keep_ids, report)
+    return emit_cursor_nested_repair(state, report, old_context_units)
+  end
+
+  local parent = root
+  local max_depth = math.max(1, math.min(tonumber(opts.max_depth) or 8, 32))
+  local seen = {}
+  for depth = 1, max_depth do
+    local parent_key = ref_key(track_ref(state, parent))
+    if seen[parent_key] then
+      break
+    end
+    seen[parent_key] = true
+
+    local children = reconcile_nested_children(bufnr, state, parent, root, depth, report, keep_ids)
+    if children == nil then
+      refresh_debug(state)
+      return false
+    end
+
+    local child = cursor_child_track(bufnr, children, cursor_row, cursor_col)
+    if child == nil then
+      break
+    end
+    parent = child
+  end
+
+  retire_cursor_nested_except(bufnr, state, keep_ids, report)
+  sync_tracks(bufnr, state)
+  return emit_cursor_nested_repair(state, report, old_context_units, track_range(root))
+end
+
+---@param bufnr integer?
 ---@return boolean
 function M.repair(bufnr)
   bufnr = normalize_bufnr(bufnr)
@@ -1199,7 +1461,7 @@ end
 ---@param ref table
 ---@return string
 function M.track_ref_key(ref)
-  return table.concat({ ref.bufnr, ref.tracker_generation or ref.generation, ref.track_id or ref.id }, ":")
+  return ref_key(ref)
 end
 
 ---@return integer

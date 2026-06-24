@@ -481,16 +481,28 @@ local function fragments_overlap(a, b)
   return a.col < b.end_col and b.col < a.end_col
 end
 
+local function nested_parent_child(a, b)
+  local av = a and a.view or nil
+  local bv = b and b.view or nil
+  if av == nil or bv == nil then
+    return false
+  end
+  return (av.cursor_nested == true and av.parent_key == bv.key)
+    or (bv.cursor_nested == true and bv.parent_key == av.key)
+end
+
 local function mark_conflicts(node_plans)
   for i = 1, #node_plans do
     for j = i + 1, #node_plans do
       local a = node_plans[i]
       local b = node_plans[j]
-      for _, left in ipairs(a.fragments) do
-        for _, right in ipairs(b.fragments) do
-          if fragments_overlap(left, right) then
-            a.source_reveal = true
-            b.source_reveal = true
+      if not nested_parent_child(a, b) then
+        for _, left in ipairs(a.fragments) do
+          for _, right in ipairs(b.fragments) do
+            if fragments_overlap(left, right) then
+              a.source_reveal = true
+              b.source_reveal = true
+            end
           end
         end
       end

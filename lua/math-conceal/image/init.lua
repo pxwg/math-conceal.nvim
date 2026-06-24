@@ -451,6 +451,10 @@ local function setup_autocmds()
     desc = "sync math-conceal image cursor preview",
     callback = function(ev)
       if M._buffers[ev.buf] ~= nil then
+        local mode = vim.api.nvim_get_mode().mode
+        tracker.sync_cursor_nested(ev.buf, {
+          enabled = not (M.config.conceal_in_normal == true and mode == "n"),
+        })
         projection.sync_cursor(ev.buf, { preview_immediate = true })
       end
     end,

@@ -14,6 +14,15 @@ local function range_intersects(a, b)
   return lt(a.row, a.col, b.end_row, b.end_col) and lt(b.row, b.col, a.end_row, a.end_col)
 end
 
+local function range_equal(a, b)
+  return a ~= nil
+    and b ~= nil
+    and a.row == b.row
+    and a.col == b.col
+    and a.end_row == b.end_row
+    and a.end_col == b.end_col
+end
+
 local function is_blank(text)
   return (text or ""):match("^%s*$") ~= nil
 end
@@ -334,28 +343,7 @@ local function build_match_index(bufnr, root, parsed_query, start_row, end_row)
   return index
 end
 
-local function collect_top_level_units(root, match_index)
-  local units = {}
-
-  local function visit(node)
-    if node == nil then
-      return
-    end
-
-    local entry = match_index[node:id()]
-    if entry ~= nil then
-      units[#units + 1] = entry
-      return
-    end
-
-    for child in node:iter_children() do
-      if child:named() then
-        visit(child)
-      end
-    end
-  end
-
-  visit(root)
+local function sort_units(units)
   table.sort(units, function(a, b)
     if a.row ~= b.row or a.col ~= b.col then
       return lt(a.row, a.col, b.row, b.col)
@@ -365,45 +353,25 @@ local function collect_top_level_units(root, match_index)
   return units
 end
 
-local function has_indexed_ancestor(node, match_index)
-  local parent = node and node:parent() or nil
-  while parent ~= nil do
-    if match_index[parent:id()] ~= nil then
-      return true
-    end
-    parent = parent:parent()
+local function same_container_entry(entry, container)
+  if entry == nil or container == nil then
+    return false
   end
-  return false
+  if not range_equal(entry, container) then
+    return false
+  end
+  local entry_kind = entry.object_kind or entry.node_type or "math"
+  local container_kind = container.object_kind or container.node_type or "math"
+  return entry_kind == container_kind
 end
 
-local function has_code_ancestor(node)
-  local parent = node and node:parent() or nil
-  while parent ~= nil do
-    if parent:type() == "code" then
-      return true
-    end
-    parent = parent:parent()
-  end
-  return false
-end
-
-local function collect_local_top_level_units(match_index)
-  local units = {}
-
+local function find_container_entry(match_index, container)
   for _, entry in pairs(match_index) do
-    if not has_indexed_ancestor(entry.node, match_index) and not has_code_ancestor(entry.node) then
-      units[#units + 1] = entry
+    if same_container_entry(entry, container) then
+      return entry
     end
   end
-
-  table.sort(units, function(a, b)
-    if a.row ~= b.row or a.col ~= b.col then
-      return lt(a.row, a.col, b.row, b.col)
-    end
-    return (a.node and a.node:id() or 0) < (b.node and b.node:id() or 0)
-  end)
-
-  return units
+  return nil
 end
 
 local function context_kind(unit)
@@ -428,6 +396,67 @@ local function is_context_unit(_, unit)
     return false
   end
   return true
+end
+
+local function append_visible_units_from_node(
+  node,
+  match_index,
+  user_allowlist,
+  opts,
+  units,
+  transparent_depth,
+  include_self
+)
+  if node == nil then
+    return
+  end
+
+  transparent_depth = transparent_depth or 0
+  local entry = include_self ~= false and match_index[node:id()] or nil
+  if entry ~= nil then
+    if entry.object_kind == "math" then
+      units[#units + 1] = entry
+      return
+    end
+    if is_context_unit(nil, entry) then
+      if opts.collect_context == true and transparent_depth == 0 then
+        units[#units + 1] = entry
+      end
+      return
+    end
+    if entry.object_kind == "code" and is_renderable_code_unit(entry, user_allowlist) then
+      units[#units + 1] = entry
+      return
+    end
+
+    transparent_depth = transparent_depth + 1
+  end
+
+  for child in node:iter_children() do
+    if child:named() then
+      append_visible_units_from_node(child, match_index, user_allowlist, opts, units, transparent_depth, true)
+    end
+  end
+end
+
+local function collect_visible_units(root, match_index, user_allowlist, opts)
+  local units = {}
+  append_visible_units_from_node(root, match_index, user_allowlist, opts or {}, units, 0, true)
+  return sort_units(units)
+end
+
+local function collect_nested_visible_units(container_entry, match_index, user_allowlist)
+  local units = {}
+  if container_entry == nil or container_entry.node == nil then
+    return units
+  end
+
+  for child in container_entry.node:iter_children() do
+    if child:named() then
+      append_visible_units_from_node(child, match_index, user_allowlist, { collect_context = false }, units, 0, true)
+    end
+  end
+  return sort_units(units)
 end
 
 local function math_source_display_facts(bufnr, unit, source)
@@ -561,10 +590,12 @@ local function build_scan(bufnr)
   end
 
   local root = tree:root()
-  local units = collect_top_level_units(root, build_match_index(bufnr, root, parsed_query))
+  local user_code_allowlist = configured_code_allowlist()
+  local units = collect_visible_units(root, build_match_index(bufnr, root, parsed_query), user_code_allowlist, {
+    collect_context = true,
+  })
   local nodes = {}
   local context_units = {}
-  local user_code_allowlist = configured_code_allowlist()
 
   for _, unit in ipairs(units) do
     if unit.object_kind == "math" then
@@ -608,12 +639,18 @@ local function build_window_scan(bufnr, window, context_units)
   end
 
   local root = tree:root()
-  local units =
-    collect_local_top_level_units(build_match_index(bufnr, root, parsed_query, window.row, window.end_row + 1))
+  local user_code_allowlist = configured_code_allowlist()
+  local units = collect_visible_units(
+    root,
+    build_match_index(bufnr, root, parsed_query, window.row, window.end_row + 1),
+    user_code_allowlist,
+    {
+      collect_context = true,
+    }
+  )
   local prefixes = prefix_signatures(context_units or {})
   local nodes = {}
   local local_context_units = {}
-  local user_code_allowlist = configured_code_allowlist()
 
   for _, unit in ipairs(units) do
     if unit.object_kind == "math" and range_intersects(unit, window) then
@@ -634,6 +671,43 @@ local function build_window_scan(bufnr, window, context_units)
   return {
     nodes = nodes,
     context_units = local_context_units,
+  }
+end
+
+local function build_nested_scan(bufnr, container, context_units)
+  local parsed_query, query_err = get_query()
+  if parsed_query == nil then
+    error("failed to parse Typst math tracker query: " .. tostring(query_err))
+  end
+
+  local parser = vim.treesitter.get_parser(bufnr, "typst")
+  local tree = parser:parse()[1]
+  if tree == nil then
+    return {
+      nodes = {},
+      context_units = {},
+    }
+  end
+
+  local root = tree:root()
+  local user_code_allowlist = configured_code_allowlist()
+  local match_index = build_match_index(bufnr, root, parsed_query, container.row, container.end_row + 1)
+  local units =
+    collect_nested_visible_units(find_container_entry(match_index, container), match_index, user_code_allowlist)
+  local prefixes = prefix_signatures(context_units or {})
+  local nodes = {}
+
+  for _, unit in ipairs(units) do
+    if unit.object_kind == "math" then
+      nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
+    elseif unit.object_kind == "code" and is_renderable_code_unit(unit, user_code_allowlist) then
+      nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
+    end
+  end
+
+  return {
+    nodes = nodes,
+    context_units = {},
   }
 end
 
@@ -658,6 +732,13 @@ end
 ---@return table
 function M.scan(bufnr, window, context_units)
   return build_window_scan(bufnr, window, context_units)
+end
+
+---@param bufnr integer
+---@param container table
+---@return table
+function M.scan_nested(bufnr, container, context_units)
+  return build_nested_scan(bufnr, container, context_units)
 end
 
 return M
