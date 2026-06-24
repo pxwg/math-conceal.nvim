@@ -294,6 +294,16 @@ local function make_placement(bufnr, intent)
     close_placement(placement)
     return nil
   end
+  -- A source-reveal close deletes the terminal placement. Kitty's lowercase
+  -- delete is allowed to retain image data, but it is not a reliable cache
+  -- boundary. Re-upload before materializing a new fold-grid placement so a
+  -- restore never depends on terminal-side image retention.
+  if type(asset.path) == "string" and asset.path ~= "" and type(terminal.send_image) == "function" then
+    if not terminal.send_image(asset.path, placement.image_id) then
+      close_placement(placement)
+      return nil
+    end
+  end
   if
     not terminal.place_image(placement.image_id, placement.placement_id, placement.cols, placement.rows, { C = 1 })
   then
