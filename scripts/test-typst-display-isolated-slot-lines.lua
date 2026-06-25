@@ -23,6 +23,11 @@ local function assert_true(label, value)
   end
 end
 
+local function current_text_width()
+  local info = vim.fn.getwininfo(vim.api.nvim_get_current_win())[1] or {}
+  return math.max(1, vim.api.nvim_win_get_width(0) - (tonumber(info.textoff) or 0))
+end
+
 local function run()
   add_repo_to_path()
 
@@ -117,7 +122,8 @@ local function run()
   assert_eq("S>I first carrier row", active.carrier_rows[1].row, 0)
   assert_eq("S>I second carrier row", active.carrier_rows[2].row, 1)
   assert_eq("S>I has no tail virt_lines", active.tail_count, 0)
-  assert_eq("S>I preserves source fragment column", active.prefix_cols, 2)
+  assert_eq("S>I preserves source fragment column as source-prefix fact", active.source_prefix_cols, 2)
+  assert_eq("S>I centers isolated block formula", active.prefix_cols, math.floor((current_text_width() - 3) / 2))
 
   set_asset(5)
   formula_display.refresh(bufnr, { conceal_in_normal = false })
@@ -125,6 +131,7 @@ local function run()
   active = surface.placements[key]
   assert_eq("S<I keeps all source rows as carriers", #active.carrier_rows, 4)
   assert_eq("S<I tail image rows are virt_lines", active.tail_count, 1)
+  assert_eq("S<I keeps isolated block formula centered", active.prefix_cols, math.floor((current_text_width() - 3) / 2))
 
   assert_true("window node slot places terminal image", #terminal_calls >= 2)
   formula_display.detach(bufnr)

@@ -79,6 +79,11 @@ local function run()
     return false
   end
 
+  local function text_width(winid)
+    local info = vim.fn.getwininfo(winid)[1] or {}
+    return math.max(1, vim.api.nvim_win_get_width(winid) - (tonumber(info.textoff) or 0))
+  end
+
   local placement = require("math-conceal.image.placement")
   local window_node_slot = require("math-conceal.image.placement.window-node-slot")
   local tracker = require("math-conceal.image.tracker")
@@ -189,6 +194,7 @@ local function run()
     },
     display_role = "block",
     block_role = "isolated",
+    align = "center",
     conceal_in_normal = false,
   }
 
@@ -209,6 +215,8 @@ local function run()
   assert_true("placement B exists", active_b ~= nil and active_b.placed == true)
   assert_true("window placement ids differ", active_a.placement_id ~= active_b.placement_id)
   assert_eq("image id is shared", active_a.image_id, active_b.image_id)
+  assert_eq("window A centers image in local text area", active_a.prefix_cols, math.floor((text_width(win_a) - 12) / 2))
+  assert_eq("window B centers image in local text area", active_b.prefix_cols, math.floor((text_width(win_b) - 12) / 2))
   assert_true("window node slot measures through tracker source lines", source_line_calls > 0)
   assert_true("window A materialize force-redraws source range", saw_forced_redraw(win_a, track.row, track.end_row + 1))
   assert_true("window B materialize force-redraws source range", saw_forced_redraw(win_b, track.row, track.end_row + 1))
@@ -227,6 +235,7 @@ local function run()
   short_intent.asset.image_id = 0x223355
   short_intent.asset.path = "/tmp/window-node-slot-contract-short.png"
   short_intent.asset.render_key = "asset:window-node-slot-short"
+  short_intent.align = "source"
 
   vim.api.nvim_buf_set_extmark(bufnr, surface_a.ns, short_track.row, 0, {
     virt_lines = {
@@ -240,6 +249,7 @@ local function run()
   local short_active_a = surface_a.placements[short_key]
   assert_eq("local remeasure clears orphan artifact before measuring", #short_active_a.carrier_rows, 3)
   assert_eq("local remeasure keeps delimiter raw height clean", short_active_a.carrier_rows[1].raw_height, 1)
+  assert_eq("source-aligned slot preserves source fragment column", short_active_a.prefix_cols, 2)
   placement.close_key(bufnr, short_key)
 
   local initial_a_placement_id = active_a.placement_id

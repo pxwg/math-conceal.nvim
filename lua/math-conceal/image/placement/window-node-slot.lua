@@ -280,6 +280,7 @@ local function normalize_intent(bufnr, intent)
     cols = cols,
     rows = rows,
     render_key = asset.render_key,
+    align = intent.align == "center" and "center" or "source",
     conceal_in_normal = intent.conceal_in_normal == true,
   }
 end
@@ -504,11 +505,17 @@ local function build_layout(surface, placement, view)
       raw_height = raw_heights[index],
     }
   end
+  local source_prefix_cols = source_prefix_display_width(surface.bufnr, view.row, view.col)
+  local prefix_cols = source_prefix_cols
+  if placement.align == "center" and placement.cols < text_width then
+    prefix_cols = math.floor((text_width - placement.cols) / 2)
+  end
 
   return {
     source_start_row = view.row,
     source_end_row = view.end_row,
-    prefix_cols = source_prefix_display_width(surface.bufnr, view.row, view.col),
+    prefix_cols = prefix_cols,
+    source_prefix_cols = source_prefix_cols,
     carrier_rows = carrier_rows,
     carrier_height = carrier_height,
     tail_count = tail_count,
@@ -633,6 +640,7 @@ local function layout_signature(placement, layout, revealed)
   local parts = {
     tostring(placement.image_id),
     tostring(placement.render_key or ""),
+    tostring(placement.align or "source"),
     tostring(placement.cols),
     tostring(placement.rows),
     tostring(layout.source_start_row),
@@ -678,6 +686,7 @@ local function update_placement_from_intent(surface, intent)
   placement.cols = intent.cols
   placement.rows = intent.rows
   placement.render_key = intent.render_key
+  placement.align = intent.align or "source"
   placement.conceal_in_normal = intent.conceal_in_normal == true
   return placement
 end
@@ -736,6 +745,7 @@ local function materialize_placement(surface, placement)
     placement.carrier_rows = layout.carrier_rows
     placement.tail_count = layout.tail_count
     placement.prefix_cols = layout.prefix_cols
+    placement.source_prefix_cols = layout.source_prefix_cols
     return true, false
   end
 
@@ -771,6 +781,7 @@ local function materialize_placement(surface, placement)
   placement.carrier_rows = layout.carrier_rows
   placement.tail_count = layout.tail_count
   placement.prefix_cols = layout.prefix_cols
+  placement.source_prefix_cols = layout.source_prefix_cols
 
   local before = placement.signature
   placement.signature = signature

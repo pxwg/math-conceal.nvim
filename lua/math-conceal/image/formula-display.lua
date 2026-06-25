@@ -1057,6 +1057,7 @@ local function placement_intent_for_plan(plan, projection_plan)
     backend = "window_node_slot",
     display_role = "block",
     block_role = "isolated",
+    align = plan.view.object.kind == "math" and "center" or "source",
     conceal_in_normal = projection_plan and projection_plan.conceal_in_normal == true,
   }
 end
