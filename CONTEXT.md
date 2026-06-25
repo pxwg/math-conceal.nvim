@@ -109,20 +109,42 @@ The node-revealable formula whose source range currently contains the cursor. On
 _Avoid_: Cursor line formula, hovered formula, selected render node
 
 **Node Slot**:
-A Typst Display Projection display artifact for one tracked object outside the isolated-block fold-grid route. It presents a rendered asset from tracker-owned geometry while ordinary text remains drawn by Neovim.
-_Avoid_: Display line run, redraw carrier, render node, isolated block fold grid
+A Typst Display Projection display artifact for one tracked object. It presents a rendered asset from tracker-owned geometry while ordinary text remains drawn by Neovim.
+_Avoid_: Display line run, redraw carrier, render node, fold grid
 
 **Source Row Slot**:
 A node slot whose first rendered image row is attached to a real source fragment row. Inline slots use inline virtual text at the first fragment column, and non-isolated block behavior follows the existing Typst Display Projection policy.
 _Avoid_: Cursor-row placeholder, row carrier, line-run landing row, isolated block surface
 
 **Block Node Slot**:
-A block-shaped node slot for block placements that are not routed to a Fold Grid Placement Surface. Existing Typst Display Projection policy decides whether non-isolated block shapes use a node slot or source reveal.
+A block-shaped node slot for block placements. Existing Typst Display Projection policy decides whether non-isolated block shapes use a node slot or source reveal.
 _Avoid_: Display line run, block carrier, whole-row redraw, isolated block placement
 
+**Window Extmark Node Slot**:
+A node slot materialized independently per editor window so each window can use its own source wrapping geometry while presenting the same tracker-owned object. It is the target isolated-block display model, replacing Fold Grid Placement Surface after migration.
+_Avoid_: Window extmark placement surface, fold-grid successor, buffer-global isolated block slot
+
+**Window-Local Slot Reveal**:
+The per-window source reveal state for Window Extmark Node Slots. It follows the existing source-reveal behavior: entering any part of the tracked source range reveals the whole tracked source range in that window, and leaving the source range restores conceal without forcing other windows showing the same buffer to close their node slots.
+_Avoid_: Buffer-global reveal state, cross-window slot teardown, shared cursor collision
+
+**Carrier-Maximized Slot Height**:
+The Window Extmark Node Slot height principle that preserves the largest real source carrier footprint that fits within the rendered image height, then uses collapsed source rows and virtual image rows only to reconcile the visible slot height with the rendered asset. If the smallest useful carrier already wraps taller than the rendered asset, carrier continuity wins and the visible slot may be taller than the asset.
+_Avoid_: Minimum carrier height, source-height preservation, fold-grid height
+
+**Local Slot Remeasure**:
+The Window Extmark Node Slot update rule that clears only the current window and track slot artifacts before measuring raw source wrapping geometry. It prevents shaped extmarks from contaminating measurement without tearing down unrelated tracks or other windows.
+_Avoid_: Full-buffer remeasure, cross-window cleanup, global slot rebuild
+
+**Incremental Slot Materialization**:
+The Window Extmark Node Slot update boundary that changes only affected window and track artifacts after source, cursor, selection, scroll, or layout events. It avoids full-buffer display rebuilds and does not turn viewport events into tracker repair.
+_Avoid_: Full-buffer display rebuild, scroll-driven repair, window-global rematerialization
+
 **Fold Grid Placement Surface**:
-An Image Placement Backend owned display surface for isolated block-shaped Typst placements. It maps live tracker geometry and a rendered image grid into folded source rows plus optional trailing virtual image rows, preserving rendered image height while source reveal restores the original tracked source.
-_Avoid_: Node slot replacement, source row slot replacement, block node slot replacement, display line run, fold-owned track, mixed-row block surface
+A legacy Image Placement Backend owned display surface formerly used for isolated block-shaped Typst placements. It is superseded by Window Extmark Node Slots and must not remain as a production fallback.
+_Avoid_: Node slot replacement, source row slot replacement, block node slot replacement, display line run, fold-owned track, mixed-row block surface, migration fallback
+
+The following Fold Grid terms are retained as legacy implementation history rather than current production guidance.
 
 **Managed Fold Window Surface**:
 The window-local fold option ownership used to materialize Fold Grid Placement Surfaces. A buffer-level placement may have window-specific folded surfaces because Neovim fold expression, fold text, fold level, and fold enablement are window-local editor state. It saves and restores prior window fold options rather than composing with user folds.
@@ -177,8 +199,8 @@ The per-window reveal state for Fold Grid Placement Surfaces. A cursor or select
 _Avoid_: Buffer-global reveal state, cross-window fold teardown, shared cursor collision
 
 **Non-Isolated Block Policy Preservation**:
-The Typst display behavior for block-shaped objects that are not isolated blocks. Fold Grid migration does not change their existing Typst Display Projection policy, including whether they use node slots or source reveal.
-_Avoid_: Prefix fold grid, suffix fold grid, sandwich fold grid, policy rewrite during fold-grid migration
+The Typst display behavior for block-shaped objects that are not isolated blocks. Window Extmark Node Slot migration does not change their existing Typst Display Projection policy, including whether they use node slots or source reveal.
+_Avoid_: Prefix fold grid, suffix fold grid, sandwich fold grid, policy rewrite during isolated-block migration
 
 **Kitty Placeholder Row Alignment**:
 The invariant that every placeholder row for one Kitty image id starts at the same visual text column. If an isolated block's first row is overlaid at an indented source fragment column while the remaining rows are `virt_lines`, those `virt_lines` must be prefixed by the source prefix display width so indentation is preserved without horizontally tearing the image.

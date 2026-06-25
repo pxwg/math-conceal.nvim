@@ -1,5 +1,5 @@
 -- Run with:
---   nvim --headless -u NONE '+luafile scripts/test-typst-fold-grid-repair-move-refresh.lua'
+--   nvim --headless -u NONE '+luafile scripts/test-typst-window-node-slot-repair-move-refresh.lua'
 
 local function add_repo_to_path()
   local cwd = vim.fn.getcwd()
@@ -31,6 +31,9 @@ local function run()
   local reconcile_calls = {}
   local close_calls = {}
   package.loaded["math-conceal.image.placement"] = {
+    available = function(name)
+      return name == "window_node_slot"
+    end,
     batch = function(fn)
       return fn()
     end,
@@ -62,7 +65,7 @@ local function run()
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
     "",
     "$",
-    "this line is intentionally long enough to require fold-grid placement when wrap is enabled",
+    "this line is intentionally long enough to require window-local placement when wrap is enabled",
     "$",
     "",
   })
@@ -107,7 +110,7 @@ local function run()
       image_id = 0x345678,
       cols = 12,
       rows = 3,
-      render_key = "asset:fold-grid",
+      render_key = "asset:window-node-slot",
     },
   }
 
@@ -122,6 +125,7 @@ local function run()
   }, { conceal_in_normal = false })
 
   assert_eq("initial repair syncs placement once", #sync_calls, 1)
+  assert_eq("initial intent backend", sync_calls[1].intent.backend, "window_node_slot")
   assert_eq("initial repair reconciles placement keys", #reconcile_calls, 1)
   assert_eq("initial repair does not need geometry-only refresh", #refresh_geometry_calls, 0)
   assert_eq("initial sync key", sync_calls[1].intent.key, key)
@@ -145,9 +149,9 @@ local function run()
 
   assert_eq("geometry-only repair does not re-sync/recreate placement", #sync_calls, 1)
   assert_eq("geometry-only repair does not close placement", #close_calls, 0)
-  assert_eq("geometry-only repair refreshes fold-grid geometry", #refresh_geometry_calls, 1)
+  assert_eq("geometry-only repair refreshes placement geometry", #refresh_geometry_calls, 1)
   assert_eq("geometry refresh bufnr", refresh_geometry_calls[1].bufnr, bufnr)
-  assert_true("geometry refresh is targeted to fold-grid key", refresh_geometry_calls[1].opts.keys[key] == true)
+  assert_true("geometry refresh is targeted to window-node-slot key", refresh_geometry_calls[1].opts.keys[key] == true)
 end
 
 local ok, err = xpcall(run, debug.traceback)
@@ -156,5 +160,5 @@ if not ok then
   vim.cmd("cquit")
 end
 
-print("typst-fold-grid-repair-move-refresh-ok")
+print("typst-window-node-slot-repair-move-refresh-ok")
 vim.cmd("qa!")

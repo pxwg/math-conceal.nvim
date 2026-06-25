@@ -43,6 +43,7 @@ local function ensure_state(bufnr)
     fd = {
       extmarks = new_extmark_groups(),
       suppressed_track_keys = {},
+      window_suppressed_track_keys = {},
       active_backends = {},
       reconcile_key = nil,
     }
@@ -50,6 +51,7 @@ local function ensure_state(bufnr)
   end
   fd.extmarks = fd.extmarks or new_extmark_groups()
   fd.suppressed_track_keys = fd.suppressed_track_keys or {}
+  fd.window_suppressed_track_keys = fd.window_suppressed_track_keys or {}
   fd.active_backends = fd.active_backends or {}
   return fd
 end
@@ -258,6 +260,14 @@ local function key_set_key(keys)
 end
 
 local function cursor_for_buf(bufnr)
+  local current = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_is_valid(current) and vim.api.nvim_win_get_buf(current) == bufnr then
+    local ok, cursor = pcall(vim.api.nvim_win_get_cursor, current)
+    if ok and cursor ~= nil then
+      return cursor[1] - 1, cursor[2]
+    end
+  end
+
   local win = vim.fn.bufwinid(bufnr)
   if win == -1 or not vim.api.nvim_win_is_valid(win) then
     return nil, nil
@@ -393,65 +403,12 @@ local function build_node_plan(bufnr, view)
   }
 end
 
-local function window_text_width(winid)
-  local info = vim.fn.getwininfo(winid)[1] or {}
-  local textoff = tonumber(info.textoff) or 0
-  return math.max(1, vim.api.nvim_win_get_width(winid) - textoff)
-end
-
 local function source_prefix_display_width(bufnr, row, col)
   if row == nil or col == nil or col <= 0 or not vim.api.nvim_buf_is_valid(bufnr) then
     return 0
   end
   local line = source_line(bufnr, row)
   return math.max(0, vim.fn.strdisplaywidth(line:sub(1, col)))
-end
-
-local function source_row_display_width(bufnr, row, winid)
-  if row == nil or not vim.api.nvim_buf_is_valid(bufnr) then
-    return 0
-  end
-  local line = source_line(bufnr, row)
-  local width = 0
-  if winid ~= nil and vim.api.nvim_win_is_valid(winid) then
-    local ok = pcall(vim.api.nvim_win_call, winid, function()
-      width = vim.fn.strdisplaywidth(line)
-    end)
-    if ok then
-      return width
-    end
-  end
-  return vim.fn.strdisplaywidth(line)
-end
-
-local function isolated_slot_wrap_unsafe_in_win(bufnr, plan, winid)
-  if
-    plan == nil
-    or plan.view == nil
-    or plan.block_shape ~= "isolated"
-    or not vim.api.nvim_win_is_valid(winid)
-    or vim.api.nvim_win_get_buf(winid) ~= bufnr
-    or vim.wo[winid].wrap ~= true
-  then
-    return false
-  end
-
-  local text_width = window_text_width(winid)
-  for row = plan.view.row, plan.view.end_row do
-    if source_row_display_width(bufnr, row, winid) > text_width then
-      return true
-    end
-  end
-  return false
-end
-
-local function isolated_slot_wrap_unsafe(bufnr, plan)
-  for _, winid in ipairs(vim.fn.win_findbuf(bufnr)) do
-    if isolated_slot_wrap_unsafe_in_win(bufnr, plan, winid) then
-      return true
-    end
-  end
-  return false
 end
 
 local function placement_backend_for_plan(bufnr, plan)
@@ -465,10 +422,10 @@ local function placement_backend_for_plan(bufnr, plan)
     return "slot"
   end
 
-  if isolated_slot_wrap_unsafe(bufnr, plan) then
-    return "fold_grid"
+  if placement.available("window_node_slot") then
+    return "window_node_slot"
   end
-  return "slot"
+  return "source"
 end
 
 local function fragments_overlap(a, b)
@@ -606,7 +563,7 @@ end
 local function source_reveal_keys(node_plans)
   local keys = {}
   for _, plan in ipairs(node_plans) do
-    if plan.source_reveal then
+    if plan.source_reveal or plan.placement_backend == "source" then
       add_key(keys, plan.view.key)
     end
   end
@@ -645,6 +602,9 @@ local function active_backend_for_plan(plan, suppressed_keys)
     return nil
   end
   if suppressed_keys ~= nil and suppressed_keys[plan.view.key] == true then
+    return "source"
+  end
+  if plan.placement_backend == "source" then
     return "source"
   end
   return plan.placement_backend or "slot"
@@ -693,7 +653,17 @@ local function build_projection_plan(bufnr, snapshots, config)
   local suppressed_keys = {}
   merge_keys(suppressed_keys, source_keys)
   local cursor_keys, collision_key = collision_keys(bufnr, node_plans, config or {})
-  merge_keys(suppressed_keys, cursor_keys)
+  local window_suppressed_keys = {}
+  -- TODO(window-node-slot): inline and non-isolated paths still use the
+  -- buffer-scoped suppression model during the isolated-block migration.
+  for key in pairs(cursor_keys) do
+    local node_plan = plans_by_key[key]
+    if node_plan ~= nil and node_plan.placement_backend == "window_node_slot" then
+      add_key(window_suppressed_keys, key)
+    else
+      add_key(suppressed_keys, key)
+    end
+  end
   local plan = {
     views = views,
     node_plans = node_plans,
@@ -701,8 +671,16 @@ local function build_projection_plan(bufnr, snapshots, config)
     source_reveal_keys = source_keys,
     collision_keys = cursor_keys,
     suppressed_keys = suppressed_keys,
+    window_suppressed_keys = window_suppressed_keys,
+    conceal_in_normal = config and config.conceal_in_normal == true,
   }
-  plan.key = collision_key .. "|" .. key_set_key(suppressed_keys) .. "|" .. backend_set_key(plan)
+  plan.key = collision_key
+    .. "|"
+    .. key_set_key(suppressed_keys)
+    .. "|"
+    .. key_set_key(window_suppressed_keys)
+    .. "|"
+    .. backend_set_key(plan)
   return plan
 end
 
@@ -1048,7 +1026,9 @@ end
 
 local function render_node_projection(bufnr, plan, extmarks)
   if plan.view.object.inline ~= true and plan.block_shape == "isolated" then
-    render_isolated_projection(bufnr, plan, extmarks)
+    if plan.placement_backend == "slot" then
+      render_isolated_projection(bufnr, plan, extmarks)
+    end
     return
   end
 
@@ -1056,14 +1036,14 @@ local function render_node_projection(bufnr, plan, extmarks)
   render_node_slot(bufnr, plan, extmarks)
 end
 
-local function fold_grid_intent_for_plan(plan)
+local function placement_intent_for_plan(plan, projection_plan)
   if
     plan == nil
     or plan.view == nil
     or plan.view.object == nil
     or plan.view.object.inline == true
     or plan.block_shape ~= "isolated"
-    or plan.placement_backend ~= "fold_grid"
+    or plan.placement_backend ~= "window_node_slot"
     or plan.view.asset == nil
     or plan.view.ref == nil
   then
@@ -1074,15 +1054,17 @@ local function fold_grid_intent_for_plan(plan)
     key = plan.view.key,
     ref = plan.view.ref,
     asset = plan.view.asset,
+    backend = "window_node_slot",
     display_role = "block",
     block_role = "isolated",
+    conceal_in_normal = projection_plan and projection_plan.conceal_in_normal == true,
   }
 end
 
-local function fold_grid_plan_keys(plan)
+local function placement_plan_keys(plan)
   local keys = {}
   for _, node_plan in ipairs(plan.node_plans or {}) do
-    if fold_grid_intent_for_plan(node_plan) ~= nil and not plan.suppressed_keys[node_plan.view.key] then
+    if placement_intent_for_plan(node_plan, plan) ~= nil and not plan.suppressed_keys[node_plan.view.key] then
       add_key(keys, node_plan.view.key)
     end
   end
@@ -1094,13 +1076,13 @@ local function render_track_keys(bufnr, fd, plan, keys)
     for _, key in ipairs(sorted_keys(keys)) do
       clear_artifacts_for_track_key(bufnr, fd, key)
       local node_plan = plan.plans_by_key[key]
-      local fold_grid_intent = fold_grid_intent_for_plan(node_plan)
-      if fold_grid_intent ~= nil and not plan.suppressed_keys[key] then
-        placement.sync(bufnr, fold_grid_intent)
+      local placement_intent = placement_intent_for_plan(node_plan, plan)
+      if placement_intent ~= nil and not plan.suppressed_keys[key] then
+        placement.sync(bufnr, placement_intent)
       else
         placement.close_key(bufnr, key)
       end
-      if node_plan ~= nil and fold_grid_intent == nil and not plan.suppressed_keys[key] then
+      if node_plan ~= nil and placement_intent == nil and not plan.suppressed_keys[key] then
         render_node_projection(bufnr, node_plan, fd.extmarks)
       end
     end
@@ -1128,7 +1110,7 @@ local function repair_keys_for_event(event, plan)
   return keys
 end
 
-function M.uses_fold_grid(bufnr, snapshot)
+function M.uses_window_node_slot(bufnr, snapshot)
   bufnr = normalize_bufnr(bufnr)
   local view = view_from_snapshot(bufnr, snapshot)
   if view == nil then
@@ -1136,7 +1118,7 @@ function M.uses_fold_grid(bufnr, snapshot)
   end
   local plan = build_node_plan(bufnr, view)
   plan.placement_backend = placement_backend_for_plan(bufnr, plan)
-  return plan.placement_backend == "fold_grid"
+  return plan.placement_backend == "window_node_slot"
 end
 
 function M.on_tracker_repair(event, config)
@@ -1151,24 +1133,27 @@ function M.on_tracker_repair(event, config)
   if event.initial == true then
     clear_all_artifacts(bufnr, fd)
     render_track_keys(bufnr, fd, plan, all_plan_keys(plan.node_plans))
-    placement.reconcile(bufnr, fold_grid_plan_keys(plan))
+    placement.reconcile(bufnr, placement_plan_keys(plan))
   else
     local keys = repair_keys_for_event(event, plan)
     merge_keys(keys, backend_changed_keys(fd, plan))
     merge_keys(keys, fd.suppressed_track_keys)
     merge_keys(keys, plan.suppressed_keys)
+    merge_keys(keys, fd.window_suppressed_track_keys)
+    merge_keys(keys, plan.window_suppressed_keys)
     render_track_keys(bufnr, fd, plan, keys)
 
     -- A repair can move a TrackRef without changing formula identity or rendered
-    -- assets. Fold-grid rows are materialized projection geometry, so refresh
+    -- assets. Window node slots are materialized projection geometry, so refresh
     -- them from the live TrackView even when no render-trigger key was emitted.
-    local fold_grid_keys = fold_grid_plan_keys(plan)
-    if next(fold_grid_keys) ~= nil then
-      placement.refresh_geometry(bufnr, { keys = fold_grid_keys })
+    local placement_keys = placement_plan_keys(plan)
+    if next(placement_keys) ~= nil then
+      placement.refresh_geometry(bufnr, { keys = placement_keys })
     end
   end
 
   fd.suppressed_track_keys = plan.suppressed_keys
+  fd.window_suppressed_track_keys = plan.window_suppressed_keys
   commit_active_backends(fd, plan)
   fd.reconcile_key = plan.key
 end
@@ -1185,8 +1170,11 @@ function M.repair_tracks(bufnr, refs, config)
   merge_keys(keys, backend_changed_keys(fd, plan))
   merge_keys(keys, fd.suppressed_track_keys)
   merge_keys(keys, plan.suppressed_keys)
+  merge_keys(keys, fd.window_suppressed_track_keys)
+  merge_keys(keys, plan.window_suppressed_keys)
   render_track_keys(bufnr, fd, plan, keys)
   fd.suppressed_track_keys = plan.suppressed_keys
+  fd.window_suppressed_track_keys = plan.window_suppressed_keys
   commit_active_backends(fd, plan)
   fd.reconcile_key = plan.key
 end
@@ -1207,8 +1195,11 @@ function M.sync_cursor(bufnr, config)
   merge_keys(keys, backend_changed_keys(fd, plan))
   merge_keys(keys, fd.suppressed_track_keys)
   merge_keys(keys, plan.suppressed_keys)
+  merge_keys(keys, fd.window_suppressed_track_keys)
+  merge_keys(keys, plan.window_suppressed_keys)
   render_track_keys(bufnr, fd, plan, keys)
   fd.suppressed_track_keys = plan.suppressed_keys
+  fd.window_suppressed_track_keys = plan.window_suppressed_keys
   commit_active_backends(fd, plan)
   fd.reconcile_key = plan.key
 end
@@ -1223,8 +1214,9 @@ function M.refresh(bufnr, config)
   local plan = build_projection_plan(bufnr, nil, config or {})
   clear_all_artifacts(bufnr, fd)
   render_track_keys(bufnr, fd, plan, all_plan_keys(plan.node_plans))
-  placement.reconcile(bufnr, fold_grid_plan_keys(plan))
+  placement.reconcile(bufnr, placement_plan_keys(plan))
   fd.suppressed_track_keys = plan.suppressed_keys
+  fd.window_suppressed_track_keys = plan.window_suppressed_keys
   commit_active_backends(fd, plan)
   fd.reconcile_key = plan.key
 end

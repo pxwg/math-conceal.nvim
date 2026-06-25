@@ -23,40 +23,6 @@ local function assert_true(label, value)
   end
 end
 
-local function mark_rows(marks)
-  local rows = {}
-  for _, mark in ipairs(marks) do
-    rows[#rows + 1] = tostring(mark[2])
-  end
-  return table.concat(rows, ",")
-end
-
-local function count_aux_kinds(marks)
-  local spans = 0
-  local conceal_lines = 0
-  for _, mark in ipairs(marks) do
-    local details = mark[4] or {}
-    if details.conceal ~= nil then
-      spans = spans + 1
-    end
-    if details.conceal_lines ~= nil then
-      conceal_lines = conceal_lines + 1
-    end
-  end
-  return spans, conceal_lines
-end
-
-local function count_display_conceals(marks)
-  local conceals = 0
-  for _, mark in ipairs(marks) do
-    local details = mark[4] or {}
-    if details.conceal ~= nil then
-      conceals = conceals + 1
-    end
-  end
-  return conceals
-end
-
 local function run()
   add_repo_to_path()
 
@@ -87,6 +53,7 @@ local function run()
   })
   vim.cmd("set columns=80 lines=16 nowrap")
 
+  local placement = require("math-conceal.image.placement")
   local state = require("math-conceal.image.state")
   local tracker = require("math-conceal.image.tracker")
   local formula_display = require("math-conceal.image.formula-display")
@@ -114,6 +81,9 @@ local function run()
   tracker.get_tracks = function(requested_bufnr)
     return requested_bufnr == bufnr and { track } or {}
   end
+  tracker.resolve_ref = function(ref)
+    return ref and ref.track_id == track.track_id and track or nil
+  end
   tracker.source_line = function(requested_bufnr, row)
     return (vim.api.nvim_buf_get_lines(requested_bufnr, row, row + 1, false) or { "" })[1] or ""
   end
@@ -136,32 +106,27 @@ local function run()
   formula_display.refresh(bufnr, { conceal_in_normal = false })
   local display_marks = vim.api.nvim_buf_get_extmarks(bufnr, state.display_ns, 0, -1, { details = true })
   local aux_marks = vim.api.nvim_buf_get_extmarks(bufnr, state.aux_ns, 0, -1, { details = true })
-  assert_eq("S>I display row count", #display_marks, 2)
-  assert_eq("S>I source rows carry first image rows", mark_rows(display_marks), "0,1")
-  local span_count, line_count = count_aux_kinds(aux_marks)
-  assert_eq("S>I uses one primary display conceal", count_display_conceals(display_marks), 1)
-  assert_eq("S>I primary conceal spans whole source range", display_marks[1][4].end_row, 3)
-  assert_eq("S>I primary conceal reaches source end col", display_marks[1][4].end_col, 3)
-  assert_eq("S>I uses no per-carrier aux range conceal", span_count, 0)
-  assert_eq("S>I surplus source rows use one conceal_lines range", line_count, 1)
-  assert_eq("S>I no tail virt_lines", display_marks[#display_marks][4].virt_lines, nil)
+  assert_eq("window node slot creates no display extmarks", #display_marks, 0)
+  assert_eq("window node slot creates no aux extmarks", #aux_marks, 0)
+
+  local surface = placement._state().window_node_slot.surfaces_by_win[vim.api.nvim_get_current_win()]
+  assert_true("window node slot surface exists", surface ~= nil)
+  local active = surface.placements[key]
+  assert_true("window node slot placement exists", active ~= nil)
+  assert_eq("S>I keeps image-height carrier prefix", #active.carrier_rows, 2)
+  assert_eq("S>I first carrier row", active.carrier_rows[1].row, 0)
+  assert_eq("S>I second carrier row", active.carrier_rows[2].row, 1)
+  assert_eq("S>I has no tail virt_lines", active.tail_count, 0)
+  assert_eq("S>I preserves source fragment column", active.prefix_cols, 2)
 
   set_asset(5)
   formula_display.refresh(bufnr, { conceal_in_normal = false })
-  display_marks = vim.api.nvim_buf_get_extmarks(bufnr, state.display_ns, 0, -1, { details = true })
-  aux_marks = vim.api.nvim_buf_get_extmarks(bufnr, state.aux_ns, 0, -1, { details = true })
-  assert_eq("S<I display row count", #display_marks, 4)
-  assert_eq("S<I all source rows carry image rows", mark_rows(display_marks), "0,1,2,3")
-  span_count, line_count = count_aux_kinds(aux_marks)
-  assert_eq("S<I uses one primary display conceal", count_display_conceals(display_marks), 1)
-  assert_eq("S<I primary conceal spans whole source range", display_marks[1][4].end_row, 3)
-  assert_eq("S<I primary conceal reaches source end col", display_marks[1][4].end_col, 3)
-  assert_eq("S<I uses no per-carrier aux range conceal", span_count, 0)
-  assert_eq("S<I no source row uses conceal_lines", line_count, 0)
-  local tail = display_marks[#display_marks][4].virt_lines or {}
-  assert_eq("S<I tail image rows are virt_lines", #tail, 1)
+  surface = placement._state().window_node_slot.surfaces_by_win[vim.api.nvim_get_current_win()]
+  active = surface.placements[key]
+  assert_eq("S<I keeps all source rows as carriers", #active.carrier_rows, 4)
+  assert_eq("S<I tail image rows are virt_lines", active.tail_count, 1)
 
-  assert_true("slot path uploads image placement", #terminal_calls >= 2)
+  assert_true("window node slot places terminal image", #terminal_calls >= 2)
   formula_display.detach(bufnr)
 end
 
@@ -171,5 +136,5 @@ if not ok then
   vim.cmd("cquit")
 end
 
-print("typst-display-isolated-slot-lines-ok")
+print("typst-display-window-node-slot-lines-ok")
 vim.cmd("qa!")
