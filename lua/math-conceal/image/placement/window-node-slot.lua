@@ -109,6 +109,24 @@ local function clear_slot_namespace_range(surface, view)
   pcall(vim.api.nvim_buf_clear_namespace, surface.bufnr, surface.ns, view.row, view.end_row + 1)
 end
 
+local function placement_extmarks_valid(surface, placement)
+  if surface == nil or placement == nil or not valid_buf(surface.bufnr) then
+    return false
+  end
+  local ids = placement.extmark_ids or {}
+  if #ids == 0 then
+    return false
+  end
+  for _, id in ipairs(ids) do
+    local mark = vim.api.nvim_buf_get_extmark_by_id(surface.bufnr, surface.ns, id, { details = true })
+    local details = mark[3] or {}
+    if mark[1] == nil or details.invalid == true then
+      return false
+    end
+  end
+  return true
+end
+
 local function redraw_surface_range(surface, start_row, end_row)
   if
     surface == nil
@@ -677,31 +695,53 @@ local function materialize_placement(surface, placement)
     return false, false
   end
 
-  clear_placement_extmarks(surface, placement)
-
   local view = track_view.for_ref(placement.ref, { require_valid = true })
   if view == nil then
+    if placement.signature == "invalid" and not placement.placed and #(placement.extmark_ids or {}) == 0 then
+      return false, false
+    end
     deactivate_placement(surface, placement)
+    local before = placement.signature
     placement.signature = "invalid"
-    return false, false
+    return false, before ~= placement.signature
   end
-  clear_slot_namespace_range(surface, view)
-  placement.extmark_ids = {}
 
   if source_revealed_in_window(surface, placement, view) then
     local before = placement.signature
+    local signature = layout_signature(placement, nil, true)
+    if before == signature and not placement.placed and #(placement.extmark_ids or {}) == 0 then
+      return true, false
+    end
     deactivate_placement(surface, placement)
-    placement.signature = layout_signature(placement, nil, true)
+    placement.signature = signature
     redraw_surface_range(surface, view.row, view.end_row)
     return true, before ~= placement.signature
   end
 
   local layout = build_layout(surface, placement, view)
   if layout == nil then
+    if placement.signature == "invalid" and not placement.placed and #(placement.extmark_ids or {}) == 0 then
+      return false, false
+    end
     deactivate_placement(surface, placement)
+    local before = placement.signature
     placement.signature = "invalid"
-    return false, false
+    return false, before ~= placement.signature
   end
+
+  local signature = layout_signature(placement, layout, false)
+  if placement.signature == signature and placement.placed and placement_extmarks_valid(surface, placement) then
+    placement.source_start_row = layout.source_start_row
+    placement.source_end_row = layout.source_end_row
+    placement.carrier_rows = layout.carrier_rows
+    placement.tail_count = layout.tail_count
+    placement.prefix_cols = layout.prefix_cols
+    return true, false
+  end
+
+  clear_placement_extmarks(surface, placement)
+  clear_slot_namespace_range(surface, view)
+  placement.extmark_ids = {}
 
   if placement.placement_id == nil then
     placement.placement_id = state.allocate_placement_id(placement.bufnr)
@@ -733,7 +773,7 @@ local function materialize_placement(surface, placement)
   placement.prefix_cols = layout.prefix_cols
 
   local before = placement.signature
-  placement.signature = layout_signature(placement, layout, false)
+  placement.signature = signature
   return true, before ~= placement.signature
 end
 

@@ -342,9 +342,15 @@ local function refresh_context_extmarks(bufnr, state)
     unit.index = idx
     set_context_extmark(bufnr, unit)
   end
+  state.context_units_synced_tick = nil
 end
 
 local function sync_context_units(bufnr, state)
+  local tick = vim.b[bufnr] and vim.b[bufnr].changedtick or nil
+  if tick ~= nil and state.context_units_synced_tick == tick then
+    return state.context_units_sync_invalid == true
+  end
+
   local invalid = false
   for _, unit in ipairs(state.context_units or {}) do
     if unit.index ~= nil then
@@ -360,6 +366,8 @@ local function sync_context_units(bufnr, state)
       end
     end
   end
+  state.context_units_synced_tick = tick
+  state.context_units_sync_invalid = invalid
   return invalid
 end
 
@@ -518,9 +526,14 @@ local function sync_track(bufnr, track)
 end
 
 local function sync_tracks(bufnr, state)
+  local tick = vim.b[bufnr] and vim.b[bufnr].changedtick or nil
+  if tick ~= nil and state.tracks_synced_tick == tick then
+    return
+  end
   for _, track in pairs(state.tracks) do
     sync_track(bufnr, track)
   end
+  state.tracks_synced_tick = tick
 end
 
 local function has_dirty_track(state)

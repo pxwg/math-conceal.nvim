@@ -112,6 +112,8 @@ M._buffers = {}
 
 local augroup_name = "math-conceal.image"
 local augroup_id = nil
+local cursor_sync_pending = {}
+local cursor_sync_generation = {}
 
 local function normalize_bufnr(bufnr)
   if bufnr == nil or bufnr == 0 then
@@ -372,6 +374,8 @@ end
 
 function M.disable_buf(bufnr)
   bufnr = normalize_bufnr(bufnr)
+  cursor_sync_pending[bufnr] = nil
+  cursor_sync_generation[bufnr] = (cursor_sync_generation[bufnr] or 0) + 1
   M._buffers[bufnr] = nil
   projection.detach(bufnr)
   tracker.detach(bufnr)
@@ -410,6 +414,35 @@ local function detach_all()
   for _, bufnr in ipairs(attached_bufnrs()) do
     M.disable_buf(bufnr)
   end
+end
+
+local function sync_cursor_now(bufnr)
+  if M._buffers[bufnr] == nil then
+    return
+  end
+  local mode = vim.api.nvim_get_mode().mode
+  tracker.sync_cursor_nested(bufnr, {
+    enabled = not (M.config.conceal_in_normal == true and mode == "n"),
+  })
+  projection.sync_cursor(bufnr, { preview_immediate = true })
+end
+
+local function schedule_cursor_sync(bufnr)
+  if cursor_sync_pending[bufnr] == true then
+    return
+  end
+  cursor_sync_pending[bufnr] = true
+  local generation = (cursor_sync_generation[bufnr] or 0) + 1
+  cursor_sync_generation[bufnr] = generation
+  vim.defer_fn(function()
+    if cursor_sync_generation[bufnr] ~= generation then
+      return
+    end
+    cursor_sync_pending[bufnr] = nil
+    if valid_loaded_buffer(bufnr) then
+      sync_cursor_now(bufnr)
+    end
+  end, 16)
 end
 
 local function setup_autocmds()
@@ -451,11 +484,13 @@ local function setup_autocmds()
     desc = "sync math-conceal image cursor preview",
     callback = function(ev)
       if M._buffers[ev.buf] ~= nil then
-        local mode = vim.api.nvim_get_mode().mode
-        tracker.sync_cursor_nested(ev.buf, {
-          enabled = not (M.config.conceal_in_normal == true and mode == "n"),
-        })
-        projection.sync_cursor(ev.buf, { preview_immediate = true })
+        if ev.event == "ModeChanged" then
+          cursor_sync_pending[ev.buf] = nil
+          cursor_sync_generation[ev.buf] = (cursor_sync_generation[ev.buf] or 0) + 1
+          sync_cursor_now(ev.buf)
+        else
+          schedule_cursor_sync(ev.buf)
+        end
       end
     end,
   })
@@ -542,6 +577,8 @@ function M.setup(cfg)
     error("math-conceal image styling_type must be one of colorscheme, simple, none")
   end
   M._buffers = {}
+  cursor_sync_pending = {}
+  cursor_sync_generation = {}
   setup_prelude()
   state.refresh_cell_px_size(M.config)
   build_filetype_index()

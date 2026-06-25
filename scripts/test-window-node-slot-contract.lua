@@ -213,6 +213,12 @@ local function run()
   assert_true("window A materialize force-redraws source range", saw_forced_redraw(win_a, track.row, track.end_row + 1))
   assert_true("window B materialize force-redraws source range", saw_forced_redraw(win_b, track.row, track.end_row + 1))
 
+  local redraw_count_before_noop = #redraw_calls
+  local terminal_count_before_noop = #terminal_calls
+  placement.refresh_geometry(bufnr, { keys = { [key] = true } })
+  assert_eq("same-signature refresh does not force redraw", #redraw_calls, redraw_count_before_noop)
+  assert_eq("same-signature refresh does not replace terminal placement", #terminal_calls, terminal_count_before_noop)
+
   local short_key = "track:window-node-slot-short"
   local short_intent = vim.deepcopy(intent)
   short_intent.key = short_key
