@@ -344,6 +344,16 @@ local function run()
   assert_eq("window A restore places again", active_a.placed, true)
   assert_true("window A restore allocates placement id", active_a.placement_id ~= nil)
 
+  local terminal_count_before_uploaded_asset = #terminal_calls
+  intent.asset.image_id = 0x223377
+  intent.asset.path = "/tmp/window-node-slot-contract-uploaded.png"
+  intent.asset.render_key = "asset:window-node-slot-uploaded"
+  intent.asset.uploaded = true
+  assert_true("uploaded asset sync succeeds", placement.sync(bufnr, intent))
+  for index = terminal_count_before_uploaded_asset + 1, #terminal_calls do
+    assert_true("uploaded asset does not resend image data", terminal_calls[index].kind ~= "send_image")
+  end
+
   placement.close_all(bufnr)
   vim.api.nvim__redraw = original_redraw
 end

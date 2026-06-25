@@ -58,6 +58,42 @@ local function window_text_width(winid)
   return math.max(1, vim.api.nvim_win_get_width(winid) - textoff)
 end
 
+local function window_view_signature(surface)
+  if surface == nil or not valid_win(surface.win) or not valid_buf(surface.bufnr) then
+    return nil
+  end
+  local ok, signature = pcall(vim.api.nvim_win_call, surface.win, function()
+    if vim.api.nvim_win_get_buf(surface.win) ~= surface.bufnr then
+      return nil
+    end
+    local info = vim.fn.getwininfo(surface.win)[1] or {}
+    local view = vim.fn.winsaveview()
+    local top = math.max(0, (tonumber(vim.fn.line("w0")) or 1) - 1)
+    local bot = math.max(top, (tonumber(vim.fn.line("w$")) or top + 1) - 1)
+    return table.concat({
+      tostring(top),
+      tostring(bot),
+      tostring(view.topfill or 0),
+      tostring(view.leftcol or 0),
+      tostring(view.skipcol or 0),
+      tostring(vim.api.nvim_win_get_width(surface.win)),
+      tostring(vim.api.nvim_win_get_height(surface.win)),
+      tostring(tonumber(info.textoff) or 0),
+      tostring(vim.wo[surface.win].wrap and 1 or 0),
+      tostring(vim.wo[surface.win].linebreak and 1 or 0),
+      tostring(vim.wo[surface.win].breakindent and 1 or 0),
+      tostring(vim.wo[surface.win].showbreak or ""),
+      tostring(vim.wo[surface.win].number and 1 or 0),
+      tostring(vim.wo[surface.win].relativenumber and 1 or 0),
+      tostring(vim.wo[surface.win].signcolumn or ""),
+    }, "|")
+  end)
+  if not ok then
+    return nil
+  end
+  return signature
+end
+
 local function active_windows_for_buf(bufnr)
   local wins = {}
   for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
@@ -639,10 +675,16 @@ local function ensure_terminal_placement(placement)
   if placement.placement_id == nil then
     placement.placement_id = state.allocate_placement_id(placement.bufnr)
   end
-  if type(placement.path) == "string" and placement.path ~= "" and type(terminal.send_image) == "function" then
+  if
+    placement.image_uploaded ~= true
+    and type(placement.path) == "string"
+    and placement.path ~= ""
+    and type(terminal.send_image) == "function"
+  then
     if not terminal.send_image(placement.path, placement.image_id) then
       return false
     end
+    placement.image_uploaded = true
   end
   return terminal.place_image(placement.image_id, placement.placement_id, placement.cols, placement.rows, { C = 1 })
 end
@@ -650,6 +692,7 @@ end
 local function update_placement_from_intent(surface, intent)
   local placement = surface.placements[intent.key]
   local image_changed = false
+  local old_image_id = placement and placement.image_id or nil
   if placement == nil then
     placement = {
       bufnr = surface.bufnr,
@@ -677,6 +720,8 @@ local function update_placement_from_intent(surface, intent)
   placement.ref = vim.deepcopy(intent.ref)
   placement.image_id = intent.asset.image_id
   placement.path = intent.asset.path
+  placement.image_uploaded = intent.asset.uploaded == true
+    or (old_image_id == intent.asset.image_id and placement.image_uploaded == true)
   placement.cols = intent.cols
   placement.rows = intent.rows
   placement.render_key = intent.render_key
@@ -787,6 +832,7 @@ local function materialize_placement(surface, placement, opts)
     placement.signature = "invalid"
     return false, false
   end
+  surface.repaint_signature = window_view_signature(surface)
 
   redraw_surface_range(surface, layout.source_start_row, layout.source_end_row)
 
@@ -872,15 +918,24 @@ local function repaint_surface(surface, keys)
     end
   end
 
-  if keys ~= nil then
-    for key in pairs(keys) do
-      repaint(surface.placements[key])
+  local function run()
+    if keys ~= nil then
+      for key in pairs(keys) do
+        repaint(surface.placements[key])
+      end
+      return
     end
-    return
+    for _, placement in pairs(surface.placements or {}) do
+      repaint(placement)
+    end
   end
-  for _, placement in pairs(surface.placements or {}) do
-    repaint(placement)
+
+  if type(terminal.batch) == "function" then
+    terminal.batch(run)
+  else
+    run()
   end
+  surface.repaint_signature = window_view_signature(surface)
 end
 
 local function schedule_repaint(surface, key)
@@ -910,6 +965,18 @@ local function schedule_repaint(surface, key)
   end)
 end
 
+local function schedule_viewport_repaint(surface)
+  if surface == nil or surface.closed then
+    return
+  end
+  local signature = window_view_signature(surface)
+  if signature == nil or surface.repaint_signature == signature then
+    return
+  end
+  surface.repaint_signature = signature
+  schedule_repaint(surface)
+end
+
 local function refresh_surface(surface, opts)
   if surface == nil or surface.closed then
     return false
@@ -931,7 +998,7 @@ local function setup_decoration_provider()
     on_win = function(_, winid, bufnr)
       local surface = surfaces_by_win[winid]
       if surface ~= nil and surface.bufnr == bufnr then
-        schedule_repaint(surface)
+        schedule_viewport_repaint(surface)
       end
       return false
     end,
@@ -1066,7 +1133,7 @@ function M.setup()
       desc = "repaint math-conceal window node slot placements",
       callback = function()
         for _, surface in pairs(surfaces_by_win) do
-          schedule_repaint(surface)
+          schedule_viewport_repaint(surface)
         end
       end,
     })

@@ -5,6 +5,8 @@ local M = {}
 local is_tmux = vim.env.TMUX ~= nil
 local stdout = nil
 local pending = {}
+local batch_depth = 0
+local unpack = table.unpack or unpack
 
 local function tmux_escape(message)
   return "\x1bPtmux;" .. message:gsub("\x1b", "\x1b\x1b") .. "\x1b\\"
@@ -40,13 +42,37 @@ function M.flush()
   write(data)
 end
 
+local function flush_if_unbatched()
+  if batch_depth == 0 then
+    M.flush()
+  end
+end
+
+function M.batch(fn)
+  if type(fn) ~= "function" then
+    return nil
+  end
+
+  batch_depth = batch_depth + 1
+  local results = { pcall(fn) }
+  local ok = table.remove(results, 1)
+  batch_depth = math.max(0, batch_depth - 1)
+  if batch_depth == 0 then
+    M.flush()
+  end
+  if not ok then
+    error(results[1], 0)
+  end
+  return unpack(results)
+end
+
 function M.send_image(path, image_id)
   if type(path) ~= "string" or path == "" then
     return false
   end
 
   queue("q=2,f=100,t=t,i=" .. image_id .. ";" .. vim.base64.encode(path))
-  M.flush()
+  flush_if_unbatched()
   return true
 end
 
@@ -72,7 +98,7 @@ function M.place_image(image_id, placement_id, cols, rows, opts)
     parts[#parts + 1] = "z=" .. tostring(opts.z)
   end
   queue(table.concat(parts, ","))
-  M.flush()
+  flush_if_unbatched()
   return true
 end
 
@@ -89,7 +115,7 @@ function M.delete_placement(image_id, placement_id)
   end
   queue("q=2,a=d,d=i,i=" .. image_id .. ",p=" .. placement_id)
   state.release_placement_id(placement_id)
-  M.flush()
+  flush_if_unbatched()
 end
 
 function M.delete_image(image_id)
@@ -98,7 +124,7 @@ function M.delete_image(image_id)
   end
   queue("q=2,a=d,d=i,i=" .. image_id)
   state.release_image_id(image_id)
-  M.flush()
+  flush_if_unbatched()
 end
 
 function M.delete(image_id)

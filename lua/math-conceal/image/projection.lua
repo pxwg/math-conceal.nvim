@@ -504,6 +504,7 @@ function M.handle_service_response(bufnr, resp, meta)
     end
     return
   end
+  candidate.uploaded = true
 
   local old = projection.visible_asset
   projection.visible_asset = candidate
