@@ -110,6 +110,8 @@ local function run()
     "  a",
     "  $",
     "done",
+    "abcdefgh",
+    "finished",
   })
   vim.o.columns = 100
   vim.o.lines = 24
@@ -161,9 +163,28 @@ local function run()
       isolated = true,
     },
   }
+  local inline_virtual_track = {
+    bufnr = bufnr,
+    tracker_generation = 1,
+    generation = 1,
+    track_id = 3,
+    id = 3,
+    kind = "typst",
+    state = "valid",
+    row = 9,
+    col = 0,
+    end_row = 9,
+    end_col = 8,
+    source_display_kind = "block",
+    source_facts = {
+      inline = false,
+      isolated = true,
+    },
+  }
   local tracks_by_id = {
     [track.track_id] = track,
     [short_track.track_id] = short_track,
+    [inline_virtual_track.track_id] = inline_virtual_track,
   }
   local source_line_calls = 0
   tracker.source_line = function(requested_bufnr, row)
@@ -251,6 +272,38 @@ local function run()
   assert_eq("local remeasure keeps delimiter raw height clean", short_active_a.carrier_rows[1].raw_height, 1)
   assert_eq("source-aligned slot preserves source fragment column", short_active_a.prefix_cols, 2)
   placement.close_key(bufnr, short_key)
+
+  local inline_virtual_key = "track:window-node-slot-inline-virtual"
+  local inline_virtual_intent = vim.deepcopy(intent)
+  inline_virtual_intent.key = inline_virtual_key
+  inline_virtual_intent.ref.track_id = inline_virtual_track.track_id
+  inline_virtual_intent.ref.id = inline_virtual_track.id
+  inline_virtual_intent.asset.image_id = 0x223366
+  inline_virtual_intent.asset.path = "/tmp/window-node-slot-contract-inline-virtual.png"
+  inline_virtual_intent.asset.rows = 2
+  inline_virtual_intent.asset.render_key = "asset:window-node-slot-inline-virtual"
+  inline_virtual_intent.align = "source"
+
+  local external_ns = vim.api.nvim_create_namespace("window-node-slot-contract.external-inline")
+  vim.api.nvim_buf_set_extmark(bufnr, external_ns, inline_virtual_track.row, 4, {
+    virt_text = { { string.rep("x", text_width(win_a)), "" } },
+    virt_text_pos = "inline",
+  })
+  local inline_oracle = vim.api.nvim_win_text_height(win_a, {
+    start_row = inline_virtual_track.row,
+    end_row = inline_virtual_track.row,
+    start_vcol = 0,
+  })
+  assert_true("inline virtual text oracle wraps row", inline_oracle.all > 1)
+  assert_true("inline virtual text sync succeeds", placement.sync(bufnr, inline_virtual_intent))
+  local inline_active_a = surface_a.placements[inline_virtual_key]
+  assert_eq(
+    "window node slot consumes tracker-view oracle row height",
+    inline_active_a.carrier_rows[1].raw_height,
+    inline_oracle.all
+  )
+  assert_eq("oracle-height carrier consumes whole image", inline_active_a.tail_count, 0)
+  placement.close_key(bufnr, inline_virtual_key)
 
   local initial_a_placement_id = active_a.placement_id
   intent.asset.cols = 7

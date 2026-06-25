@@ -419,44 +419,6 @@ local function source_revealed_in_window(surface, placement, view)
   return cursor_collides(surface, view)
 end
 
-local function source_row_display_width(surface, row)
-  local line = source_line(surface.bufnr, row)
-  local ok, width = pcall(vim.api.nvim_win_call, surface.win, function()
-    return vim.fn.strdisplaywidth(line)
-  end)
-  if not ok or type(width) ~= "number" then
-    return math.max(0, vim.fn.strdisplaywidth(line))
-  end
-  return math.max(0, width)
-end
-
-local function source_row_height(surface, row, text_width)
-  if not vim.wo[surface.win].wrap then
-    return 1
-  end
-  text_width = math.max(1, math.floor(tonumber(text_width) or 1))
-  local width = source_row_display_width(surface, row)
-  if width <= 0 then
-    return 1
-  end
-  return math.max(1, math.ceil(width / text_width))
-end
-
-local function wrap_row_byte_col(surface, row, start_vcol)
-  if start_vcol <= 0 then
-    return 0
-  end
-  local ok, col = pcall(vim.fn.virtcol2col, surface.win, row + 1, start_vcol + 1)
-  if not ok or type(col) ~= "number" or col < 1 then
-    return 0
-  end
-  return math.max(0, col - 1)
-end
-
-local function next_wrap_vcol(_, _, start_vcol, fallback_width)
-  return start_vcol + math.max(1, fallback_width or 1)
-end
-
 local function choose_carrier_count(raw_heights, image_rows)
   image_rows = math.max(1, math.floor(tonumber(image_rows) or 1))
   local carrier_count = 0
@@ -479,6 +441,12 @@ local function choose_carrier_count(raw_heights, image_rows)
   return carrier_count, carrier_height, math.max(0, image_rows - carrier_height)
 end
 
+local function clear_measurement_artifacts(surface, placement, view)
+  clear_placement_extmarks(surface, placement)
+  clear_slot_namespace_range(surface, view)
+  placement.extmark_ids = {}
+end
+
 local function build_layout(surface, placement, view)
   if view == nil or view.row == nil or view.end_row == nil or view.end_row < view.row then
     return nil
@@ -489,9 +457,14 @@ local function build_layout(surface, placement, view)
   end
 
   local text_width = window_text_width(surface.win)
+  local measured = track_view.measure_source_layout(view, surface.win, { require_valid = true })
+  if measured == nil then
+    return nil
+  end
+
   local raw_heights = {}
-  for row = view.row, view.end_row do
-    raw_heights[#raw_heights + 1] = source_row_height(surface, row, text_width)
+  for _, row_layout in ipairs(measured.rows or {}) do
+    raw_heights[#raw_heights + 1] = row_layout.screen_height
   end
   local carrier_count, carrier_height, tail_count = choose_carrier_count(raw_heights, placement.rows)
   if carrier_count == 0 then
@@ -500,9 +473,11 @@ local function build_layout(surface, placement, view)
 
   local carrier_rows = {}
   for index = 1, carrier_count do
+    local row_layout = measured.rows[index]
     carrier_rows[#carrier_rows + 1] = {
-      row = view.row + index - 1,
+      row = row_layout.row,
       raw_height = raw_heights[index],
+      segments = row_layout.segments or {},
     }
   end
   local source_prefix_cols = source_prefix_display_width(surface.bufnr, view.row, view.col)
@@ -581,13 +556,12 @@ local function render_collapsed_tail(surface, layout, ids)
 end
 
 local function render_carrier_overlays(surface, placement, layout, ids)
-  local text_width = window_text_width(surface.win)
   local image_row = 1
   for _, carrier in ipairs(layout.carrier_rows) do
-    local start_vcol = 0
-    for _ = 1, carrier.raw_height do
+    for index = 1, carrier.raw_height do
       if image_row <= placement.rows then
-        local byte_col = wrap_row_byte_col(surface, carrier.row, start_vcol)
+        local segment = carrier.segments and carrier.segments[index] or nil
+        local byte_col = segment and segment.byte_col or 0
         ids[#ids + 1] = add_extmark(surface, carrier.row, byte_col, {
           virt_text = placeholder_line(placement, image_row),
           virt_text_pos = "overlay",
@@ -599,7 +573,6 @@ local function render_carrier_overlays(surface, placement, layout, ids)
         })
       end
       image_row = image_row + 1
-      start_vcol = next_wrap_vcol(surface, carrier.row, start_vcol, text_width)
     end
   end
 end
@@ -651,6 +624,13 @@ local function layout_signature(placement, layout, revealed)
   }
   for _, carrier in ipairs(layout.carrier_rows or {}) do
     parts[#parts + 1] = tostring(carrier.row) .. "@" .. tostring(carrier.raw_height)
+    for _, segment in ipairs(carrier.segments or {}) do
+      parts[#parts + 1] = table.concat({
+        tostring(segment.start_vcol or 0),
+        tostring(segment.end_vcol or 0),
+        tostring(segment.byte_col or 0),
+      }, ",")
+    end
   end
   return table.concat(parts, "|")
 end
@@ -669,6 +649,7 @@ end
 
 local function update_placement_from_intent(surface, intent)
   local placement = surface.placements[intent.key]
+  local image_changed = false
   if placement == nil then
     placement = {
       bufnr = surface.bufnr,
@@ -677,8 +658,21 @@ local function update_placement_from_intent(surface, intent)
     }
     surface.placements[intent.key] = placement
   elseif placement.image_id ~= nil and placement.image_id ~= intent.asset.image_id then
+    image_changed = true
     deactivate_placement(surface, placement)
   end
+
+  local layout_input_changed = placement.rows ~= nil
+    and (
+      placement.cols ~= intent.cols
+      or placement.rows ~= intent.rows
+      or placement.render_key ~= intent.render_key
+      or placement.align ~= (intent.align or "source")
+    )
+  if placement.has_collapsed_tail == true and layout_input_changed then
+    placement.clear_before_measure = true
+  end
+  placement.intent_changed = image_changed or layout_input_changed
 
   placement.ref = vim.deepcopy(intent.ref)
   placement.image_id = intent.asset.image_id
@@ -691,7 +685,8 @@ local function update_placement_from_intent(surface, intent)
   return placement
 end
 
-local function materialize_placement(surface, placement)
+local function materialize_placement(surface, placement, opts)
+  opts = opts or {}
   if surface == nil or surface.closed or placement == nil then
     return false, false
   end
@@ -727,6 +722,24 @@ local function materialize_placement(surface, placement)
     return true, before ~= placement.signature
   end
 
+  if
+    opts.clear_before_measure ~= true
+    and placement.clear_before_measure ~= true
+    and placement.intent_changed ~= true
+    and placement.signature ~= nil
+    and placement.placed == true
+    and placement.source_start_row == view.row
+    and placement.source_end_row == view.end_row
+    and placement_extmarks_valid(surface, placement)
+  then
+    return true, false
+  end
+
+  if opts.clear_before_measure == true or placement.clear_before_measure == true then
+    clear_measurement_artifacts(surface, placement, view)
+    placement.clear_before_measure = false
+  end
+
   local layout = build_layout(surface, placement, view)
   if layout == nil then
     if placement.signature == "invalid" and not placement.placed and #(placement.extmark_ids or {}) == 0 then
@@ -744,8 +757,10 @@ local function materialize_placement(surface, placement)
     placement.source_end_row = layout.source_end_row
     placement.carrier_rows = layout.carrier_rows
     placement.tail_count = layout.tail_count
+    placement.carrier_height = layout.carrier_height
     placement.prefix_cols = layout.prefix_cols
     placement.source_prefix_cols = layout.source_prefix_cols
+    placement.has_collapsed_tail = layout.collapsed_start_row <= layout.source_end_row
     return true, false
   end
 
@@ -780,25 +795,27 @@ local function materialize_placement(surface, placement)
   placement.source_end_row = layout.source_end_row
   placement.carrier_rows = layout.carrier_rows
   placement.tail_count = layout.tail_count
+  placement.carrier_height = layout.carrier_height
   placement.prefix_cols = layout.prefix_cols
   placement.source_prefix_cols = layout.source_prefix_cols
+  placement.has_collapsed_tail = layout.collapsed_start_row <= layout.source_end_row
 
   local before = placement.signature
   placement.signature = signature
   return true, before ~= placement.signature
 end
 
-local function materialize_surface_key(surface, key)
+local function materialize_surface_key(surface, key, opts)
   local intent = intents_by_buf[surface.bufnr] and intents_by_buf[surface.bufnr][key] or nil
   if intent == nil then
     close_window_placement(surface, key)
     return false, false
   end
   local placement = update_placement_from_intent(surface, intent)
-  return materialize_placement(surface, placement)
+  return materialize_placement(surface, placement, opts)
 end
 
-local function materialize_buf_key(bufnr, key)
+local function materialize_buf_key(bufnr, key, opts)
   local ok_any = false
   local changed = false
   local wins = active_windows_for_buf(bufnr)
@@ -808,7 +825,7 @@ local function materialize_buf_key(bufnr, key)
   for _, winid in ipairs(wins) do
     local surface = ensure_surface(winid, bufnr)
     if surface ~= nil then
-      local ok, did_change = materialize_surface_key(surface, key)
+      local ok, did_change = materialize_surface_key(surface, key, opts)
       ok_any = ok_any or ok
       changed = changed or did_change
     end
@@ -893,13 +910,13 @@ local function schedule_repaint(surface, key)
   end)
 end
 
-local function refresh_surface(surface)
+local function refresh_surface(surface, opts)
   if surface == nil or surface.closed then
     return false
   end
   local changed = false
   for key in pairs(intents_by_buf[surface.bufnr] or {}) do
-    local _, did_change = materialize_surface_key(surface, key)
+    local _, did_change = materialize_surface_key(surface, key, opts)
     changed = changed or did_change
   end
   return changed
@@ -992,7 +1009,7 @@ function M.refresh_buf(bufnr)
   for _, winid in ipairs(active_windows_for_buf(bufnr)) do
     local surface = ensure_surface(winid, bufnr)
     if surface ~= nil then
-      changed = refresh_surface(surface) or changed
+      changed = refresh_surface(surface, { clear_before_measure = true }) or changed
     end
   end
   return changed
@@ -1006,7 +1023,7 @@ function M.refresh_geometry(bufnr, opts)
   local changed = false
   for key in pairs(records) do
     if only_keys == nil or only_keys[key] == true then
-      local _, did_change = materialize_buf_key(bufnr, key)
+      local _, did_change = materialize_buf_key(bufnr, key, opts)
       changed = changed or did_change
     end
   end
@@ -1026,7 +1043,7 @@ function M.refresh_all()
     surfaces[#surfaces + 1] = surface
   end
   for _, surface in ipairs(surfaces) do
-    refresh_surface(surface)
+    refresh_surface(surface, { clear_before_measure = true })
   end
 end
 
@@ -1095,7 +1112,7 @@ function M.setup()
     desc = "remeasure math-conceal window node slots after window option changes",
     callback = function()
       local winid = vim.api.nvim_get_current_win()
-      refresh_surface(surfaces_by_win[winid])
+      refresh_surface(surfaces_by_win[winid], { clear_before_measure = true })
     end,
   })
   vim.api.nvim_create_autocmd("ColorScheme", {
