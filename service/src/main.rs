@@ -11,8 +11,9 @@ use std::thread;
 use compiler::Compiler;
 use latex::LatexRenderer;
 use protocol::{
-    ClassifyFlowRequest, FlowClassifyResponse, FlowNodeRequest, FormulaNodeRequest,
-    FormulaRenderResponse, IncomingMessage, OutgoingMessage, RenderFormulasRequest,
+    CodeFlowNodeRequest, CodeFlowRenderResponse, CompileStatus, DiagnosticInfo, FormulaNodeRequest,
+    FormulaRenderResponse, IncomingMessage, OutgoingMessage, RenderCodeFlowRequest,
+    RenderFormulasRequest,
 };
 
 const MAX_COMPILERS: usize = 16;
@@ -24,8 +25,8 @@ struct CachedCompiler {
 }
 
 #[derive(Clone)]
-struct FlowTask {
-    node: FlowNodeRequest,
+struct CodeFlowTask {
+    node: CodeFlowNodeRequest,
     cache_key: String,
     last_used: u64,
 }
@@ -34,7 +35,6 @@ struct FlowTask {
 struct FormulaTask {
     node: FormulaNodeRequest,
     cache_key: String,
-    last_used: u64,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -88,11 +88,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     render_formulas_parallel(&mut stdout, req, &mut compilers, &mut use_clock)?;
                 }
             }
-            IncomingMessage::ClassifyFlow(req) => {
-                if req.nodes.len() <= 1 {
-                    classify_flow_sequential(&mut stdout, req, &mut compilers, &mut use_clock)?;
+            IncomingMessage::RenderCodeFlow(req) => {
+                if code_flow_worker_count(&req) <= 1 {
+                    render_code_flow_sequential(&mut stdout, req, &mut compilers, &mut use_clock)?;
                 } else {
-                    classify_flow_parallel(&mut stdout, req, &mut compilers, &mut use_clock)?;
+                    render_code_flow_parallel(&mut stdout, req, &mut compilers, &mut use_clock)?;
                 }
             }
             IncomingMessage::Shutdown => break,
@@ -102,17 +102,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn classify_flow_sequential(
+fn render_code_flow_sequential(
     stdout: &mut impl Write,
-    req: ClassifyFlowRequest,
+    req: RenderCodeFlowRequest,
     compilers: &mut HashMap<String, CachedCompiler>,
     use_clock: &mut u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let base_cache_key = flow_base_cache_key(&req);
+    let base_cache_key = code_flow_base_cache_key(&req);
     let mut active_keys = Vec::new();
 
     for node in &req.nodes {
-        let cache_key = flow_node_cache_key(&base_cache_key, node);
+        let cache_key = code_flow_node_cache_key(&base_cache_key, node);
         active_keys.push(cache_key.clone());
         *use_clock = (*use_clock).saturating_add(1);
         let compiler = compilers
@@ -122,24 +122,24 @@ fn classify_flow_sequential(
                 last_used: *use_clock,
             });
         compiler.last_used = *use_clock;
-        let resp = compiler.compiler.classify_flow(&req, node);
-        write_flow_response(stdout, resp)?;
+        let resp = compiler.compiler.render_code_flow(&req, node);
+        write_code_flow_response(stdout, resp)?;
     }
 
     evict_stale_compilers_except(compilers, &active_keys);
     Ok(())
 }
 
-fn classify_flow_parallel(
+fn render_code_flow_parallel(
     stdout: &mut impl Write,
-    req: ClassifyFlowRequest,
+    req: RenderCodeFlowRequest,
     compilers: &mut HashMap<String, CachedCompiler>,
     use_clock: &mut u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let base_cache_key = flow_base_cache_key(&req);
-    let tasks = flow_tasks(&req, &base_cache_key, use_clock);
+    let base_cache_key = code_flow_base_cache_key(&req);
+    let tasks = code_flow_tasks(&req, &base_cache_key, use_clock);
     let active_keys: Vec<_> = tasks.iter().map(|task| task.cache_key.clone()).collect();
-    let worker_count = MAX_FORMULA_WORKERS.min(tasks.len().max(1));
+    let worker_count = code_flow_worker_count(&req).min(tasks.len());
     let req = Arc::new(req);
     let queue = Arc::new(Mutex::new(VecDeque::from(tasks)));
     let (tx, rx) = mpsc::channel();
@@ -164,7 +164,7 @@ fn classify_flow_parallel(
                                 .map(|cached| cached.compiler)
                                 .unwrap_or_else(Compiler::new)
                         };
-                        let resp = compiler.classify_flow(&req, &task.node);
+                        let resp = compiler.render_code_flow(&req, &task.node);
                         {
                             let mut compilers = compilers.lock().unwrap();
                             compilers.insert(
@@ -184,7 +184,7 @@ fn classify_flow_parallel(
 
             drop(tx);
             for resp in rx {
-                write_flow_response(stdout, resp)?;
+                write_code_flow_response(stdout, resp)?;
             }
 
             Ok(())
@@ -218,6 +218,10 @@ fn render_formulas_sequential(
     for node in &req.nodes {
         let cache_key = formula_node_cache_key(&base_cache_key, node);
         active_keys.push(cache_key.clone());
+        if is_code_formula_node(node) {
+            write_formula_response(stdout, unsupported_code_formula_response(&req, node))?;
+            continue;
+        }
         *use_clock = (*use_clock).saturating_add(1);
         let compiler = compilers
             .entry(cache_key.clone())
@@ -237,10 +241,10 @@ fn render_formulas_parallel(
     stdout: &mut impl Write,
     req: RenderFormulasRequest,
     compilers: &mut HashMap<String, CachedCompiler>,
-    use_clock: &mut u64,
+    _use_clock: &mut u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let base_cache_key = formula_base_cache_key(&req);
-    let tasks = formula_tasks(&req, &base_cache_key, use_clock);
+    let tasks = formula_tasks(&req, &base_cache_key);
     let active_keys: Vec<_> = tasks.iter().map(|task| task.cache_key.clone()).collect();
     let worker_count = formula_worker_count(&req).min(tasks.len());
     let req = Arc::new(req);
@@ -248,13 +252,11 @@ fn render_formulas_parallel(
     let (tx, rx) = mpsc::channel();
 
     {
-        let compilers = Mutex::new(&mut *compilers);
         thread::scope(|scope| -> Result<(), Box<dyn std::error::Error>> {
             for _ in 0..worker_count {
                 let req = Arc::clone(&req);
                 let queue = Arc::clone(&queue);
                 let tx = tx.clone();
-                let compilers = &compilers;
                 scope.spawn(move || {
                     let mut math_compiler = None;
                     loop {
@@ -262,25 +264,7 @@ fn render_formulas_parallel(
                             break;
                         };
                         let resp = if is_code_formula_node(&task.node) {
-                            let mut compiler = {
-                                let mut compilers = compilers.lock().unwrap();
-                                compilers
-                                    .remove(&task.cache_key)
-                                    .map(|cached| cached.compiler)
-                                    .unwrap_or_else(Compiler::new)
-                            };
-                            let resp = compiler.render_formula(&req, &task.node);
-                            {
-                                let mut compilers = compilers.lock().unwrap();
-                                compilers.insert(
-                                    task.cache_key,
-                                    CachedCompiler {
-                                        compiler,
-                                        last_used: task.last_used,
-                                    },
-                                );
-                            }
-                            resp
+                            unsupported_code_formula_response(&req, &task.node)
                         } else {
                             math_compiler
                                 .get_or_insert_with(Compiler::new)
@@ -310,10 +294,38 @@ fn is_code_formula_node(node: &FormulaNodeRequest) -> bool {
     node.kind.as_deref() == Some("code")
 }
 
-fn flow_base_cache_key(req: &ClassifyFlowRequest) -> String {
+fn unsupported_code_formula_response(
+    req: &RenderFormulasRequest,
+    node: &FormulaNodeRequest,
+) -> FormulaRenderResponse {
+    FormulaRenderResponse {
+        request_id: req.request_id.clone(),
+        context_id: req.context_id.clone(),
+        context_rev: req.context_rev,
+        node_id: node.node_id.clone(),
+        node_rev: node.node_rev,
+        status: CompileStatus::Error,
+        path: None,
+        width_px: None,
+        height_px: None,
+        cached: false,
+        diagnostics: vec![DiagnosticInfo {
+            message: "render_formulas no longer supports kind=\"code\"; use render_code_flow"
+                .to_string(),
+            severity: "error".to_string(),
+            file: None,
+            line: None,
+            column: None,
+        }],
+        compile_us: None,
+        render_us: None,
+    }
+}
+
+fn code_flow_base_cache_key(req: &RenderCodeFlowRequest) -> String {
     req.cache_key
         .clone()
-        .unwrap_or_else(|| format!("flow:{}:{}", req.context_id, req.context_rev))
+        .unwrap_or_else(|| format!("code-flow:{}:{}", req.context_id, req.context_rev))
 }
 
 fn formula_base_cache_key(req: &RenderFormulasRequest) -> String {
@@ -326,55 +338,50 @@ fn code_node_cache_key(base: &str, node_id: &str) -> String {
     format!("{base}:code:{node_id}")
 }
 
-fn flow_node_cache_key(base: &str, node: &FlowNodeRequest) -> String {
+fn code_flow_node_cache_key(base: &str, node: &CodeFlowNodeRequest) -> String {
     code_node_cache_key(base, &node.node_id)
 }
 
 fn formula_node_cache_key(base: &str, node: &FormulaNodeRequest) -> String {
-    if is_code_formula_node(node) {
-        code_node_cache_key(base, &node.node_id)
-    } else {
-        format!("{base}:formula:{}", node.node_id)
-    }
+    format!("{base}:formula:{}", node.node_id)
 }
 
-fn flow_tasks(
-    req: &ClassifyFlowRequest,
+fn code_flow_tasks(
+    req: &RenderCodeFlowRequest,
     base_cache_key: &str,
     use_clock: &mut u64,
-) -> Vec<FlowTask> {
+) -> Vec<CodeFlowTask> {
     req.nodes
         .iter()
         .map(|node| {
             *use_clock = (*use_clock).saturating_add(1);
-            FlowTask {
+            CodeFlowTask {
                 node: node.clone(),
-                cache_key: flow_node_cache_key(base_cache_key, node),
+                cache_key: code_flow_node_cache_key(base_cache_key, node),
                 last_used: *use_clock,
             }
         })
         .collect()
 }
 
-fn formula_tasks(
-    req: &RenderFormulasRequest,
-    base_cache_key: &str,
-    use_clock: &mut u64,
-) -> Vec<FormulaTask> {
+fn formula_tasks(req: &RenderFormulasRequest, base_cache_key: &str) -> Vec<FormulaTask> {
     req.nodes
         .iter()
-        .map(|node| {
-            *use_clock = (*use_clock).saturating_add(1);
-            FormulaTask {
-                node: node.clone(),
-                cache_key: formula_node_cache_key(base_cache_key, node),
-                last_used: *use_clock,
-            }
+        .map(|node| FormulaTask {
+            node: node.clone(),
+            cache_key: formula_node_cache_key(base_cache_key, node),
         })
         .collect()
 }
 
 fn formula_worker_count(req: &RenderFormulasRequest) -> usize {
+    req.worker_count
+        .unwrap_or(1)
+        .clamp(1, MAX_FORMULA_WORKERS)
+        .min(req.nodes.len().max(1))
+}
+
+fn code_flow_worker_count(req: &RenderCodeFlowRequest) -> usize {
     req.worker_count
         .unwrap_or(1)
         .clamp(1, MAX_FORMULA_WORKERS)
@@ -391,11 +398,11 @@ fn write_formula_response(
     Ok(())
 }
 
-fn write_flow_response(
+fn write_code_flow_response(
     stdout: &mut impl Write,
-    resp: FlowClassifyResponse,
+    resp: CodeFlowRenderResponse,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    serde_json::to_writer(stdout.by_ref(), &OutgoingMessage::FlowClassified(resp))?;
+    serde_json::to_writer(stdout.by_ref(), &OutgoingMessage::CodeFlowRendered(resp))?;
     stdout.write_all(b"\n")?;
     stdout.flush()?;
     Ok(())
@@ -419,5 +426,45 @@ fn evict_stale_compilers_except(
             break;
         };
         compilers.remove(&evict_key);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    use super::*;
+
+    #[test]
+    fn render_formulas_rejects_code_nodes() {
+        let req = RenderFormulasRequest {
+            backend: None,
+            request_id: "formula:test".to_string(),
+            cache_key: None,
+            context_id: "ctx".to_string(),
+            context_rev: 1,
+            context_source: String::new(),
+            root: PathBuf::from("/tmp"),
+            inputs: HashMap::new(),
+            output_dir: PathBuf::from("/tmp/out"),
+            ppi: 72,
+            worker_count: None,
+            compiler: None,
+            converter: None,
+            compiler_args: Vec::new(),
+            nodes: Vec::new(),
+        };
+        let node = FormulaNodeRequest {
+            node_id: "code".to_string(),
+            node_rev: 1,
+            source_hash: None,
+            kind: Some("code".to_string()),
+            source: "#box[hi]".to_string(),
+        };
+
+        let resp = unsupported_code_formula_response(&req, &node);
+        assert!(matches!(resp.status, CompileStatus::Error));
+        assert!(resp.diagnostics[0].message.contains("render_code_flow"));
     }
 }

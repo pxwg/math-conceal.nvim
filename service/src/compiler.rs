@@ -19,9 +19,9 @@ use typst::syntax::{LinkedNode, Side, Source, Span, ast};
 use typst::{Document, World};
 
 use crate::protocol::{
-    ClassifyFlowRequest, CompileRequest, CompileResponse, CompileStatus, DiagnosticInfo,
-    FlowClassifyResponse, FlowNodeRequest, FlowRole, FormulaNodeRequest, FormulaRenderResponse,
-    PageResult, RenderFormulasRequest,
+    CodeFlowNodeRequest, CodeFlowRenderResponse, CompileRequest, CompileResponse, CompileStatus,
+    DiagnosticInfo, FlowRole, FormulaNodeRequest, FormulaRenderResponse, PageResult,
+    RenderCodeFlowRequest, RenderFormulasRequest,
 };
 use crate::world::ConcealerWorld;
 
@@ -40,6 +40,16 @@ struct FlowLayoutClassification {
     breaks: bool,
     reason: Option<String>,
     diagnostics: Vec<DiagnosticInfo>,
+}
+
+struct FlowClassificationResult {
+    status: CompileStatus,
+    flow_role: FlowRole,
+    layout_role: FlowRole,
+    layout_break: bool,
+    layout_reason: Option<String>,
+    diagnostics: Vec<DiagnosticInfo>,
+    compile_us: Option<u64>,
 }
 
 pub struct Compiler {
@@ -224,15 +234,16 @@ impl Compiler {
         }
     }
 
-    pub fn classify_flow(
+    fn classify_code_flow(
         &mut self,
-        req: &ClassifyFlowRequest,
-        node: &FlowNodeRequest,
-    ) -> FlowClassifyResponse {
+        req: &RenderCodeFlowRequest,
+        node: &CodeFlowNodeRequest,
+    ) -> FlowClassificationResult {
         let _cache_identity = (&node.source_hash, &node.kind);
+        let flow_context_source = code_flow_context_source(req);
         let document = build_flow_classify_document(
-            &req.context_source,
-            &node.source,
+            flow_context_source,
+            &node.flow_source,
             node.target_start,
             node.target_end,
         );
@@ -257,12 +268,7 @@ impl Compiler {
                 let layout = self.classify_flow_layout(req, node, flow_role);
                 diagnostics.extend(layout.diagnostics);
                 let compile_us = t_compile.elapsed().as_micros() as u64;
-                FlowClassifyResponse {
-                    request_id: req.request_id.clone(),
-                    context_id: req.context_id.clone(),
-                    context_rev: req.context_rev,
-                    node_id: node.node_id.clone(),
-                    node_rev: node.node_rev,
+                FlowClassificationResult {
                     status: CompileStatus::Ok,
                     flow_role,
                     layout_role: layout.role,
@@ -276,12 +282,7 @@ impl Compiler {
                 let warnings = sink.warnings();
                 diagnostics.splice(0..0, self.format_diagnostics(warnings.iter()));
                 let compile_us = t_compile.elapsed().as_micros() as u64;
-                FlowClassifyResponse {
-                    request_id: req.request_id.clone(),
-                    context_id: req.context_id.clone(),
-                    context_rev: req.context_rev,
-                    node_id: node.node_id.clone(),
-                    node_rev: node.node_rev,
+                FlowClassificationResult {
                     status: CompileStatus::Error,
                     flow_role: FlowRole::Unknown,
                     layout_role: FlowRole::Unknown,
@@ -400,8 +401,8 @@ impl Compiler {
 
     fn classify_flow_layout(
         &mut self,
-        req: &ClassifyFlowRequest,
-        node: &FlowNodeRequest,
+        req: &RenderCodeFlowRequest,
+        node: &CodeFlowNodeRequest,
         flow_role: FlowRole,
     ) -> FlowLayoutClassification {
         if !matches!(flow_role, FlowRole::Inline) {
@@ -430,8 +431,8 @@ impl Compiler {
             .unwrap_or(11.0);
 
         let document = build_flow_layout_document(
-            &req.context_source,
-            &node.source,
+            code_flow_context_source(req),
+            &node.flow_source,
             node.target_start,
             node.target_end,
             width_pt,
@@ -503,6 +504,132 @@ impl Compiler {
                 reason: None,
                 diagnostics,
             }
+        }
+    }
+
+    pub fn render_code_flow(
+        &mut self,
+        req: &RenderCodeFlowRequest,
+        node: &CodeFlowNodeRequest,
+    ) -> CodeFlowRenderResponse {
+        let flow = self.classify_code_flow(req, node);
+        if !matches!(flow.status, CompileStatus::Ok)
+            || !matches!(flow.layout_role, FlowRole::Inline | FlowRole::Block)
+        {
+            return CodeFlowRenderResponse {
+                request_id: req.request_id.clone(),
+                context_id: req.context_id.clone(),
+                context_rev: req.context_rev,
+                node_id: node.node_id.clone(),
+                node_rev: node.node_rev,
+                flow_status: flow.status,
+                render_status: CompileStatus::Error,
+                flow_role: flow.flow_role,
+                layout_role: flow.layout_role,
+                layout_break: flow.layout_break,
+                layout_reason: flow.layout_reason,
+                render_policy: None,
+                selected_variant: None,
+                selected_variant_hash: None,
+                path: None,
+                width_px: None,
+                height_px: None,
+                cached: false,
+                flow_diagnostics: flow.diagnostics,
+                render_diagnostics: Vec::new(),
+                flow_compile_us: flow.compile_us,
+                render_compile_us: None,
+                render_us: None,
+            };
+        }
+
+        let (selected_variant, render_policy, variant) = match (flow.flow_role, flow.layout_role) {
+            (FlowRole::Inline, FlowRole::Inline) => {
+                ("inline", "inline_naturalized", &node.variants.inline)
+            }
+            (FlowRole::Inline, FlowRole::Block) => {
+                ("block", "block_constrained", &node.variants.block)
+            }
+            (FlowRole::Block, FlowRole::Block) => ("block", "block", &node.variants.block),
+            _ => {
+                return CodeFlowRenderResponse {
+                    request_id: req.request_id.clone(),
+                    context_id: req.context_id.clone(),
+                    context_rev: req.context_rev,
+                    node_id: node.node_id.clone(),
+                    node_rev: node.node_rev,
+                    flow_status: flow.status,
+                    render_status: CompileStatus::Error,
+                    flow_role: flow.flow_role,
+                    layout_role: flow.layout_role,
+                    layout_break: flow.layout_break,
+                    layout_reason: flow.layout_reason,
+                    render_policy: None,
+                    selected_variant: None,
+                    selected_variant_hash: None,
+                    path: None,
+                    width_px: None,
+                    height_px: None,
+                    cached: false,
+                    flow_diagnostics: flow.diagnostics,
+                    render_diagnostics: Vec::new(),
+                    flow_compile_us: flow.compile_us,
+                    render_compile_us: None,
+                    render_us: None,
+                };
+            }
+        };
+
+        let render_req = RenderFormulasRequest {
+            backend: None,
+            request_id: req.request_id.clone(),
+            cache_key: req.cache_key.clone(),
+            context_id: req.context_id.clone(),
+            context_rev: req.context_rev,
+            context_source: req.context_source.clone(),
+            root: req.root.clone(),
+            inputs: req.inputs.clone(),
+            output_dir: req.output_dir.clone(),
+            ppi: req.ppi,
+            worker_count: None,
+            compiler: None,
+            converter: None,
+            compiler_args: Vec::new(),
+            nodes: Vec::new(),
+        };
+        let render_node = FormulaNodeRequest {
+            node_id: node.node_id.clone(),
+            node_rev: node.node_rev,
+            source_hash: variant.source_hash.clone(),
+            kind: Some("code_flow".to_string()),
+            source: variant.source.clone(),
+        };
+        let rendered = self.render_formula(&render_req, &render_node);
+
+        CodeFlowRenderResponse {
+            request_id: req.request_id.clone(),
+            context_id: req.context_id.clone(),
+            context_rev: req.context_rev,
+            node_id: node.node_id.clone(),
+            node_rev: node.node_rev,
+            flow_status: flow.status,
+            render_status: rendered.status,
+            flow_role: flow.flow_role,
+            layout_role: flow.layout_role,
+            layout_break: flow.layout_break,
+            layout_reason: flow.layout_reason,
+            render_policy: Some(render_policy.to_string()),
+            selected_variant: Some(selected_variant.to_string()),
+            selected_variant_hash: variant.source_hash.clone(),
+            path: rendered.path,
+            width_px: rendered.width_px,
+            height_px: rendered.height_px,
+            cached: rendered.cached,
+            flow_diagnostics: flow.diagnostics,
+            render_diagnostics: rendered.diagnostics,
+            flow_compile_us: flow.compile_us,
+            render_compile_us: rendered.compile_us,
+            render_us: rendered.render_us,
         }
     }
 
@@ -736,6 +863,14 @@ fn build_formula_entry_document(context_source: &str, node_path: &str) -> String
     source
 }
 
+fn code_flow_context_source(req: &RenderCodeFlowRequest) -> &str {
+    if req.flow_context_source.is_empty() {
+        &req.context_source
+    } else {
+        &req.flow_context_source
+    }
+}
+
 fn build_flow_classify_document(
     context_source: &str,
     node_source: &str,
@@ -962,6 +1097,8 @@ mod tests {
     use std::thread;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+    use crate::protocol::{CodeFlowVariant, CodeFlowVariants};
+
     use super::*;
 
     fn temp_dir(name: &str) -> PathBuf {
@@ -975,60 +1112,78 @@ mod tests {
         ))
     }
 
-    fn classify_flow_case(context_source: &str, source: &str) -> FlowClassifyResponse {
-        classify_flow_case_with_target(context_source, source, None, None)
+    fn code_flow_case(context_source: &str, source: &str) -> CodeFlowRenderResponse {
+        code_flow_case_with_target(context_source, source, None, None)
     }
 
-    fn classify_flow_case_with_target(
+    fn code_flow_case_with_target(
         context_source: &str,
         source: &str,
         target_start: Option<usize>,
         target_end: Option<usize>,
-    ) -> FlowClassifyResponse {
-        classify_flow_case_with_layout(context_source, source, target_start, target_end, None)
+    ) -> CodeFlowRenderResponse {
+        code_flow_case_with_layout(context_source, source, target_start, target_end, None)
     }
 
-    fn classify_flow_case_with_layout(
+    fn code_flow_case_with_layout(
         context_source: &str,
         source: &str,
         target_start: Option<usize>,
         target_end: Option<usize>,
         layout_width_pt: Option<f64>,
-    ) -> FlowClassifyResponse {
-        let req = ClassifyFlowRequest {
+    ) -> CodeFlowRenderResponse {
+        let root = temp_dir("code-flow-root");
+        let variant_source = source.to_string();
+        let req = RenderCodeFlowRequest {
             request_id: "flow:test".to_string(),
             cache_key: None,
             context_id: "ctx".to_string(),
             context_rev: 1,
             context_source: context_source.to_string(),
-            root: temp_dir("flow-root"),
+            flow_context_source: context_source.to_string(),
+            root: root.clone(),
             inputs: HashMap::new(),
             layout_width_pt,
             layout_baseline_pt: Some(11.0),
+            output_dir: root.join("out"),
+            ppi: 72,
+            worker_count: None,
             nodes: Vec::new(),
         };
-        let node = FlowNodeRequest {
+        let node = CodeFlowNodeRequest {
             node_id: "node".to_string(),
             node_rev: 1,
             source_hash: None,
             kind: Some("code".to_string()),
-            source: source.to_string(),
+            flow_source: source.to_string(),
             target_start,
             target_end,
+            variants: CodeFlowVariants {
+                inline: CodeFlowVariant {
+                    source: variant_source.clone(),
+                    source_hash: None,
+                },
+                block: CodeFlowVariant {
+                    source: variant_source,
+                    source_hash: None,
+                },
+            },
         };
 
         let mut compiler = Compiler::new();
-        compiler.classify_flow(&req, &node)
+        let resp = compiler.render_code_flow(&req, &node);
+        let _ = fs::remove_dir_all(root);
+        resp
     }
 
     #[test]
     fn flow_classifier_uses_target_node_not_whole_context_document() {
-        let resp = classify_flow_case(
+        let resp = code_flow_case(
             "#let chip() = box[GEOMETRY]\n\n#let tag = (geometry: chip())\n",
             "#tag.geometry",
         );
 
-        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(&resp.flow_status, CompileStatus::Ok), "{resp:?}");
         assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
     }
 
@@ -1036,38 +1191,55 @@ mod tests {
     fn flow_classifier_uses_target_range_inside_node_source() {
         let source = "#let chip() = box[GEOMETRY]\n\n#let tag = (geometry: chip())\n#tag.geometry";
         let target_start = source.find("#tag.geometry").unwrap();
-        let resp = classify_flow_case_with_target(
+        let resp = code_flow_case_with_target(
             "",
             source,
             Some(target_start),
             Some(target_start + "#tag.geometry".len()),
         );
 
-        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(&resp.flow_status, CompileStatus::Ok), "{resp:?}");
         assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
     }
 
     #[test]
     fn flow_classifier_respects_selector_show_rules_at_target_position() {
-        let resp = classify_flow_case("#show strong: it => block(it.body)\n", "#strong[hi]");
+        let resp = code_flow_case("#show strong: it => block(it.body)\n", "#strong[hi]");
 
-        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(&resp.flow_status, CompileStatus::Ok), "{resp:?}");
         assert!(matches!(resp.flow_role, FlowRole::Block), "{resp:?}");
+        assert_eq!(resp.selected_variant.as_deref(), Some("block"));
+        assert_eq!(resp.render_policy.as_deref(), Some("block"));
     }
 
     #[test]
     fn flow_classifier_distinguishes_inline_and_block_values() {
-        let inline = classify_flow_case("", "#box[hi]");
-        assert!(matches!(&inline.status, CompileStatus::Ok), "{inline:?}");
-        assert!(matches!(inline.flow_role, FlowRole::Inline), "{inline:?}");
-
-        let block = classify_flow_case("", "#block[hi]");
-        assert!(matches!(&block.status, CompileStatus::Ok), "{block:?}");
-        assert!(matches!(block.flow_role, FlowRole::Block), "{block:?}");
-
-        let let_block = classify_flow_case("#let b = block[hi]\n", "#b");
+        let inline = code_flow_case("", "#box[hi]");
         assert!(
-            matches!(&let_block.status, CompileStatus::Ok),
+            matches!(&inline.flow_status, CompileStatus::Ok),
+            "{inline:?}"
+        );
+        assert!(
+            matches!(&inline.render_status, CompileStatus::Ok),
+            "{inline:?}"
+        );
+        assert!(matches!(inline.flow_role, FlowRole::Inline), "{inline:?}");
+        assert_eq!(inline.selected_variant.as_deref(), Some("inline"));
+        assert_eq!(inline.render_policy.as_deref(), Some("inline_naturalized"));
+
+        let block = code_flow_case("", "#block[hi]");
+        assert!(matches!(&block.flow_status, CompileStatus::Ok), "{block:?}");
+        assert!(
+            matches!(&block.render_status, CompileStatus::Ok),
+            "{block:?}"
+        );
+        assert!(matches!(block.flow_role, FlowRole::Block), "{block:?}");
+        assert_eq!(block.selected_variant.as_deref(), Some("block"));
+        assert_eq!(block.render_policy.as_deref(), Some("block"));
+
+        let let_block = code_flow_case("#let b = block[hi]\n", "#b");
+        assert!(
+            matches!(&let_block.flow_status, CompileStatus::Ok),
             "{let_block:?}"
         );
         assert!(
@@ -1077,10 +1249,64 @@ mod tests {
     }
 
     #[test]
+    fn code_flow_render_uses_render_context_source() {
+        let root = temp_dir("code-flow-render-context");
+        let req = RenderCodeFlowRequest {
+            request_id: "flow:test".to_string(),
+            cache_key: None,
+            context_id: "ctx".to_string(),
+            context_rev: 1,
+            context_source:
+                "#set page(width: auto, height: auto, margin: (x: 0pt, y: 0pt), fill: none)\n"
+                    .to_string(),
+            flow_context_source: String::new(),
+            root: root.clone(),
+            inputs: HashMap::new(),
+            layout_width_pt: None,
+            layout_baseline_pt: Some(11.0),
+            output_dir: root.join("out"),
+            ppi: 72,
+            worker_count: None,
+            nodes: Vec::new(),
+        };
+        let node = CodeFlowNodeRequest {
+            node_id: "node".to_string(),
+            node_rev: 1,
+            source_hash: None,
+            kind: Some("code".to_string()),
+            flow_source: "#box[hi]".to_string(),
+            target_start: None,
+            target_end: None,
+            variants: CodeFlowVariants {
+                inline: CodeFlowVariant {
+                    source: "#box[hi]".to_string(),
+                    source_hash: None,
+                },
+                block: CodeFlowVariant {
+                    source: "#box[hi]".to_string(),
+                    source_hash: None,
+                },
+            },
+        };
+
+        let mut compiler = Compiler::new();
+        let resp = compiler.render_code_flow(&req, &node);
+        let _ = fs::remove_dir_all(root);
+
+        assert!(matches!(&resp.flow_status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(&resp.render_status, CompileStatus::Ok), "{resp:?}");
+        assert_eq!(resp.selected_variant.as_deref(), Some("inline"));
+        assert!(
+            resp.width_px.unwrap_or(u32::MAX) < 200,
+            "render context page setup was not applied: {resp:?}"
+        );
+    }
+
+    #[test]
     fn flow_layout_probe_promotes_full_width_inline_box_after_prefix() {
         let source = "Hello #box(width: 100%)[hello, test]";
         let target_start = source.find("#box").unwrap();
-        let resp = classify_flow_case_with_layout(
+        let resp = code_flow_case_with_layout(
             "",
             source,
             Some(target_start),
@@ -1088,17 +1314,19 @@ mod tests {
             Some(100.0),
         );
 
-        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(&resp.flow_status, CompileStatus::Ok), "{resp:?}");
         assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
         assert!(matches!(resp.layout_role, FlowRole::Block), "{resp:?}");
         assert!(resp.layout_break, "{resp:?}");
+        assert_eq!(resp.selected_variant.as_deref(), Some("block"));
+        assert_eq!(resp.render_policy.as_deref(), Some("block_constrained"));
     }
 
     #[test]
     fn flow_layout_probe_keeps_small_relative_width_inline_box_on_same_line() {
         let source = "x #box(width: 1%)[hi]";
         let target_start = source.find("#box").unwrap();
-        let resp = classify_flow_case_with_layout(
+        let resp = code_flow_case_with_layout(
             "",
             source,
             Some(target_start),
@@ -1106,7 +1334,7 @@ mod tests {
             Some(100.0),
         );
 
-        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(&resp.flow_status, CompileStatus::Ok), "{resp:?}");
         assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
         assert!(matches!(resp.layout_role, FlowRole::Inline), "{resp:?}");
         assert!(!resp.layout_break, "{resp:?}");
@@ -1115,10 +1343,9 @@ mod tests {
     #[test]
     fn flow_layout_probe_promotes_full_width_inline_box_at_line_start() {
         let source = "#box(width: 100%)[hi]";
-        let resp =
-            classify_flow_case_with_layout("", source, Some(0), Some(source.len()), Some(100.0));
+        let resp = code_flow_case_with_layout("", source, Some(0), Some(source.len()), Some(100.0));
 
-        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(&resp.flow_status, CompileStatus::Ok), "{resp:?}");
         assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
         assert!(matches!(resp.layout_role, FlowRole::Block), "{resp:?}");
         assert!(resp.layout_break, "{resp:?}");
@@ -1128,10 +1355,9 @@ mod tests {
     #[test]
     fn flow_layout_probe_promotes_multiline_full_width_inline_box_at_line_start() {
         let source = "#box(width: 100%)[hi\n  $ sin(alpha) $\n  hello]";
-        let resp =
-            classify_flow_case_with_layout("", source, Some(0), Some(source.len()), Some(100.0));
+        let resp = code_flow_case_with_layout("", source, Some(0), Some(source.len()), Some(100.0));
 
-        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(&resp.flow_status, CompileStatus::Ok), "{resp:?}");
         assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
         assert!(matches!(resp.layout_role, FlowRole::Block), "{resp:?}");
         assert!(resp.layout_break, "{resp:?}");
@@ -1142,7 +1368,7 @@ mod tests {
     fn flow_layout_probe_keeps_auto_width_inline_box_on_same_line() {
         let source = "Hello #box(width: auto)[hello, test]";
         let target_start = source.find("#box").unwrap();
-        let resp = classify_flow_case_with_layout(
+        let resp = code_flow_case_with_layout(
             "",
             source,
             Some(target_start),
@@ -1150,7 +1376,7 @@ mod tests {
             Some(100.0),
         );
 
-        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(&resp.flow_status, CompileStatus::Ok), "{resp:?}");
         assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
         assert!(matches!(resp.layout_role, FlowRole::Inline), "{resp:?}");
         assert!(!resp.layout_break, "{resp:?}");
@@ -1160,10 +1386,9 @@ mod tests {
     fn flow_layout_probe_keeps_multiline_text_call_inline() {
         let source = "#text[\n  hello\n] world";
         let target_end = source.find(" world").unwrap();
-        let resp =
-            classify_flow_case_with_layout("", source, Some(0), Some(target_end), Some(1000.0));
+        let resp = code_flow_case_with_layout("", source, Some(0), Some(target_end), Some(1000.0));
 
-        assert!(matches!(&resp.status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(&resp.flow_status, CompileStatus::Ok), "{resp:?}");
         assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
         assert!(matches!(resp.layout_role, FlowRole::Inline), "{resp:?}");
         assert!(!resp.layout_break, "{resp:?}");

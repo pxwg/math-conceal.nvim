@@ -1,8 +1,6 @@
 local quickfix = require("math-conceal.image.quickfix")
-local session = require("math-conceal.image.session")
 local state = require("math-conceal.image.state")
 local tracker = require("math-conceal.image.tracker")
-local wrapper = require("math-conceal.image.wrapper")
 
 local M = {}
 
@@ -17,7 +15,6 @@ local function flow_state(bufnr)
   local bs = state.get_buf_state(bufnr)
   bs.flow_classification = bs.flow_classification or {
     roles = {},
-    requested = {},
   }
   return bs.flow_classification
 end
@@ -48,10 +45,6 @@ local function baseline_pt(config)
     baseline = 11
   end
   return baseline
-end
-
-local function service_cache_key(ctx)
-  return "typst:" .. (ctx and ctx.context_id or "") .. ":" .. tostring(ctx and ctx.context_rev or 0)
 end
 
 local function is_code_track(track)
@@ -90,6 +83,8 @@ local function layout_signature(bufnr, config)
   }, "\0"),
     metrics
 end
+
+M.layout_signature = layout_signature
 
 function M.signature(track, ctx, layout_sig)
   return vim.fn.sha256(table.concat({
@@ -143,6 +138,8 @@ local function render_policy_for_roles(flow_role, layout_role)
   return nil
 end
 
+M.render_policy_for_roles = render_policy_for_roles
+
 function M.apply_role(track, role, opts)
   if not is_code_track(track) or (role ~= "inline" and role ~= "block") then
     return nil
@@ -172,30 +169,15 @@ function M.apply_role(track, role, opts)
   return copy
 end
 
-local function request_id(bufnr)
-  local bs = state.get_buf_state(bufnr)
-  bs.next_flow_request_id = (bs.next_flow_request_id or 0) + 1
-  return ("flow:%d:%d"):format(bufnr, bs.next_flow_request_id)
-end
-
-local function ref_from_track(track)
-  return {
-    bufnr = track.bufnr,
-    tracker_generation = track.tracker_generation,
-    generation = track.generation,
-    track_id = track.track_id,
-    id = track.track_id,
-  }
-end
-
 local function clear_report(bufnr, key)
   quickfix.set_items(bufnr, "flow_by_node", key, nil)
 end
 
 local function report_unknown(bufnr, key, track, resp)
   local message = "failed to classify Typst code flow/layout; showing source"
-  if type(resp) == "table" and type(resp.diagnostics) == "table" and resp.diagnostics[1] ~= nil then
-    message = message .. ": " .. tostring(resp.diagnostics[1].message or "unknown error")
+  local diagnostics = type(resp) == "table" and (resp.flow_diagnostics or resp.diagnostics) or nil
+  if type(diagnostics) == "table" and diagnostics[1] ~= nil then
+    message = message .. ": " .. tostring(diagnostics[1].message or "unknown error")
   elseif type(resp) == "table" and resp.layout_role == "unknown" then
     message = "Typst code layout is unknown; showing source"
   elseif type(resp) == "table" and resp.flow_role == "unknown" then
@@ -214,136 +196,40 @@ local function report_unknown(bufnr, key, track, resp)
   })
 end
 
+function M.store_response(bufnr, key, signature, track, resp)
+  bufnr = normalize_bufnr(bufnr)
+  local role = type(resp) == "table" and (resp.flow_role or "unknown") or "unknown"
+  local layout_role = type(resp) == "table" and (resp.layout_role or role) or role
+  local ok = type(resp) == "table"
+    and resp.flow_status == "ok"
+    and role ~= "unknown"
+    and (layout_role == "inline" or layout_role == "block")
+
+  flow_state(bufnr).roles[key] = {
+    signature = signature,
+    flow_role = role,
+    layout_role = layout_role,
+    render_policy = resp and resp.render_policy or render_policy_for_roles(role, layout_role),
+    layout_break = resp and resp.layout_break == true,
+    layout_reason = resp and resp.layout_reason,
+  }
+
+  if ok then
+    clear_report(bufnr, key)
+  else
+    report_unknown(bufnr, key, track, resp)
+  end
+  return ok
+end
+
 function M.clear_refs(bufnr, refs)
   bufnr = normalize_bufnr(bufnr)
   local fs = flow_state(bufnr)
   for _, ref in ipairs(refs or {}) do
     local key = tracker.track_ref_key(ref)
     fs.roles[key] = nil
-    fs.requested[key] = nil
     clear_report(bufnr, key)
   end
-end
-
-function M.request(bufnr, binding, ctx, tracks)
-  bufnr = normalize_bufnr(bufnr)
-  if binding == nil or ctx == nil then
-    return {}
-  end
-
-  local fs = flow_state(bufnr)
-  local nodes = {}
-  local node_meta = {}
-  local requested_refs = {}
-  local layout_sig, metrics = layout_signature(bufnr, require("math-conceal.image").config)
-
-  for _, track in ipairs(tracks or {}) do
-    if is_code_track(track) and track.invalid ~= true and track.state == "valid" then
-      local key = tracker.track_ref_key(track)
-      local signature = M.signature(track, ctx, layout_sig)
-      local role = fs.roles[key]
-      if (role == nil or role.signature ~= signature) and fs.requested[key] ~= signature then
-        fs.requested[key] = signature
-        local flow_source, flow_target = wrapper.build_flow_source(track, ctx)
-        nodes[#nodes + 1] = {
-          node_id = key,
-          node_rev = track.rev or 0,
-          source_hash = track.source_hash,
-          kind = track.object_kind or track.node_type or "code",
-          source = flow_source,
-          target_start = flow_target and flow_target.target_start or nil,
-          target_end = flow_target and flow_target.target_end or nil,
-        }
-        node_meta[key] = {
-          key = key,
-          ref = ref_from_track(track),
-          signature = signature,
-          track_rev = track.rev or 0,
-          context_id = ctx.context_id,
-          context_rev = ctx.context_rev,
-        }
-        requested_refs[#requested_refs + 1] = ref_from_track(track)
-      end
-    end
-  end
-
-  if #nodes == 0 then
-    return requested_refs
-  end
-
-  local req_id = request_id(bufnr)
-  local payload = {
-    type = "classify_flow",
-    request_id = req_id,
-    cache_key = service_cache_key(ctx),
-    context_id = ctx.context_id,
-    context_rev = ctx.context_rev,
-    context_source = ctx.flow_context_source or ctx.context_source,
-    root = ctx.effective_root,
-    inputs = ctx.inputs or vim.empty_dict(),
-    layout_width_pt = metrics.width_pt,
-    layout_baseline_pt = metrics.baseline_pt,
-    nodes = nodes,
-  }
-
-  local ok = session.classify_flow(bufnr, binding, payload, {
-    request_id = req_id,
-    context_id = ctx.context_id,
-    context_rev = ctx.context_rev,
-    node_meta = node_meta,
-    expected = #nodes,
-  })
-
-  if not ok then
-    for _, node in ipairs(nodes) do
-      fs.requested[node.node_id] = nil
-    end
-  end
-
-  return requested_refs
-end
-
-function M.handle_service_response(bufnr, resp, meta)
-  if type(resp) ~= "table" or resp.type ~= "flow_classified" or meta == nil then
-    return
-  end
-
-  bufnr = normalize_bufnr(bufnr)
-  local fs = flow_state(bufnr)
-  local node_meta = meta.node_meta and meta.node_meta[resp.node_id] or nil
-  if node_meta == nil then
-    return
-  end
-
-  if fs.requested[resp.node_id] == node_meta.signature then
-    fs.requested[resp.node_id] = nil
-  end
-  local track = tracker.resolve_ref(node_meta.ref)
-  local ctx = state.get_buf_state(bufnr).context
-  local layout_sig = layout_signature(bufnr, require("math-conceal.image").config)
-  if track == nil or not is_code_track(track) or M.signature(track, ctx, layout_sig) ~= node_meta.signature then
-    return
-  end
-
-  local role = resp.flow_role or "unknown"
-  local layout_role = resp.layout_role or role
-  fs.roles[resp.node_id] = {
-    signature = node_meta.signature,
-    flow_role = role,
-    layout_role = layout_role,
-    render_policy = render_policy_for_roles(role, layout_role),
-    layout_break = resp.layout_break == true,
-    layout_reason = resp.layout_reason,
-  }
-
-  if resp.status == "ok" and (layout_role == "inline" or layout_role == "block") then
-    clear_report(bufnr, resp.node_id)
-    require("math-conceal.image.projection").render_refs_after_flow(bufnr, { node_meta.ref })
-    return
-  end
-
-  report_unknown(bufnr, resp.node_id, track, resp)
-  require("math-conceal.image.projection").repair_source_reveal_refs(bufnr, { node_meta.ref })
 end
 
 return M
