@@ -715,7 +715,7 @@ end
 local function tracks_in_window(state, window)
   local tracks = {}
   for _, track in ipairs(dirty_tracks(state)) do
-    if track.invalid or range_intersects(track, window) then
+    if track.cursor_nested ~= true and (track.invalid or range_intersects(track, window)) then
       tracks[#tracks + 1] = track
     end
   end
@@ -1081,6 +1081,102 @@ local function retire_cursor_nested_except(bufnr, state, keep_ids, report)
   end
 end
 
+local function has_cursor_nested_track(state)
+  for _, track in ipairs(live_tracks(state)) do
+    if track.cursor_nested == true then
+      return true
+    end
+  end
+  return false
+end
+
+local function has_dirty_cursor_nested_track(state)
+  for _, track in ipairs(dirty_tracks(state)) do
+    if track.cursor_nested == true then
+      return true
+    end
+  end
+  return false
+end
+
+local function track_touches_ranges(track, ranges)
+  if track == nil then
+    return false
+  end
+  local current = track_range(track)
+  for _, range in ipairs(ranges or {}) do
+    if range_touches(current, range) then
+      return true
+    end
+  end
+  return false
+end
+
+local function should_reconcile_cursor_nested_after_repair(bufnr, state, repair_ranges)
+  if type(state.scanner.scan_nested) ~= "function" then
+    return has_cursor_nested_track(state)
+  end
+
+  if has_dirty_cursor_nested_track(state) then
+    return true
+  end
+
+  if not has_cursor_nested_track(state) then
+    return false
+  end
+
+  local cursor_row, cursor_col = cursor_for_buf(bufnr)
+  local root = cursor_root_track(bufnr, state, cursor_row, cursor_col)
+  if root == nil then
+    return true
+  end
+
+  return track_touches_ranges(root, repair_ranges)
+end
+
+local function reconcile_cursor_nested(bufnr, state, opts, report)
+  opts = opts or {}
+  local keep_ids = {}
+
+  if opts.enabled == false or type(state.scanner.scan_nested) ~= "function" then
+    retire_cursor_nested_except(bufnr, state, keep_ids, report)
+    return true, nil
+  end
+
+  local cursor_row, cursor_col = cursor_for_buf(bufnr)
+  local root = cursor_root_track(bufnr, state, cursor_row, cursor_col)
+  if root == nil then
+    retire_cursor_nested_except(bufnr, state, keep_ids, report)
+    return true, nil
+  end
+
+  local parent = root
+  local max_depth = math.max(1, math.min(tonumber(opts.max_depth) or 8, 32))
+  local seen = {}
+  for depth = 1, max_depth do
+    local parent_key = ref_key(track_ref(state, parent))
+    if seen[parent_key] then
+      break
+    end
+    seen[parent_key] = true
+
+    local children = reconcile_nested_children(bufnr, state, parent, root, depth, report, keep_ids)
+    if children == nil then
+      return false, nil
+    end
+
+    local child = cursor_child_track(bufnr, children, cursor_row, cursor_col)
+    if child == nil then
+      break
+    end
+    parent = child
+  end
+
+  retire_cursor_nested_except(bufnr, state, keep_ids, report)
+  sync_tracks(bufnr, state)
+  return true, track_range(root)
+end
+
 local function report_has_track_changes(report)
   return #report.born_refs > 0
     or #report.retired_refs > 0
@@ -1318,46 +1414,13 @@ function M.sync_cursor_nested(bufnr, opts)
 
   local old_context_units = vim.deepcopy(state.context_units or {})
   local report = empty_repair_report()
-  local keep_ids = {}
-
-  if opts.enabled == false or type(state.scanner.scan_nested) ~= "function" then
-    retire_cursor_nested_except(bufnr, state, keep_ids, report)
-    return emit_cursor_nested_repair(state, report, old_context_units)
+  local ok, repair_range = reconcile_cursor_nested(bufnr, state, opts, report)
+  if not ok then
+    refresh_debug(state)
+    return false
   end
 
-  local cursor_row, cursor_col = cursor_for_buf(bufnr)
-  local root = cursor_root_track(bufnr, state, cursor_row, cursor_col)
-  if root == nil then
-    retire_cursor_nested_except(bufnr, state, keep_ids, report)
-    return emit_cursor_nested_repair(state, report, old_context_units)
-  end
-
-  local parent = root
-  local max_depth = math.max(1, math.min(tonumber(opts.max_depth) or 8, 32))
-  local seen = {}
-  for depth = 1, max_depth do
-    local parent_key = ref_key(track_ref(state, parent))
-    if seen[parent_key] then
-      break
-    end
-    seen[parent_key] = true
-
-    local children = reconcile_nested_children(bufnr, state, parent, root, depth, report, keep_ids)
-    if children == nil then
-      refresh_debug(state)
-      return false
-    end
-
-    local child = cursor_child_track(bufnr, children, cursor_row, cursor_col)
-    if child == nil then
-      break
-    end
-    parent = child
-  end
-
-  retire_cursor_nested_except(bufnr, state, keep_ids, report)
-  sync_tracks(bufnr, state)
-  return emit_cursor_nested_repair(state, report, old_context_units, track_range(root))
+  return emit_cursor_nested_repair(state, report, old_context_units, repair_range)
 end
 
 ---@param bufnr integer?
@@ -1403,6 +1466,14 @@ function M.repair(bufnr)
     state.context_signature = context_scan.signature or context_scan.context_signature or ""
     refresh_context_extmarks(bufnr, state)
     apply_context_to_tracks(state)
+  end
+
+  if should_reconcile_cursor_nested_after_repair(bufnr, state, repair_ranges) then
+    local ok = reconcile_cursor_nested(bufnr, state, { enabled = true }, report)
+    if not ok then
+      refresh_debug(state)
+      return false
+    end
   end
 
   clear_damage(bufnr)
