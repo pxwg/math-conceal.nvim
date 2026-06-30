@@ -1,0 +1,134 @@
+local state = require("math-conceal.image.state")
+
+local M = {}
+
+local is_tmux = vim.env.TMUX ~= nil
+local stdout = nil
+local pending = {}
+local batch_depth = 0
+local unpack = table.unpack or unpack
+
+local function tmux_escape(message)
+  return "\x1bPtmux;" .. message:gsub("\x1b", "\x1b\x1b") .. "\x1b\\"
+end
+
+local function encode_kitty(message)
+  local payload = "\x1b_G" .. message .. "\x1b\\"
+  if is_tmux then
+    return tmux_escape(payload)
+  end
+  return payload
+end
+
+local function queue(message)
+  pending[#pending + 1] = encode_kitty(message)
+end
+
+local function write(data)
+  if vim.api.nvim_ui_send ~= nil and pcall(vim.api.nvim_ui_send, data) then
+    return
+  end
+
+  stdout = stdout or assert(vim.uv.new_tty(1, false))
+  stdout:write(data)
+end
+
+function M.flush()
+  if #pending == 0 then
+    return
+  end
+  local data = table.concat(pending)
+  pending = {}
+  write(data)
+end
+
+local function flush_if_unbatched()
+  if batch_depth == 0 then
+    M.flush()
+  end
+end
+
+function M.batch(fn)
+  if type(fn) ~= "function" then
+    return nil
+  end
+
+  batch_depth = batch_depth + 1
+  local results = { pcall(fn) }
+  local ok = table.remove(results, 1)
+  batch_depth = math.max(0, batch_depth - 1)
+  if batch_depth == 0 then
+    M.flush()
+  end
+  if not ok then
+    error(results[1], 0)
+  end
+  return unpack(results)
+end
+
+function M.send_image(path, image_id)
+  if type(path) ~= "string" or path == "" then
+    return false
+  end
+
+  queue("q=2,f=100,t=t,i=" .. image_id .. ";" .. vim.base64.encode(path))
+  flush_if_unbatched()
+  return true
+end
+
+function M.place_image(image_id, placement_id, cols, rows, opts)
+  opts = opts or {}
+  cols = math.max(1, math.floor(tonumber(cols) or 1))
+  rows = math.max(1, math.floor(tonumber(rows) or 1))
+  local parts = {
+    "q=2",
+    "a=p",
+    "U=1",
+    "i=" .. image_id,
+  }
+  if placement_id ~= nil then
+    parts[#parts + 1] = "p=" .. placement_id
+  end
+  parts[#parts + 1] = "c=" .. cols
+  parts[#parts + 1] = "r=" .. rows
+  if opts.C ~= nil then
+    parts[#parts + 1] = "C=" .. tostring(opts.C)
+  end
+  if opts.z ~= nil then
+    parts[#parts + 1] = "z=" .. tostring(opts.z)
+  end
+  queue(table.concat(parts, ","))
+  flush_if_unbatched()
+  return true
+end
+
+function M.upload(path, image_id, cols, rows)
+  if not M.send_image(path, image_id) then
+    return false
+  end
+  return M.place_image(image_id, nil, cols, rows)
+end
+
+function M.delete_placement(image_id, placement_id)
+  if image_id == nil or placement_id == nil then
+    return
+  end
+  queue("q=2,a=d,d=i,i=" .. image_id .. ",p=" .. placement_id)
+  state.release_placement_id(placement_id)
+  flush_if_unbatched()
+end
+
+function M.delete_image(image_id)
+  if image_id == nil then
+    return
+  end
+  queue("q=2,a=d,d=i,i=" .. image_id)
+  state.release_image_id(image_id)
+  flush_if_unbatched()
+end
+
+function M.delete(image_id)
+  M.delete_image(image_id)
+end
+
+return M

@@ -17,6 +17,30 @@ local M = {
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
     depth = 90,
     ns_id = 0,
+    buffer = {
+      mode = "edit",
+    },
+    image = {
+      enabled = false,
+      enabled_by_default = true,
+      live_preview_enabled = true,
+      tracker = {
+        debug = false,
+      },
+      renderers = {
+        typst = {
+          filetypes = { "typst" },
+          live_debounce = 0,
+          code_render = {
+            allow = {},
+          },
+        },
+        markdown = {
+          filetypes = { "markdown" },
+          live_debounce = 0,
+        },
+      },
+    },
     highlights = {
       ["@_env"] = { link = "@conceal", default = true },
       ["@_frac_name"] = { link = "@conceal", default = true },
@@ -85,12 +109,140 @@ local M = {
 --- @field depth integer
 --- @field augroup_id integer?
 --- @field ns_id integer
+--- @field buffer MathConcealBufferOptions?
 --- @field highlights table<string, table<string, string>>
+--- @field image MathConcealImageOptions?
+
+--- @class MathConcealBufferOptions
+--- @field mode "edit"|"preview"|"presentation"?: Conceal cursor behavior. `edit` expands the item under the cursor; `preview` keeps ASCII/Unicode items concealed; `presentation` keeps plugin-managed ASCII/Unicode conceal collapsed, except while Visual selection reveals source for precise selection.
+
+--- @class MathConcealImageOptions
+--- @field enabled boolean?: Enable image renderer attachment. Default false.
+--- @field enabled_by_default boolean?: Attach matching buffers automatically. Default true.
+--- @field live_preview_enabled boolean?: Enable cursor-following live preview. Default true.
+--- @field tracker MathConcealImageTrackerOptions?: Tracker configuration for the image path.
+--- @field renderers table<string, MathConcealImageRendererOptions>?: Renderer-specific attachment configuration.
+--- Other fields are stored by `math-conceal.image` for the future renderer.
+
+--- @class MathConcealImageTrackerOptions
+--- @field debug boolean?: Show tracker debug projection extmarks. Default false.
+
+--- @class MathConcealImageRendererOptions
+--- @field filetypes string[]?: Neovim filetypes that should attach this renderer.
+--- @field service_binary string?: Renderer service executable path.
+--- @field live_debounce integer?: Text-change live preview debounce in milliseconds for this renderer.
+--- @field source_kind string?: Scanner source kind. Defaults to the renderer name.
+--- @field scanner string?: Scanner module key. Defaults to source_kind.
+--- @field backend string?: Rust service backend. Markdown uses the Typst backend with a MiTeX wrapper.
+--- @field wrapper string?: Render input wrapper. Markdown uses "mitex".
+--- @field root string|fun(ctx: table): string?: Project root resolver for the renderer.
+--- @field inputs table<string, string>|fun(ctx: table): table<string, string>?: Typst-like input values.
+--- @field header string?: Renderer-scoped Typst header.
+--- @field preamble_file string|fun(ctx: table): string?: Renderer-scoped Typst preamble file.
+--- @field mitex_package string?: Typst package spec for Markdown MiTeX rendering.
+--- @field code_render table?: Typst code rendering policy. `allow` adds global user names to the built-in safe allowlist.
+--- @field render_paths table?: Path filters for renderer attachment.
+
+local function plugin_root()
+  local source = debug.getinfo(1, "S").source
+  if source:sub(1, 1) == "@" then
+    local init_path = source:sub(2)
+    return vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(init_path)))
+  end
+end
+
+local function bundled_service_binary()
+  local root = plugin_root()
+  if not root then
+    return nil
+  end
+  local exe = vim.fn.has("win32") == 1 and "typst-concealer-service.exe" or "typst-concealer-service"
+  local path = table.concat({ root, "service", "target", "release", exe }, "/")
+  if vim.uv.fs_stat(path) ~= nil then
+    return path
+  end
+end
+
+local function image_enabled()
+  return M.opts.image ~= nil and M.opts.image.enabled == true
+end
+
+local function image_filetype_enabled(filetype)
+  local image = M.opts.image or {}
+  for _, renderer in pairs(image.renderers or {}) do
+    for _, ft in ipairs(renderer.filetypes or {}) do
+      if ft == filetype then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+local function setup_image()
+  if not image_enabled() or M._image_setup_ran then
+    return
+  end
+
+  local image_cfg = vim.deepcopy(M.opts.image or {})
+  image_cfg.enabled = nil
+
+  local service_binary = bundled_service_binary() or "typst-concealer-service"
+  for _, renderer in pairs(image_cfg.renderers or {}) do
+    if renderer.service_binary == nil then
+      renderer.service_binary = service_binary
+    end
+  end
+
+  require("math-conceal.image").setup(image_cfg)
+  M._image_setup_ran = true
+end
+
+local function set_image(filetype)
+  if not image_enabled() or not image_filetype_enabled(filetype) then
+    return
+  end
+
+  setup_image()
+  local image = require("math-conceal.image")
+  local bufnr = vim.api.nvim_get_current_buf()
+  if image.config.enabled_by_default and image.is_supported_bufnr(bufnr) and image.is_render_allowed(bufnr) then
+    image.enable_buf(bufnr)
+  end
+end
 
 ---set up
 ---@param opts MathConcealOptions?
 function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", M.opts, opts or {})
+  render.set_default_buffer_config(M.opts.buffer)
+  setup_image()
+end
+
+---Configure ASCII/Unicode conceal behavior for one buffer.
+---Examples:
+---  require("math-conceal").setup_buffer({ mode = "preview" })
+---  require("math-conceal").setup_buffer({ mode = "presentation" })
+---  require("math-conceal").setup_buffer(bufnr, { mode = "edit" })
+---@param bufnr integer|MathConcealBufferOptions?
+---@param opts MathConcealBufferOptions?
+---@return MathConcealBufferOptions
+function M.setup_buffer(bufnr, opts)
+  return render.setup_buffer(bufnr, opts)
+end
+
+---Return the effective ASCII/Unicode conceal config for one buffer.
+---@param bufnr integer?
+---@return MathConcealBufferOptions
+function M.get_buffer_config(bufnr)
+  return render.get_buffer_config(bufnr)
+end
+
+---Return true when one buffer is in presentation mode.
+---@param bufnr integer?
+---@return boolean
+function M.is_presentation_mode(bufnr)
+  return render.is_presentation_mode(bufnr)
 end
 
 ---check if `filetype` is in `M.opts.ft`.
@@ -103,6 +255,7 @@ function M.set(filetype)
       M.set_hl(filetype)
     end
   end
+  set_image(filetype)
 end
 
 local function restart_treesitter(bufnr)
