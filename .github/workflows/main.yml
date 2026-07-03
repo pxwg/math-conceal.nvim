@@ -39,6 +39,7 @@ jobs:
         with:
           extra_luarocks_args: |
             --force
+          name: math-conceal-service
           version: scm
           template: math-conceal-service-scm-1.rockspec
       - uses: lumen-oss/luarocks-tag-release@v7
@@ -48,4 +49,5 @@ jobs:
         with:
           extra_luarocks_args: |
             --force
+          name: math-conceal-service
           template: math-conceal-service-scm-1.rockspec
