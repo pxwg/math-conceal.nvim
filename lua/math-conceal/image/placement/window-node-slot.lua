@@ -190,15 +190,18 @@ local function release_terminal_placement(placement)
   placement.placement_id = nil
 end
 
-local function deactivate_placement(surface, placement)
+local function deactivate_placement(surface, placement, opts)
   if placement == nil then
     return
   end
+  opts = opts or {}
   local had_extmarks = #(placement.extmark_ids or {}) > 0
   local source_start_row = placement.source_start_row
   local source_end_row = placement.source_end_row
   clear_placement_extmarks(surface, placement)
-  release_terminal_placement(placement)
+  if opts.keep_terminal_placement ~= true then
+    release_terminal_placement(placement)
+  end
   placement.placed = false
   if had_extmarks and source_start_row ~= nil and source_end_row ~= nil then
     redraw_surface_range(surface, source_start_row, source_end_row)
@@ -761,7 +764,10 @@ local function materialize_placement(surface, placement, opts)
     if before == signature and not placement.placed and #(placement.extmark_ids or {}) == 0 then
       return true, false
     end
-    deactivate_placement(surface, placement)
+    -- Source reveal is a visibility transition, not hard disposal. Keep the
+    -- Kitty Unicode-placeholder virtual placement alive so restore can reuse
+    -- the same placement id; `placed=false` does not imply release.
+    deactivate_placement(surface, placement, { keep_terminal_placement = true })
     placement.signature = signature
     redraw_surface_range(surface, view.row, view.end_row)
     return true, before ~= placement.signature

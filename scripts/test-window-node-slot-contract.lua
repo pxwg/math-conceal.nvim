@@ -323,16 +323,15 @@ local function run()
   vim.api.nvim_win_set_cursor(win_a, { 3, 4 })
   vim.api.nvim_win_set_cursor(win_b, { 1, 0 })
   local redraw_count_before_reveal = #redraw_calls
+  local terminal_count_before_reveal = #terminal_calls
+  local placement_id_before_reveal = active_a.placement_id
   placement.refresh_geometry(bufnr, { keys = { [key] = true } })
   active_a = surface_a.placements[key]
   active_b = surface_b.placements[key]
   assert_eq("window A reveal clears placement", active_a.placed, false)
-  assert_eq("window A reveal releases terminal placement", active_a.placement_id, nil)
+  assert_eq("window A reveal keeps terminal placement id", active_a.placement_id, placement_id_before_reveal)
   assert_eq("window B keeps placement visible", active_b.placed, true)
-  assert_true(
-    "source reveal deletes one terminal placement",
-    terminal_calls[#terminal_calls].kind == "delete_placement"
-  )
+  assert_eq("source reveal does not hot-delete terminal placement", #terminal_calls, terminal_count_before_reveal)
   assert_true(
     "source reveal force-redraws source range",
     saw_forced_redraw(win_a, track.row, track.end_row + 1, redraw_count_before_reveal + 1)
@@ -342,7 +341,7 @@ local function run()
   placement.refresh_geometry(bufnr, { keys = { [key] = true } })
   active_a = surface_a.placements[key]
   assert_eq("window A restore places again", active_a.placed, true)
-  assert_true("window A restore allocates placement id", active_a.placement_id ~= nil)
+  assert_eq("window A restore reuses placement id", active_a.placement_id, placement_id_before_reveal)
 
   local terminal_count_before_uploaded_asset = #terminal_calls
   intent.asset.image_id = 0x223377
@@ -354,7 +353,13 @@ local function run()
     assert_true("uploaded asset does not resend image data", terminal_calls[index].kind ~= "send_image")
   end
 
+  local terminal_count_before_close_all = #terminal_calls
   placement.close_all(bufnr)
+  local saw_close_delete = false
+  for index = terminal_count_before_close_all + 1, #terminal_calls do
+    saw_close_delete = saw_close_delete or terminal_calls[index].kind == "delete_placement"
+  end
+  assert_true("hard close deletes terminal placements", saw_close_delete)
   vim.api.nvim__redraw = original_redraw
 end
 
