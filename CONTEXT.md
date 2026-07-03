@@ -125,8 +125,8 @@ A node slot materialized independently per editor window so each window can use 
 _Avoid_: Window extmark placement surface, fold-grid successor, buffer-global isolated block slot
 
 **Window-Local Slot Reveal**:
-The per-window source reveal state for Window Extmark Node Slots. It follows the existing source-reveal behavior: entering any part of the tracked source range reveals the whole tracked source range in that window, and leaving the source range restores conceal without forcing other windows showing the same buffer to close their node slots.
-_Avoid_: Buffer-global reveal state, cross-window slot teardown, shared cursor collision
+The per-window source reveal state for Window Extmark Node Slots. It follows the existing source-reveal behavior: entering any part of the tracked source range reveals the whole tracked source range in that window, and leaving the source range restores conceal without forcing other windows showing the same buffer to close their node slots. This is a visibility state, not a terminal-placement disposal state: `placed=false` means window-local slot extmarks are absent, while `placement_id` may remain live so the Kitty Unicode-placeholder virtual placement can be reused on restore. Hard lifecycle events, not cursor source reveal, own `delete_placement`.
+_Avoid_: Buffer-global reveal state, cross-window slot teardown, shared cursor collision, treating `placed=false` as terminal placement release
 
 **Carrier-Maximized Slot Height**:
 The Window Extmark Node Slot height principle that preserves the largest real source carrier footprint that fits within the rendered image height, then uses collapsed source rows and virtual image rows only to reconcile the visible slot height with the rendered asset. If the smallest useful carrier already wraps taller than the rendered asset, carrier continuity wins and the visible slot may be taller than the asset.
