@@ -12,35 +12,9 @@ https://github.com/user-attachments/assets/d78175a5-7462-40b6-be63-087fd100b97a
 
 https://github.com/user-attachments/assets/359fb62f-2031-4b5c-8d0b-0fe835fccd80
 
-## Preview Channel
-
-The stable `main` branch focuses on fast ASCII/Unicode math conceal. A preview
-branch is available for graphical equation conceal in Typst and Markdown, with
-experimental LaTeX rendering.
-
 ### Typst Equation Conceal Preview
 
 https://github.com/user-attachments/assets/d78175a5-7462-40b6-be63-087fd100b97a
-
-Try the preview branch with lazy.nvim:
-
-```lua
-return {
-  "pxwg/math-conceal.nvim",
-  branch = "preview",
-  build = "cargo build --release --manifest-path service/Cargo.toml",
-  main = "math-conceal",
-  opts = {
-    conceal = { "greek", "script", "math", "font", "delim", "phy" },
-    ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
-    image = { enabled = true },
-  },
-}
-```
-
-Feedback from Typst, Markdown streaming-output, and experimental LaTeX users is
-welcome. Please include your terminal, OS, Neovim version, filetype, a minimal
-snippet, and any `:messages` output.
 
 ### LaTeX Conceal
 
@@ -61,27 +35,13 @@ snippet, and any `:messages` output.
   </tr>
 </table>
 
-## Introduction
-
-In neovim `0.11.0`, the treesitter query has been changed to allow the asynchronous query, which allows us to use the treesitter query to conceal latex file. However, it's still slow while fully use `#set! conceal` directive since the expansive cost of query over the whole AST while conceal a single node.
-
-The basic solution of the problem above comes from [latex.nvim](https://github.com/robbielyman/latex.nvim), who uses customized `set-pairs` directive to conceal the latex file.
-Using a proper-designed lua module to handle the conceal patterns and only use treesitter to locate the position of the patterns can significantly improve the performance of conceal.
-
 ## Features
 
 - High performance conceal for LaTeX and typst files.
 - Fine grained conceal patterns:
     - Original neovim conceal patterns: expand *all* concealed nodes on the line where the cursor is located.
   - Fine grained conceal patterns: only expand the concealed node under the cursor.
-- Buffer-local preview and presentation modes:
-  `require("math-conceal").setup_buffer({ mode = "preview" })` keeps concealed
-  ASCII/Unicode nodes collapsed while the cursor moves over them.
-  `require("math-conceal").setup_buffer({ mode = "presentation" })` is for
-  rendered reading surfaces such as AI chat buffers: plugin-managed conceal is
-  kept collapsed, rendered image rows are cursor-protected, and normal source
-  reveal paths are disabled for that buffer. Visual selection temporarily
-  reveals source so inline text ranges can still be selected precisely.
+- Image overlay conceal: Using [kitty graphic protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) to show the compiled equations instead of source code.
 - Support multiple conceal patterns, including greek letters, script letters, math symbols, font styles, delimiters, and physical units.
 - Multiple highlight groups for different conceal patterns, allowing you to customize the appearance of each pattern (all highlight groups can be found in [highlights](./highlights/highlights.md)).
 
@@ -138,7 +98,7 @@ return {
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
     image = {
-      enabled = false, -- set true to enable graphical equation conceal
+      enabled = true, -- set true to enable graphical equation conceal
     },
   },
 }
