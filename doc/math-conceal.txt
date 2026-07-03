@@ -350,8 +350,11 @@ Restrict rendering by path:
 `image.renderers.typst.code_render.allow`~
         List or map of global user Typst code names allowed to enter the
         renderer in addition to math-conceal's built-in predictable Typst code
-        allowlist. Structural code such as `#import`, `#let`, `#set`, and
-        `#show` remains context-only.
+        allowlist. Structural code such as `#import`, `#let`, and `#set`
+        remains context-only. Selector show rules such as
+        `#show math.equation: ...` remain context-only; bare document
+        transformers such as `#show: conf.with(...)` are not replayed into
+        isolated render preludes.
 >
         image = {
           renderers = {
