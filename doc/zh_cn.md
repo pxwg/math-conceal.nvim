@@ -63,6 +63,21 @@ $ luarocks --lua-version 5.1 --local --tree ~/.local/share/nvim/rocks install ma
 # ~/.local/share/nvim/rocks 是默认 rocks tree 路径
 # 可根据你的 vim.g.rocks_nvim.rocks_path 进行更改
 ```
+
+图形化公式 conceal 还需要安装可选的 Rust 服务二进制：
+
+```vim
+:Rocks install math-conceal-service
+```
+
+或：
+
+```sh
+$ luarocks --lua-version 5.1 --local --tree ~/.local/share/nvim/rocks install math-conceal-service
+```
+
+LuaRocks 会优先使用适配当前平台的预构建 service rock；如果没有可用的预构建版本，则会从源码构建，此时需要 Rust/Cargo。
+
 ### lazy.nvim
 
 ```lua
@@ -114,7 +129,13 @@ require("math-conceal").setup({
 })
 ```
 
-安装或更新后需要构建 Rust 服务：
+使用 rocks.nvim 安装时，安装可选的服务 rock：
+
+```vim
+:Rocks install math-conceal-service
+```
+
+使用源码或 lazy.nvim 安装时，安装或更新后需要构建 Rust 服务：
 
 ```sh
 cargo build --release --manifest-path service/Cargo.toml

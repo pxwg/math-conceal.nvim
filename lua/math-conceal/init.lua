@@ -142,23 +142,78 @@ local M = {
 --- @field code_render table?: Typst code rendering policy. `allow` adds global user names to the built-in safe allowlist.
 --- @field render_paths table?: Path filters for renderer attachment.
 
-local function plugin_root()
+local function module_source_path()
   local source = debug.getinfo(1, "S").source
   if source:sub(1, 1) == "@" then
-    local init_path = source:sub(2)
+    return source:sub(2)
+  end
+end
+
+local function plugin_root()
+  local init_path = module_source_path()
+  if init_path then
     return vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(init_path)))
   end
 end
 
-local function bundled_service_binary()
-  local root = plugin_root()
-  if not root then
+local function service_executable_name()
+  return vim.fn.has("win32") == 1 and "typst-concealer-service.exe" or "typst-concealer-service"
+end
+
+local function path_join(parts)
+  return table.concat(parts, "/")
+end
+
+local function path_exists(path)
+  return path ~= nil and path ~= "" and vim.uv.fs_stat(path) ~= nil
+end
+
+local function rocks_tree_root()
+  local init_path = module_source_path()
+  if not init_path then
     return nil
   end
-  local exe = vim.fn.has("win32") == 1 and "typst-concealer-service.exe" or "typst-concealer-service"
-  local path = table.concat({ root, "service", "target", "release", exe }, "/")
-  if vim.uv.fs_stat(path) ~= nil then
-    return path
+  init_path = init_path:gsub("\\", "/")
+  return init_path:match("^(.*)/share/lua/[^/]+/math%-conceal/init%.lua$")
+end
+
+local function configured_rocks_roots()
+  local roots = {}
+  local rocks_nvim = vim.g.rocks_nvim
+  if type(rocks_nvim) == "table" and type(rocks_nvim.rocks_path) == "string" then
+    table.insert(roots, rocks_nvim.rocks_path)
+  end
+  table.insert(roots, path_join({ vim.fn.stdpath("data"), "rocks" }))
+  return roots
+end
+
+local function bundled_service_binary()
+  local exe = service_executable_name()
+  local candidates = {}
+
+  local root = plugin_root()
+  if root then
+    table.insert(candidates, path_join({ root, "service", "target", "release", exe }))
+  end
+
+  local rocks_root = rocks_tree_root()
+  if rocks_root then
+    table.insert(candidates, path_join({ rocks_root, "bin", exe }))
+  end
+
+  for _, candidate_root in ipairs(configured_rocks_roots()) do
+    table.insert(candidates, path_join({ candidate_root, "bin", exe }))
+  end
+
+  local path_service = vim.fn.exepath(exe)
+  if path_service ~= "" then
+    table.insert(candidates, path_service)
+  end
+
+  for _, candidate in ipairs(candidates) do
+    if path_exists(candidate) then
+      return candidate
+    end
   end
 end
 

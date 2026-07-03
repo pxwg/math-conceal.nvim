@@ -61,6 +61,21 @@ $ luarocks --lua-version 5.1 --local --tree ~/.local/share/nvim/rocks install ma
 # you can change it according to your vim.g.rocks_nvim.rocks_path
 ```
 
+Graphical equation conceal also needs the optional Rust service binary:
+
+```vim
+:Rocks install math-conceal-service
+```
+
+or:
+
+```sh
+$ luarocks --lua-version 5.1 --local --tree ~/.local/share/nvim/rocks install math-conceal-service
+```
+
+LuaRocks uses a prebuilt service rock when one is available for your platform;
+otherwise it builds the service from source and requires Rust/Cargo.
+
 ### lazy.nvim
 
 ```lua
@@ -118,7 +133,13 @@ require("math-conceal").setup({
 })
 ```
 
-Build the bundled Rust service after installing or updating:
+For rocks.nvim installs, install the optional service rock:
+
+```vim
+:Rocks install math-conceal-service
+```
+
+For source/lazy.nvim installs, build the bundled Rust service after installing or updating:
 
 ```sh
 cargo build --release --manifest-path service/Cargo.toml

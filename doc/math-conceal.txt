@@ -62,18 +62,25 @@ lazy.nvim setup with graphical equation conceal:
 <
 
 The Rust service is required only when graphical equation rendering is enabled.
-If you do not use a plugin manager build hook, build it manually:
+For rocks.nvim installs, install the optional service rock:
+>
+  :Rocks install math-conceal-service
+<
+LuaRocks uses a prebuilt service rock when one is available for your platform;
+otherwise it builds the service from source and requires Rust/Cargo.
+
+For source or lazy.nvim installs, build it manually or via a plugin manager
+build hook:
 >
   cargo build --release --manifest-path service/Cargo.toml
 <
 
-When a renderer `service_binary` is omitted, math-conceal first checks the
-bundled release binary:
+When a renderer `service_binary` is omitted, math-conceal checks:
 >
   service/target/release/typst-concealer-service
+  <rocks-tree>/bin/typst-concealer-service
+  typst-concealer-service on $PATH
 <
-
-If it is not found, it falls back to `typst-concealer-service` on $PATH.
 
 ==============================================================================
 3. ASCII conceal                                      *math-conceal-ascii*
@@ -279,8 +286,9 @@ Restrict rendering by path:
         math-conceal tries:
 >
         service/target/release/typst-concealer-service
+        <rocks-tree>/bin/typst-concealer-service
+        typst-concealer-service on $PATH
 <
-        then falls back to `typst-concealer-service` on $PATH.
 
                                               *math-conceal-image.enabled_by_default*
 `image.enabled_by_default`~
@@ -445,9 +453,11 @@ No rendered equations appear~
         Check terminal support first. Graphical equation conceal requires kitty
         graphics protocol support.
 
-        Confirm the service is built:
+        Confirm the service is installed or built:
 >
+        :Rocks install math-conceal-service
         test -x service/target/release/typst-concealer-service
+        command -v typst-concealer-service
 <
 
         Confirm graphical equation conceal is enabled:

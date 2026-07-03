@@ -251,7 +251,12 @@ function M.ensure(bufnr, binding, kind)
 
   local binary = binding and binding.service_binary or "typst-concealer-service"
   if vim.fn.executable(binary) ~= 1 and vim.uv.fs_stat(binary) == nil then
-    notify("service binary not found: " .. tostring(binary), vim.log.levels.ERROR)
+    local message = "service binary not found: " .. tostring(binary)
+    if binary == "typst-concealer-service" or binary == "typst-concealer-service.exe" then
+      message = message
+        .. ". Install math-conceal-service with :Rocks install math-conceal-service, or set image.renderers.<name>.service_binary."
+    end
+    notify(message, vim.log.levels.ERROR)
     return nil
   end
 
