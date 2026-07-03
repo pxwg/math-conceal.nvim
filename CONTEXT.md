@@ -271,7 +271,7 @@ A scanner-reported fact about a tracked object's source structure or geometry, s
 _Avoid_: Render state, display artifact, flow role, layout fact
 
 **Context Unit**:
-A scanner-recognized source node that contributes rendering context for later tracked objects without becoming a tracked object itself. Typst context units include structural code such as `#set`, `#let`, `#import`, and `#show` forms.
+A scanner-recognized source node that contributes rendering context for later tracked objects without becoming a tracked object itself. Typst context units include structural code such as `#set`, `#let`, `#import`, and selector show rules like `#show math.equation: ...`; bare document transformers like `#show: conf.with(...)` are not replayed into isolated render preludes.
 _Avoid_: Formula track, provider prelude node
 
 **Context Unit Index**:

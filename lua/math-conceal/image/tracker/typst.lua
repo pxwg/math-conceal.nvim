@@ -288,6 +288,10 @@ local function is_renderable_code_unit(unit, user_allowlist)
   return is_builtin_renderable_code(unit) or is_user_renderable_code(unit, user_allowlist)
 end
 
+local function show_has_selector(node)
+  return node ~= nil and node:type() == "show" and node:named_child_count() >= 2
+end
+
 local function build_match_index(bufnr, root, parsed_query, start_row, end_row)
   local index = {}
 
@@ -334,6 +338,9 @@ local function build_match_index(bufnr, root, parsed_query, start_row, end_row)
         entry.code_root = candidate.root
         entry.code_path = candidate.path
         entry.call_ident = call_ident_node and vim.treesitter.get_node_text(call_ident_node, bufnr) or ""
+        if entry.code_type == "show" then
+          entry.show_has_selector = show_has_selector(code_node)
+        end
       end
 
       index[node:id()] = entry
@@ -382,7 +389,10 @@ local function context_kind(unit)
     return unit.code_type
   end
   if unit.code_type == "show" then
-    return "show"
+    if unit.show_has_selector == true then
+      return "show"
+    end
+    return nil
   end
   if unit.call_ident == "import" then
     return "import"
