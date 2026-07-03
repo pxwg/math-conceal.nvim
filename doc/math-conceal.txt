@@ -22,16 +22,14 @@ There are two rendering paths:
 
 - ASCII/Unicode conceal: fast tree-sitter based symbol replacement using
   Neovim extmark conceal.
-- Graphical equation conceal: terminal-graphics rendering for richer math
-  previews, migrated from https://github.com/pxwg/typst-concealer, a fork of
-  the original
-  https://github.com/PartyWumpus/typst-concealer.
+- Graphical equation conceal: terminal-graphics rendering for richer equation
+  display, adapted from https://github.com/pxwg/typst-concealer, a fork of the
+  original https://github.com/PartyWumpus/typst-concealer.
 
 Graphical equation conceal supports:
 
 - Typst math and code blocks.
 - Markdown math through https://github.com/mitex-rs/mitex.
-- Experimental LaTeX rendering when the LaTeX backend is explicitly enabled.
 
 Graphical equation conceal uses the kitty graphics protocol. Use a compatible
 terminal such as kitty or Ghostty.
@@ -431,11 +429,13 @@ Query helpers:
   image.is_render_allowed(bufnr)
 <
 
-Advanced integrations can use the runtime directly:
+Programmatic integrations should use the public image module API:
 >
-  local runtime = require("math-conceal.image.machine.runtime")
-  runtime.render_buf(bufnr)
-  runtime.refresh_visible_overlays(bufnr, { force_reupload_blocks = true })
+  local image = require("math-conceal.image")
+  if image.is_supported_bufnr(bufnr) and image.is_render_allowed(bufnr) then
+    image.enable_buf(bufnr)
+  end
+  image.rerender_buf(bufnr)
 <
 
 ==============================================================================
