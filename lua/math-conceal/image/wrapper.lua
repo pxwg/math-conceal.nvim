@@ -105,6 +105,17 @@ function M.render_size_key(config)
   return tostring(baseline_pt(config))
 end
 
+function M.render_page_prelude(config)
+  local styling_type = (config and config.styling_type) or "colorscheme"
+  if styling_type == "none" then
+    return ""
+  end
+  if styling_type == "simple" then
+    return "#set page(width: auto, height: auto, margin: 0.75pt, fill: none)\n"
+  end
+  return "#set page(width: auto, height: auto, margin: (x: 0pt, y: 0pt), fill: none)\n"
+end
+
 local function flow_block_config(ctx)
   local cfg = (ctx and ctx.code_block) or {}
   return {
@@ -325,6 +336,8 @@ function M.build_slot_document(track, ctx, config)
       append("\n")
     end
   end
+
+  append(M.render_page_prelude(config))
 
   local source_rows = track.source_rows or math.max(1, track.end_row - track.row + 1)
   local render_policy = code_render_policy(track)
