@@ -303,6 +303,9 @@ Restrict rendering by path:
         transparent page fill.
 
         `simple` uses a simple document prelude without colorscheme matching.
+        For both modes, render slots re-assert their auto-sized page setup
+        after collected Typst prelude units, so document page settings such as
+        `#set page(paper: "a4")` do not force formula images to page size.
 
         `none` does not inject styling. Use this when your project prelude fully
         controls the rendered output.

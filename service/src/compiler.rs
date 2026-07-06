@@ -925,9 +925,6 @@ fn build_flow_layout_document(
         source.push_str(context_source);
         source.push('\n');
     }
-    source.push_str(&format!(
-        "#set page(width: {width_pt}pt, height: auto, margin: (x: 0pt, y: 0pt), fill: none)\n#set text(size: {baseline_pt}pt)\n"
-    ));
 
     let target_start = clamp_char_boundary(node_source, target_start.unwrap_or(0));
     let target_end = clamp_char_boundary(node_source, target_end.unwrap_or(node_source.len()));
@@ -940,6 +937,9 @@ fn build_flow_layout_document(
     if let Some(line_start) = node_source[..target_start].rfind('\n') {
         source.push_str(&node_source[..=line_start]);
     }
+    source.push_str(&format!(
+        "#set page(width: {width_pt}pt, height: auto, margin: (x: 0pt, y: 0pt), fill: none)\n#set text(size: {baseline_pt}pt)\n"
+    ));
     source.push_str("x #box(width: 0pt)[#metadata(\"");
     source.push_str(FLOW_LAYOUT_BEFORE_LABEL);
     source.push_str("\") <");
@@ -1323,6 +1323,26 @@ mod tests {
     }
 
     #[test]
+    fn flow_layout_probe_page_setup_beats_user_page_prelude() {
+        let source = "#set page(paper: \"a4\")\nHello #box(width: 150pt)[hello, test]";
+        let target_start = source.find("#box").unwrap();
+        let resp = code_flow_case_with_layout(
+            "",
+            source,
+            Some(target_start),
+            Some(source.len()),
+            Some(100.0),
+        );
+
+        assert!(matches!(&resp.flow_status, CompileStatus::Ok), "{resp:?}");
+        assert!(matches!(resp.flow_role, FlowRole::Inline), "{resp:?}");
+        assert!(matches!(resp.layout_role, FlowRole::Block), "{resp:?}");
+        assert!(resp.layout_break, "{resp:?}");
+        assert_eq!(resp.selected_variant.as_deref(), Some("block"));
+        assert_eq!(resp.render_policy.as_deref(), Some("block_constrained"));
+    }
+
+    #[test]
     fn flow_layout_probe_keeps_small_relative_width_inline_box_on_same_line() {
         let source = "x #box(width: 1%)[hi]";
         let target_start = source.find("#box").unwrap();
@@ -1509,6 +1529,54 @@ mod tests {
             image.get_pixel(0, 0).0[3],
             0,
             "formula page prelude should keep the background transparent"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn formula_slot_page_override_beats_user_page_prelude() {
+        let root = temp_dir("formula-slot-page-override");
+        let output_dir = root.join("out");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        let req = RenderFormulasRequest {
+            backend: None,
+            request_id: "formula:test".to_string(),
+            cache_key: None,
+            context_id: "ctx".to_string(),
+            context_rev: 1,
+            context_source: String::new(),
+            root: root.clone(),
+            inputs: HashMap::new(),
+            output_dir: output_dir.clone(),
+            ppi: 72,
+            worker_count: None,
+            compiler: None,
+            converter: None,
+            compiler_args: Vec::new(),
+            nodes: Vec::new(),
+        };
+        let node = FormulaNodeRequest {
+            node_id: "node".to_string(),
+            node_rev: 1,
+            source_hash: None,
+            kind: None,
+            source: "#set page(paper: \"a4\")\n#set page(width: auto, height: auto, margin: (x: 0pt, y: 0pt), fill: none)\n$x$\n".to_string(),
+        };
+
+        let mut compiler = Compiler::new();
+        let rendered = compiler.render_formula(&req, &node);
+        assert!(matches!(&rendered.status, CompileStatus::Ok));
+        let width = rendered.width_px.unwrap();
+        let height = rendered.height_px.unwrap();
+        assert!(
+            width < 200,
+            "expected render page override to avoid A4 width, got {width}px"
+        );
+        assert!(
+            height < 200,
+            "expected render page override to avoid A4 height, got {height}px"
         );
 
         let _ = fs::remove_dir_all(root);
