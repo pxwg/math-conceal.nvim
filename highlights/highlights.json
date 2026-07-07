@@ -1,14 +1,16 @@
 {
-  "total_count": 51,
+  "total_count": 59,
   "languages": {
     "latex": [
       "@_env",
       "@_line",
       "@close_paren",
       "@cmd",
+      "@cmd_escape",
       "@conceal",
       "@conceal_dollar",
       "@font_letter",
+      "@font_digit",
       "@frac",
       "@left_1",
       "@left_2",
@@ -22,9 +24,11 @@
       "@right_brace",
       "@right_paren",
       "@right_paren_cmd",
+      "@sub_digit",
       "@sub_letter",
       "@sub_object",
       "@sub_symbol",
+      "@sup_digit",
       "@sup_letter",
       "@sup_object",
       "@sup_symbol",
@@ -35,6 +39,7 @@
     "typst": [
       "@_frac_name",
       "@_func_name",
+      "@_tagged",
       "@abs_name",
       "@close_paren",
       "@cmd",
@@ -43,6 +48,7 @@
       "@content",
       "@first_letter",
       "@font_letter",
+      "@font_digit",
       "@func",
       "@func_name",
       "@left_brace",
@@ -54,10 +60,15 @@
       "@right_content",
       "@right_paren",
       "@second_letter",
+      "@sub_digit",
+      "@sub_letter",
       "@sub_object",
+      "@sub_string",
       "@sub_symbol",
+      "@sup_digit",
       "@sup_letter",
       "@sup_object",
+      "@sup_string",
       "@sup_symbol",
       "@symbol",
       "@typ_font_name",
@@ -69,7 +80,8 @@
       "@typ_math_delim",
       "@typ_math_font",
       "@typ_math_symbol",
-      "@typ_phy_symbol"
+      "@typ_phy_symbol",
+      "@typ_symbol"
     ]
   },
   "all_highlight_groups": [
@@ -77,6 +89,7 @@
     "@_frac_name",
     "@_func_name",
     "@_line",
+    "@_tagged",
     "@abs_name",
     "@close_paren",
     "@cmd",
@@ -86,6 +99,7 @@
     "@content",
     "@first_letter",
     "@font_letter",
+    "@font_digit",
     "@frac",
     "@func",
     "@func_name",
@@ -104,11 +118,15 @@
     "@right_paren",
     "@right_paren_cmd",
     "@second_letter",
+    "@sub_digit",
     "@sub_letter",
     "@sub_object",
+    "@sub_string",
     "@sub_symbol",
+    "@sup_digit",
     "@sup_letter",
     "@sup_object",
+    "@sup_string",
     "@sup_symbol",
     "@symbol",
     "@tex_font_name",
@@ -123,6 +141,7 @@
     "@typ_math_delim",
     "@typ_math_font",
     "@typ_math_symbol",
-    "@typ_phy_symbol"
+    "@typ_phy_symbol",
+    "@typ_symbol"
   ]
 }
