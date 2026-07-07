@@ -4,64 +4,19 @@
 
 Faster and More Precise [LaTeX](https://www.latex-project.org/) and [typst](https://github.com/typst/typst) conceal for [Neovim](https://github.com/neovim/neovim).
 
-https://github.com/user-attachments/assets/65826ae2-2cd5-48a4-aa37-bfd3d9748b31
-
-## Preview Channel
-
-The stable `main` branch focuses on fast ASCII/Unicode math conceal. A preview
-branch is available for graphical equation conceal in Typst and Markdown, with
-experimental LaTeX rendering.
-
-### Typst Equation Conceal Preview
+### Typst Equation Conceal
 
 https://github.com/user-attachments/assets/d78175a5-7462-40b6-be63-087fd100b97a
 
-Try the preview branch with lazy.nvim:
+### Markdown Equation Conceal (Compatible with Stream Output)
 
-```lua
-return {
-  "pxwg/math-conceal.nvim",
-  branch = "preview",
-  build = "cargo build --release --manifest-path service/Cargo.toml",
-  main = "math-conceal",
-  opts = {
-    conceal = { "greek", "script", "math", "font", "delim", "phy" },
-    ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
-    image = {
-      enabled = true,
-      filetypes = { "typst", "markdown" },
-    },
-  },
-}
-```
+https://github.com/user-attachments/assets/359fb62f-2031-4b5c-8d0b-0fe835fccd80
 
-Feedback from Typst, Markdown streaming-output, and experimental LaTeX users is
-welcome. Please include your terminal, OS, Neovim version, filetype, a minimal
-snippet, and any `:messages` output.
+### LaTeX Conceal
 
-<table style="width: 80%; margin: auto; text-align: center;">
-  <tr>
-    <td style="width: 50%;">
-      <figure>
-        <img src="https://github.com/user-attachments/assets/51702428-640b-4b5e-8888-2a3f6354ad4c" alt="Latex Showcase" style="width: 95%;">
-        <figcaption>LaTeX-Before</figcaption>
-      </figure>
-    </td>
-    <td style="width: 50%;">
-      <figure>
-        <img src="https://github.com/user-attachments/assets/affbcc24-df83-4a45-9f02-aeba891f7727" alt="LaTeX Showcase" style="width: 99%;">
-        <figcaption>LaTeX-After</figcaption>
-      </figure>
-    </td>
-  </tr>
-</table>
-
-## Introduction
-
-In neovim `0.11.0`, the treesitter query has been changed to allow the asynchronous query, which allows us to use the treesitter query to conceal latex file. However, it's still slow while fully use `#set! conceal` directive since the expansive cost of query over the whole AST while conceal a single node.
-
-The basic solution of the problem above comes from [latex.nvim](https://github.com/robbielyman/latex.nvim), who uses customized `set-pairs` directive to conceal the latex file. ~However, it still has some performance problem. The way to resolve the performance issue is considering a hash map to accelerate pattern matching, instead of matching conceal pattern inside AST query file.~
-Using a proper-designed lua module to handle the conceal patterns and only use treesitter to locate the position of the patterns can significantly improve the performance of conceal.
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/affbcc24-df83-4a45-9f02-aeba891f7727" alt="LaTeX ASCII/Unicode Conceal" width="80%">
+</p>
 
 ## Features
 
@@ -69,6 +24,7 @@ Using a proper-designed lua module to handle the conceal patterns and only use t
 - Fine grained conceal patterns:
     - Original neovim conceal patterns: expand *all* concealed nodes on the line where the cursor is located.
   - Fine grained conceal patterns: only expand the concealed node under the cursor.
+- Image overlay conceal: Using [kitty graphic protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) to show the compiled equations instead of source code.
 - Support multiple conceal patterns, including greek letters, script letters, math symbols, font styles, delimiters, and physical units.
 - Multiple highlight groups for different conceal patterns, allowing you to customize the appearance of each pattern (all highlight groups can be found in [highlights](./highlights/highlights.md)).
 
@@ -105,6 +61,21 @@ $ luarocks --lua-version 5.1 --local --tree ~/.local/share/nvim/rocks install ma
 # you can change it according to your vim.g.rocks_nvim.rocks_path
 ```
 
+Graphical equation conceal also needs the optional Rust service binary:
+
+```vim
+:Rocks install math-conceal-service
+```
+
+or:
+
+```sh
+$ luarocks --lua-version 5.1 --local --tree ~/.local/share/nvim/rocks install math-conceal-service
+```
+
+LuaRocks uses a prebuilt service rock when one is available for your platform;
+otherwise it builds the service from source and requires Rust/Cargo.
+
 ### lazy.nvim
 
 ```lua
@@ -112,6 +83,7 @@ return {
   "pxwg/math-conceal.nvim",
   event = "VeryLazy",
   main = "math-conceal",
+  build = "cargo build --release --manifest-path service/Cargo.toml", -- required for graphical equation conceal
   --- @type LaTeXConcealOptions
   opts = {
     conceal = {
@@ -123,8 +95,78 @@ return {
       "phy",
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+    image = {
+      enabled = true, -- set true to enable graphical equation conceal
+    },
   },
 }
+```
+
+## Equation Conceal
+
+`math-conceal.nvim` can also render equations as terminal graphics using the renderer
+adapted from [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer),
+which is a fork of [PartyWumpus/typst-concealer](https://github.com/PartyWumpus/typst-concealer).
+This path uses kitty graphics protocol and works in terminals that support it,
+such as kitty and Ghostty.
+
+Graphical equation conceal supports Typst and Markdown math through
+[MiTeX](https://github.com/mitex-rs/mitex).
+Markdown math supports `$...$`, `$$...$$`, `\(...\)`, and `\[...\]` delimiters.
+
+Enable it from the same setup table:
+
+```lua
+require("math-conceal").setup({
+  image = {
+    enabled = true,
+    renderers = {
+      typst = {
+        filetypes = { "typst" },
+      },
+      markdown = {
+        filetypes = { "markdown" },
+        mitex_package = "@preview/mitex:0.2.7",
+      },
+    },
+  },
+})
+```
+
+For rocks.nvim installs, install the optional service rock:
+
+```vim
+:Rocks install math-conceal-service
+```
+
+For source/lazy.nvim installs, build the bundled Rust service after installing or updating:
+
+```sh
+cargo build --release --manifest-path service/Cargo.toml
+```
+
+Renderer-specific options live under `image.renderers.<name>`, including
+`filetypes`, `service_binary`, `live_debounce`, `root`, `inputs`,
+`preamble_file`, `header`, `render_paths`, Typst's `code_render.allow`, and
+Markdown's `mitex_package`.
+
+Typst code rendering is intentionally allowlisted. math-conceal renders a
+built-in set of predictable Typst primitives by default; add project-wide custom
+function names with `code_render.allow`:
+
+```lua
+require("math-conceal").setup({
+  image = {
+    enabled = true,
+    renderers = {
+      typst = {
+        code_render = {
+          allow = { "theorem", "lemma", "remark" },
+        },
+      },
+    },
+  },
+})
 ```
 
 ## To-do
@@ -147,5 +189,7 @@ return {
 
 - [Freed-Wu](https://github.com/Freed-Wu): Instrumental in publishing this plugin to [LuaRocks](https://luarocks.org/modules/pxwg/math-conceal.nvim) and refactoring the code structure to fit the best practices for Neovim plugins.
 - [Dirichy](https://github.com/dirichy): for helpful discussions about LaTeX conceal patterns and optimizations.
+- [PartyWumpus](https://github.com/PartyWumpus): for the original [typst-concealer](https://github.com/PartyWumpus/typst-concealer) plugin, which inspired Typst graphical conceal support.
 - [latex.nvim](https://github.com/robbielyman/latex.nvim) for the idea of using customized conceal patterns.
 - [latex_concealer.nvim](http://github.com/dirichy/latex_concealer.nvim) for the idea of fine grained conceal patterns.
+- [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer) as the fork whose renderer source was adapted into this plugin.

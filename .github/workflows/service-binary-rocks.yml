@@ -1,0 +1,110 @@
+name: Release Service Binary Rocks
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "LuaRocks version/modrev to publish, for example 0.1.7"
+        required: true
+      git_ref:
+        description: "Git ref recorded in the rockspec source block. Defaults to the current ref name."
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-service-binary-rock:
+    name: Build service binary rock (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    env:
+      LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Lua 5.1
+        uses: leafo/gh-actions-lua@v11
+        with:
+          luaVersion: "5.1"
+
+      - name: Install LuaRocks
+        uses: leafo/gh-actions-luarocks@v5
+
+      - name: Render release rockspec
+        id: rockspec
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_GIT_REF: ${{ github.event.inputs.git_ref }}
+        run: |
+          set -euo pipefail
+          version="${INPUT_VERSION:-}"
+          git_ref="${INPUT_GIT_REF:-}"
+          if [ -z "$version" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          if [ -z "$git_ref" ]; then
+            git_ref="$GITHUB_REF_NAME"
+          fi
+          archive_suffix="${git_ref#v}"
+          rockspec="math-conceal-service-${version}-1.rockspec"
+          python3 - "$version" "$git_ref" "$archive_suffix" "$rockspec" <<'PY'
+          import sys
+          from pathlib import Path
+
+          version, git_ref, archive_suffix, rockspec = sys.argv[1:]
+          repo_url = "https://github.com/pxwg/math-conceal.nvim"
+
+          def lua_quote(value: str) -> str:
+              return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+          text = Path("math-conceal-service-scm-1.rockspec").read_text()
+          replacements = {
+              "'$git_ref'": lua_quote(git_ref),
+              "'$modrev'": lua_quote(version),
+              "'$specrev'": lua_quote("1"),
+              "'$repo_url'": lua_quote(repo_url),
+              "'$homepage'": lua_quote(repo_url),
+              "'$archive_dir_suffix'": lua_quote(archive_suffix),
+          }
+          for old, new in replacements.items():
+              text = text.replace(old, new)
+          text = text.replace("$repo_name", "math-conceal.nvim")
+          Path(rockspec).write_text(text)
+          PY
+          echo "path=$rockspec" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build binary rock
+        shell: bash
+        run: |
+          set -euo pipefail
+          luarocks --lua-version 5.1 make --pack-binary-rock "${{ steps.rockspec.outputs.path }}"
+          ls -lh math-conceal-service-${{ steps.rockspec.outputs.version }}-1.*.rock
+
+      - name: Upload binary rock artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: math-conceal-service-${{ steps.rockspec.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+          path: math-conceal-service-${{ steps.rockspec.outputs.version }}-1.*.rock
+          if-no-files-found: error
+
+      - name: Publish binary rock to LuaRocks
+        if: env.LUAROCKS_API_KEY != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          luarocks upload --force --api-key="$LUAROCKS_API_KEY" "${{ steps.rockspec.outputs.path }}" math-conceal-service-${{ steps.rockspec.outputs.version }}-1.*.rock
