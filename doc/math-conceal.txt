@@ -331,6 +331,12 @@ Restrict rendering by path:
         and visual modes.
         Default: true.
 
+                                           *math-conceal-image.preview_idle_timeout_ms*
+`image.preview_idle_timeout_ms`~
+        Milliseconds before an idle live-preview service is stopped after the
+        preview surface is cleared. Set to a negative value to keep the service
+        alive. Default: 5000.
+
                                       *math-conceal-image.renderers.live_debounce*
 `image.renderers.<name>.live_debounce`~
         Delay in milliseconds for text-change live preview updates for a

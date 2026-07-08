@@ -44,6 +44,7 @@ local M = {}
 ---@field do_diagnostics boolean
 ---@field conceal_in_normal boolean
 ---@field live_preview_enabled boolean
+---@field preview_idle_timeout_ms integer
 ---@field block_padding_cols integer
 
 local defaults = {
@@ -59,6 +60,7 @@ local defaults = {
   do_diagnostics = true,
   conceal_in_normal = false,
   live_preview_enabled = true,
+  preview_idle_timeout_ms = 5000,
   block_padding_cols = 0,
   renderers = {
     typst = {

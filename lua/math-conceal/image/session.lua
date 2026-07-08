@@ -331,18 +331,31 @@ function M.cancel_live_preview(bufnr)
   end
 end
 
-function M.stop(bufnr)
+local function stop_service(service)
+  if service ~= nil and service.job_id ~= nil then
+    service.stopping = true
+    pcall(vim.fn.chansend, service.job_id, vim.json.encode({ type = "shutdown" }) .. "\n")
+    pcall(vim.fn.jobstop, service.job_id)
+  end
+end
+
+function M.stop(bufnr, kind)
   local bucket = services[bufnr]
   if bucket == nil then
     return
   end
 
-  for _, service in pairs(bucket) do
-    if service.job_id ~= nil then
-      service.stopping = true
-      pcall(vim.fn.chansend, service.job_id, vim.json.encode({ type = "shutdown" }) .. "\n")
-      pcall(vim.fn.jobstop, service.job_id)
+  if kind ~= nil then
+    stop_service(bucket[kind])
+    bucket[kind] = nil
+    if next(bucket) == nil then
+      services[bufnr] = nil
     end
+    return
+  end
+
+  for _, service in pairs(bucket) do
+    stop_service(service)
   end
   services[bufnr] = nil
 end
