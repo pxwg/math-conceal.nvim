@@ -1,5 +1,6 @@
 local queries = require("math-conceal.query")
 local render = require("math-conceal.render")
+local window_options = require("math-conceal.window-options")
 local M = {
   files = {},
   queries = {},
@@ -15,6 +16,10 @@ local M = {
       "phy",
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+    opt = {
+      conceallevel = 2,
+      concealcursor = "n",
+    },
     depth = 90,
     ns_id = 0,
     buffer = {
@@ -108,12 +113,17 @@ local M = {
 --- @class MathConcealOptions
 --- @field conceal string[]?: Enable or disable math symbol concealment. You can add your own custom conceal types here. Default is {"greek", "script", "math", "font", "delim"}.
 --- @field ft string[]: A list of filetypes to enable conceal
+--- @field opt MathConcealWindowOptions?: Window-local Neovim conceal options applied to attached buffers.
 --- @field depth integer
 --- @field augroup_id integer?
 --- @field ns_id integer
 --- @field buffer MathConcealBufferOptions?
 --- @field highlights table<string, table<string, string>>
 --- @field image MathConcealImageOptions?
+
+--- @class MathConcealWindowOptions
+--- @field conceallevel integer?: Window-local conceallevel for attached buffers. Default 2.
+--- @field concealcursor string?: Window-local concealcursor for attached buffers. Default "n".
 
 --- @class MathConcealBufferOptions
 --- @field mode "edit"|"preview"|"presentation"?: Conceal cursor behavior. `edit` expands the item under the cursor; `preview` keeps ASCII/Unicode items concealed; `presentation` keeps plugin-managed ASCII/Unicode conceal collapsed, except while Visual selection reveals source for precise selection.
@@ -274,6 +284,7 @@ end
 ---@param opts MathConcealOptions?
 function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", M.opts, opts or {})
+  window_options.setup(M.opts.opt)
   render.set_default_buffer_config(M.opts.buffer)
   setup_image()
 end
@@ -330,8 +341,7 @@ end
 ---do some prepare work, then call `set_highlights`
 ---@param filetype string
 function M.set_hl(filetype)
-  vim.opt_local.conceallevel = 2
-  vim.opt_local.concealcursor = "nci"
+  window_options.setup(M.opts.opt)
 
   -- set typst math conceal for typst
   -- and set latex math conceal for all other filetypes.

@@ -111,6 +111,25 @@ Options:
 `highlights`~
         Highlight definitions for conceal capture groups.
 
+                                                             *math-conceal-opt*
+`opt`~
+        Neovim window-local conceal options injected only into windows showing
+        buffers where math-conceal is attached.
+>
+  require("math-conceal").setup({
+    opt = {
+      conceallevel = 2,
+      concealcursor = "n",
+    },
+  })
+<
+        Defaults are `conceallevel=2` and `concealcursor=n`. This keeps conceal
+        active in Normal mode while revealing source on the cursor line during
+        Insert mode. Set `concealcursor="nci"` to keep the previous
+        always-concealed cursor-line behavior, or use any valid Neovim
+        'concealcursor' string. These options are restored when a window no
+        longer shows a math-conceal-attached buffer.
+
                                                         *math-conceal-buffer*
 `buffer`~
         Default buffer-local ASCII/Unicode conceal behavior.
@@ -131,9 +150,8 @@ Options:
         - `presentation`: keep plugin-managed conceal collapsed for rendered
           reading surfaces. Image-rendered rows are cursor-protected, live
           source reveal paths are disabled, and the buffer window is kept at
-          `conceallevel=2` with `concealcursor=nci`. Visual selection
-          temporarily reveals source so inline text ranges can be selected
-          precisely.
+          the configured `opt` conceal settings. Visual selection temporarily
+          reveals source so inline text ranges can be selected precisely.
 
         The same setting can be changed for one buffer:
 >
