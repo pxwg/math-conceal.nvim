@@ -5,6 +5,7 @@ local repair_event = require("math-conceal.image.repair-event")
 local state = require("math-conceal.image.state")
 local terminal = require("math-conceal.image.terminal")
 local tracker = require("math-conceal.image.tracker")
+local window_options = require("math-conceal.window-options")
 
 local M = {}
 
@@ -1091,12 +1092,7 @@ local function render_track_keys(bufnr, fd, plan, keys)
 end
 
 local function ensure_conceal_options(bufnr)
-  for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
-    if vim.api.nvim_win_is_valid(win) then
-      vim.wo[win].conceallevel = math.max(tonumber(vim.wo[win].conceallevel) or 0, 2)
-      vim.wo[win].concealcursor = "nci"
-    end
-  end
+  window_options.sync(bufnr)
 end
 
 local function repair_keys_for_event(event, plan)

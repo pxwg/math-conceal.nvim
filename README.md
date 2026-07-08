@@ -95,12 +95,22 @@ return {
       "phy",
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+    opt = {
+      conceallevel = 2,
+      concealcursor = "n",
+    },
     image = {
       enabled = true, -- set true to enable graphical equation conceal
     },
   },
 }
 ```
+
+The top-level `opt` table controls the Neovim window-local conceal options that
+math-conceal injects only into windows showing attached buffers. The default
+`concealcursor = "n"` keeps conceal active in Normal mode while revealing source
+on the cursor line during Insert mode; set it to `"nci"` to keep the previous
+always-concealed cursor-line behavior.
 
 ## Equation Conceal
 

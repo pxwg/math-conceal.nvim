@@ -1,6 +1,7 @@
 local projection = require("math-conceal.image.projection")
 local state = require("math-conceal.image.state")
 local tracker = require("math-conceal.image.tracker")
+local window_options = require("math-conceal.window-options")
 
 local M = {}
 
@@ -449,6 +450,7 @@ function M.attach_buf(bufnr)
   close_hidden_service_timer(bufnr)
   M._buffers[bufnr] = binding
   resume_on_read[bufnr] = nil
+  window_options.attach(bufnr, "image")
   tracker.attach(bufnr, {
     kind = binding.scanner or binding.source_kind or kind,
     debug = tracker_debug_enabled(),
@@ -475,6 +477,7 @@ function M.disable_buf(bufnr, opts)
   end
   close_hidden_service_timer(bufnr)
   M._buffers[bufnr] = nil
+  window_options.detach(bufnr, "image")
   projection.detach(bufnr)
   tracker.detach(bufnr)
 end

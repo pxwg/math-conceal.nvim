@@ -97,12 +97,22 @@ return {
       "phy",
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+    opt = {
+      conceallevel = 2,
+      concealcursor = "n",
+    },
     image = {
       enabled = true, -- 启用图形化公式 conceal
     },
   },
 }
 ```
+
+顶层 `opt` 表控制插件只注入到已 attach buffer 所在 window 的 Neovim
+window-local conceal 选项。默认 `concealcursor = "n"`，Normal 模式保持
+公式 conceal，Insert 模式光标行显示源码；如果想保留旧的光标行始终
+conceal 行为，可以设为 `"nci"`。当 window 不再显示已 attach buffer 时，
+插件会恢复原 window 选项，避免污染其他 window。
 
 ## 数学公式 Conceal
 
