@@ -469,6 +469,47 @@ local function close_timer(preview)
   end
 end
 
+local function close_idle_timer(preview)
+  if preview.idle_timer ~= nil then
+    preview.idle_timer:stop()
+    if not preview.idle_timer:is_closing() then
+      preview.idle_timer:close()
+    end
+    preview.idle_timer = nil
+  end
+end
+
+local function preview_idle_timeout_ms()
+  local image = require("math-conceal.image")
+  local timeout = tonumber(image.config and image.config.preview_idle_timeout_ms)
+  if timeout == nil then
+    timeout = 1000
+  end
+  return timeout
+end
+
+local function schedule_idle_stop(bufnr, preview)
+  local timeout = preview_idle_timeout_ms()
+  if timeout < 0 then
+    close_idle_timer(preview)
+    return
+  end
+  close_idle_timer(preview)
+  preview.idle_timer = vim.uv.new_timer()
+  preview.idle_timer:start(
+    math.max(0, timeout),
+    0,
+    vim.schedule_wrap(function()
+      close_idle_timer(preview)
+      session.stop(bufnr, "preview")
+    end)
+  )
+end
+
+local function cancel_idle_stop(preview)
+  close_idle_timer(preview)
+end
+
 function M.clear(bufnr, opts)
   bufnr = normalize_bufnr(bufnr)
   opts = opts or {}
@@ -484,6 +525,11 @@ function M.clear(bufnr, opts)
   session.cancel_live_preview(bufnr)
   clear_visible_preview(preview, bufnr)
   preview.pending_key = nil
+  if opts.skip_idle_stop == true then
+    close_idle_timer(preview)
+  else
+    schedule_idle_stop(bufnr, preview)
+  end
 end
 
 local function render_projection_preview(bufnr, projection, track, cursor_row, cursor_col, mode)
@@ -496,6 +542,7 @@ local function render_projection_preview(bufnr, projection, track, cursor_row, c
 
   local bs = state.get_buf_state(bufnr)
   local preview = bs.live_preview
+  cancel_idle_stop(preview)
   local attempted_continuity = false
   if preview.visible_asset == nil or preview.track_key ~= projection.key then
     attempted_continuity = true
@@ -751,8 +798,9 @@ function M.detach(bufnr)
   local bs = state.get_buf_state(bufnr)
   if bs.live_preview ~= nil then
     close_timer(bs.live_preview)
+    close_idle_timer(bs.live_preview)
   end
-  M.clear(bufnr)
+  M.clear(bufnr, { skip_idle_stop = true })
   if vim.api.nvim_buf_is_valid(bufnr) then
     pcall(vim.api.nvim_buf_clear_namespace, bufnr, state.preview_ns, 0, -1)
   end

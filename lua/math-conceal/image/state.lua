@@ -57,6 +57,7 @@ function M.get_buf_state(bufnr)
         handoff_key = nil,
         vertical = "above",
         timer = nil,
+        idle_timer = nil,
       },
       context = nil,
       pending_batches = {},

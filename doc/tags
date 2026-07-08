@@ -13,9 +13,11 @@ math-conceal-image.conceal_in_normal	math-conceal.txt	/*math-conceal-image.conce
 math-conceal-image.cursor_hover_throttle_ms	math-conceal.txt	/*math-conceal-image.cursor_hover_throttle_ms*
 math-conceal-image.enabled	math-conceal.txt	/*math-conceal-image.enabled*
 math-conceal-image.enabled_by_default	math-conceal.txt	/*math-conceal-image.enabled_by_default*
+math-conceal-image.hidden_service_idle_ms	math-conceal.txt	/*math-conceal-image.hidden_service_idle_ms*
 math-conceal-image.live_preview_enabled	math-conceal.txt	/*math-conceal-image.live_preview_enabled*
 math-conceal-image.math_baseline_pt	math-conceal.txt	/*math-conceal-image.math_baseline_pt*
 math-conceal-image.ppi	math-conceal.txt	/*math-conceal-image.ppi*
+math-conceal-image.preview_idle_timeout_ms	math-conceal.txt	/*math-conceal-image.preview_idle_timeout_ms*
 math-conceal-image.renderers	math-conceal.txt	/*math-conceal-image.renderers*
 math-conceal-image.renderers.filetypes	math-conceal.txt	/*math-conceal-image.renderers.filetypes*
 math-conceal-image.renderers.header	math-conceal.txt	/*math-conceal-image.renderers.header*
@@ -26,6 +28,7 @@ math-conceal-image.renderers.preamble_file	math-conceal.txt	/*math-conceal-image
 math-conceal-image.renderers.render_paths	math-conceal.txt	/*math-conceal-image.renderers.render_paths*
 math-conceal-image.renderers.root	math-conceal.txt	/*math-conceal-image.renderers.root*
 math-conceal-image.renderers.service_binary	math-conceal.txt	/*math-conceal-image.renderers.service_binary*
+math-conceal-image.renderers.typst.code_render.allow	math-conceal.txt	/*math-conceal-image.renderers.typst.code_render.allow*
 math-conceal-image.styling_type	math-conceal.txt	/*math-conceal-image.styling_type*
 math-conceal-intro	math-conceal.txt	/*math-conceal-intro*
 math-conceal-setup	math-conceal.txt	/*math-conceal-setup*
