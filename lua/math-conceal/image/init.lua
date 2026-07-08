@@ -114,6 +114,7 @@ local augroup_name = "math-conceal.image"
 local augroup_id = nil
 local cursor_sync_pending = {}
 local cursor_sync_generation = {}
+local resume_on_read = {}
 
 local function normalize_bufnr(bufnr)
   if bufnr == nil or bufnr == 0 then
@@ -341,21 +342,23 @@ end
 
 function M.attach_buf(bufnr)
   bufnr = normalize_bufnr(bufnr)
+  local keep_resume = resume_on_read[bufnr] == true
   local kind = M.renderer_kind_for_bufnr(bufnr)
   if kind == nil then
-    M.disable_buf(bufnr)
+    M.disable_buf(bufnr, { keep_resume = keep_resume })
     return false
   end
 
   local spec = M.config.renderers[kind]
   local ctx = buffer_context(bufnr, kind)
   if path_excluded(spec, ctx) then
-    M.disable_buf(bufnr)
+    M.disable_buf(bufnr, { keep_resume = keep_resume })
     return false
   end
 
   local binding = make_binding(kind, spec, ctx)
   M._buffers[bufnr] = binding
+  resume_on_read[bufnr] = nil
   tracker.attach(bufnr, {
     kind = binding.scanner or binding.source_kind or kind,
     debug = tracker_debug_enabled(),
@@ -372,10 +375,14 @@ function M.enable_buf(bufnr)
   return M.attach_buf(bufnr)
 end
 
-function M.disable_buf(bufnr)
+function M.disable_buf(bufnr, opts)
   bufnr = normalize_bufnr(bufnr)
+  opts = opts or {}
   cursor_sync_pending[bufnr] = nil
   cursor_sync_generation[bufnr] = (cursor_sync_generation[bufnr] or 0) + 1
+  if opts.keep_resume ~= true then
+    resume_on_read[bufnr] = nil
+  end
   M._buffers[bufnr] = nil
   projection.detach(bufnr)
   tracker.detach(bufnr)
@@ -454,7 +461,7 @@ local function setup_autocmds()
       pattern = fts,
       desc = "attach math-conceal image renderer",
       callback = function(ev)
-        if M.config.enabled_by_default then
+        if M.config.enabled_by_default or resume_on_read[ev.buf] == true then
           M.attach_buf(ev.buf)
         end
       end,
@@ -465,16 +472,35 @@ local function setup_autocmds()
     group = augroup_id,
     desc = "reattach math-conceal image renderer after reload",
     callback = function(ev)
-      if valid_loaded_buffer(ev.buf) and (M._buffers[ev.buf] ~= nil or M.config.enabled_by_default) then
+      if
+        valid_loaded_buffer(ev.buf)
+        and (M._buffers[ev.buf] ~= nil or M.config.enabled_by_default or resume_on_read[ev.buf] == true)
+      then
         M.attach_buf(ev.buf)
       end
     end,
   })
 
-  vim.api.nvim_create_autocmd("BufWipeout", {
+  vim.api.nvim_create_autocmd("BufUnload", {
+    group = augroup_id,
+    desc = "detach math-conceal image renderer while preserving manual reload intent",
+    callback = function(ev)
+      if M._buffers[ev.buf] == nil and resume_on_read[ev.buf] ~= true then
+        return
+      end
+      local should_resume = M.config.enabled_by_default ~= true
+      M.disable_buf(ev.buf, { keep_resume = should_resume })
+      if should_resume then
+        resume_on_read[ev.buf] = true
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
     group = augroup_id,
     desc = "clear math-conceal image renderer",
     callback = function(ev)
+      resume_on_read[ev.buf] = nil
       M.disable_buf(ev.buf)
     end,
   })
@@ -579,6 +605,7 @@ function M.setup(cfg)
   M._buffers = {}
   cursor_sync_pending = {}
   cursor_sync_generation = {}
+  resume_on_read = {}
   setup_prelude()
   state.refresh_cell_px_size(M.config)
   build_filetype_index()
