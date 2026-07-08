@@ -61,8 +61,8 @@ local defaults = {
   do_diagnostics = true,
   conceal_in_normal = false,
   live_preview_enabled = true,
-  preview_idle_timeout_ms = 5000,
-  hidden_service_idle_ms = 30000,
+  preview_idle_timeout_ms = 1000,
+  hidden_service_idle_ms = 2000,
   block_padding_cols = 0,
   renderers = {
     typst = {
@@ -347,7 +347,7 @@ end
 local function hidden_service_idle_ms()
   local timeout = tonumber(M.config.hidden_service_idle_ms)
   if timeout == nil then
-    timeout = 30000
+    timeout = 2000
   end
   return timeout
 end

@@ -483,7 +483,7 @@ local function preview_idle_timeout_ms()
   local image = require("math-conceal.image")
   local timeout = tonumber(image.config and image.config.preview_idle_timeout_ms)
   if timeout == nil then
-    timeout = 5000
+    timeout = 1000
   end
   return timeout
 end
