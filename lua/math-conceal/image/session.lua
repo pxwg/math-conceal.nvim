@@ -331,12 +331,49 @@ function M.cancel_live_preview(bufnr)
   end
 end
 
+local function service_idle(service)
+  if service == nil then
+    return true
+  end
+  return service.active_request_id == nil
+    and next(service.active or {}) == nil
+    and service.pending_preview == nil
+    and (service.pending_full == nil or next(service.pending_full) == nil)
+end
+
 local function stop_service(service)
   if service ~= nil and service.job_id ~= nil then
     service.stopping = true
     pcall(vim.fn.chansend, service.job_id, vim.json.encode({ type = "shutdown" }) .. "\n")
     pcall(vim.fn.jobstop, service.job_id)
   end
+end
+
+function M.stop_if_idle(bufnr, kind)
+  local bucket = services[bufnr]
+  if bucket == nil then
+    return true
+  end
+
+  if kind ~= nil then
+    local service = bucket[kind]
+    if service == nil then
+      return true
+    end
+    if not service_idle(service) then
+      return false
+    end
+    M.stop(bufnr, kind)
+    return true
+  end
+
+  for _, service in pairs(bucket) do
+    if not service_idle(service) then
+      return false
+    end
+  end
+  M.stop(bufnr)
+  return true
 end
 
 function M.stop(bufnr, kind)

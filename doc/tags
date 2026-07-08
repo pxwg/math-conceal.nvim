@@ -13,6 +13,7 @@ math-conceal-image.conceal_in_normal	math-conceal.txt	/*math-conceal-image.conce
 math-conceal-image.cursor_hover_throttle_ms	math-conceal.txt	/*math-conceal-image.cursor_hover_throttle_ms*
 math-conceal-image.enabled	math-conceal.txt	/*math-conceal-image.enabled*
 math-conceal-image.enabled_by_default	math-conceal.txt	/*math-conceal-image.enabled_by_default*
+math-conceal-image.hidden_service_idle_ms	math-conceal.txt	/*math-conceal-image.hidden_service_idle_ms*
 math-conceal-image.live_preview_enabled	math-conceal.txt	/*math-conceal-image.live_preview_enabled*
 math-conceal-image.math_baseline_pt	math-conceal.txt	/*math-conceal-image.math_baseline_pt*
 math-conceal-image.ppi	math-conceal.txt	/*math-conceal-image.ppi*

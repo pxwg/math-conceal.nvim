@@ -45,6 +45,7 @@ local M = {}
 ---@field conceal_in_normal boolean
 ---@field live_preview_enabled boolean
 ---@field preview_idle_timeout_ms integer
+---@field hidden_service_idle_ms integer
 ---@field block_padding_cols integer
 
 local defaults = {
@@ -61,6 +62,7 @@ local defaults = {
   conceal_in_normal = false,
   live_preview_enabled = true,
   preview_idle_timeout_ms = 5000,
+  hidden_service_idle_ms = 30000,
   block_padding_cols = 0,
   renderers = {
     typst = {
@@ -117,6 +119,7 @@ local augroup_id = nil
 local cursor_sync_pending = {}
 local cursor_sync_generation = {}
 local resume_on_read = {}
+local hidden_service_timers = {}
 
 local function normalize_bufnr(bufnr)
   if bufnr == nil or bufnr == 0 then
@@ -314,6 +317,90 @@ local function attached_bufnrs()
   return bufs
 end
 
+local function close_hidden_service_timer(bufnr)
+  local timer = hidden_service_timers[bufnr]
+  if timer == nil then
+    return
+  end
+  timer:stop()
+  if not timer:is_closing() then
+    timer:close()
+  end
+  hidden_service_timers[bufnr] = nil
+end
+
+local function close_all_hidden_service_timers()
+  for bufnr in pairs(hidden_service_timers) do
+    close_hidden_service_timer(bufnr)
+  end
+end
+
+local function buffer_visible(bufnr)
+  for _, winid in ipairs(vim.fn.win_findbuf(bufnr)) do
+    if vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) == bufnr then
+      return true
+    end
+  end
+  return false
+end
+
+local function hidden_service_idle_ms()
+  local timeout = tonumber(M.config.hidden_service_idle_ms)
+  if timeout == nil then
+    timeout = 30000
+  end
+  return timeout
+end
+
+local function stop_hidden_services(bufnr)
+  hidden_service_timers[bufnr] = nil
+  if M._buffers[bufnr] == nil or buffer_visible(bufnr) then
+    return
+  end
+
+  local session = require("math-conceal.image.session")
+  local ok_preview, preview = pcall(require, "math-conceal.image.preview")
+  if ok_preview and type(preview.clear) == "function" then
+    pcall(preview.clear, bufnr, { skip_idle_stop = true })
+  end
+  session.stop(bufnr, "preview")
+  if not session.stop_if_idle(bufnr, "full") then
+    -- Full renders own projection pending state.  Do not cancel them from the
+    -- hidden-buffer path; try again after the same idle interval.
+    M._schedule_hidden_service_stop(bufnr)
+  end
+end
+
+function M._schedule_hidden_service_stop(bufnr)
+  bufnr = normalize_bufnr(bufnr)
+  if M._buffers[bufnr] == nil or buffer_visible(bufnr) then
+    close_hidden_service_timer(bufnr)
+    return
+  end
+
+  local timeout = hidden_service_idle_ms()
+  if timeout < 0 then
+    close_hidden_service_timer(bufnr)
+    return
+  end
+  if hidden_service_timers[bufnr] ~= nil then
+    return
+  end
+
+  local timer = vim.uv.new_timer()
+  hidden_service_timers[bufnr] = timer
+  timer:start(
+    math.max(0, timeout),
+    0,
+    vim.schedule_wrap(function()
+      if not timer:is_closing() then
+        timer:close()
+      end
+      stop_hidden_services(bufnr)
+    end)
+  )
+end
+
 function M.renderer_kind_for_bufnr(bufnr)
   bufnr = normalize_bufnr(bufnr)
   if not valid_loaded_buffer(bufnr) then
@@ -359,6 +446,7 @@ function M.attach_buf(bufnr)
   end
 
   local binding = make_binding(kind, spec, ctx)
+  close_hidden_service_timer(bufnr)
   M._buffers[bufnr] = binding
   resume_on_read[bufnr] = nil
   tracker.attach(bufnr, {
@@ -385,6 +473,7 @@ function M.disable_buf(bufnr, opts)
   if opts.keep_resume ~= true then
     resume_on_read[bufnr] = nil
   end
+  close_hidden_service_timer(bufnr)
   M._buffers[bufnr] = nil
   projection.detach(bufnr)
   tracker.detach(bufnr)
@@ -544,9 +633,23 @@ local function setup_autocmds()
     group = augroup_id,
     desc = "refresh math-conceal image display strategy for new windows",
     callback = function(ev)
+      close_hidden_service_timer(ev.buf)
       if M._buffers[ev.buf] ~= nil then
         projection.on_layout_change(ev.buf)
       end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "BufHidden", "BufWinLeave" }, {
+    group = augroup_id,
+    desc = "stop idle math-conceal services for hidden buffers",
+    callback = function(ev)
+      local bufnr = ev.buf
+      vim.schedule(function()
+        if valid_loaded_buffer(bufnr) then
+          M._schedule_hidden_service_stop(bufnr)
+        end
+      end)
     end,
   })
 
@@ -604,10 +707,12 @@ function M.setup(cfg)
   if not vim.list_contains({ "colorscheme", "simple", "none" }, M.config.styling_type) then
     error("math-conceal image styling_type must be one of colorscheme, simple, none")
   end
+  close_all_hidden_service_timers()
   M._buffers = {}
   cursor_sync_pending = {}
   cursor_sync_generation = {}
   resume_on_read = {}
+  hidden_service_timers = {}
   setup_prelude()
   state.refresh_cell_px_size(M.config)
   build_filetype_index()

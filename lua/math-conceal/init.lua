@@ -25,6 +25,7 @@ local M = {
       enabled_by_default = true,
       live_preview_enabled = true,
       preview_idle_timeout_ms = 5000,
+      hidden_service_idle_ms = 30000,
       tracker = {
         debug = false,
       },
@@ -122,6 +123,7 @@ local M = {
 --- @field enabled_by_default boolean?: Attach matching buffers automatically. Default true.
 --- @field live_preview_enabled boolean?: Enable cursor-following live preview. Default true.
 --- @field preview_idle_timeout_ms integer?: Stop the idle live preview service after this many milliseconds. Default 5000.
+--- @field hidden_service_idle_ms integer?: Stop services for hidden buffers after this many idle milliseconds. Default 30000.
 --- @field tracker MathConcealImageTrackerOptions?: Tracker configuration for the image path.
 --- @field renderers table<string, MathConcealImageRendererOptions>?: Renderer-specific attachment configuration.
 --- Other fields are stored by `math-conceal.image` for the future renderer.

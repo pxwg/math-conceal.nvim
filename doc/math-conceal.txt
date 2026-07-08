@@ -337,6 +337,13 @@ Restrict rendering by path:
         preview surface is cleared. Set to a negative value to keep the service
         alive. Default: 5000.
 
+                                               *math-conceal-image.hidden_service_idle_ms*
+`image.hidden_service_idle_ms`~
+        Milliseconds before services for a hidden buffer are stopped. The live
+        preview service may be stopped immediately at timeout; the full render
+        service is stopped only when it has no active or queued request. Set to
+        a negative value to keep hidden-buffer services alive. Default: 30000.
+
                                       *math-conceal-image.renderers.live_debounce*
 `image.renderers.<name>.live_debounce`~
         Delay in milliseconds for text-change live preview updates for a
