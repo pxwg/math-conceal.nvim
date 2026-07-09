@@ -24,6 +24,7 @@ jobs:
             --force
           version: scm
           template: math-conceal.nvim-scm-1.rockspec
+          license: MIT
       - uses: lumen-oss/luarocks-tag-release@v7
         env:
           LUAROCKS_API_KEY: ${{secrets.LUAROCKS_API_KEY}}
@@ -32,6 +33,7 @@ jobs:
           extra_luarocks_args: |
             --force
           template: math-conceal.nvim-scm-1.rockspec
+          license: MIT
       - uses: lumen-oss/luarocks-tag-release@v7
         env:
           LUAROCKS_API_KEY: ${{secrets.LUAROCKS_API_KEY}}
@@ -42,6 +44,7 @@ jobs:
           name: math-conceal-service
           version: scm
           template: math-conceal-service-scm-1.rockspec
+          license: MIT
       - uses: lumen-oss/luarocks-tag-release@v7
         env:
           LUAROCKS_API_KEY: ${{secrets.LUAROCKS_API_KEY}}
@@ -51,3 +54,4 @@ jobs:
             --force
           name: math-conceal-service
           template: math-conceal-service-scm-1.rockspec
+          license: MIT
