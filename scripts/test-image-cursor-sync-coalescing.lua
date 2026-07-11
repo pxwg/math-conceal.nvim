@@ -82,7 +82,7 @@ local function run()
   for _ = 1, 5 do
     vim.api.nvim_exec_autocmds("CursorMoved", { buffer = bufnr, modeline = false })
   end
-  assert_eq("cursor moved sync is deferred", tracker_cursor_calls, 0)
+  assert_eq("cursor moved sync is scheduled", tracker_cursor_calls, 0)
   assert_true(
     "cursor moved sync eventually runs once",
     vim.wait(200, function()
@@ -97,7 +97,7 @@ local function run()
   tracker_cursor_calls = 0
   projection_cursor_calls = 0
   vim.api.nvim_exec_autocmds("CursorMoved", { buffer = bufnr, modeline = false })
-  assert_eq("preempted cursor moved sync is deferred", tracker_cursor_calls, 0)
+  assert_eq("preempted cursor moved sync is scheduled", tracker_cursor_calls, 0)
   vim.api.nvim_exec_autocmds("ModeChanged", { buffer = bufnr, modeline = false })
   assert_eq("preempting mode changed tracker sync is immediate", tracker_cursor_calls, 1)
   assert_eq("preempting mode changed projection sync is immediate", projection_cursor_calls, 1)
@@ -114,5 +114,5 @@ if not ok then
   vim.cmd("cquit")
 end
 
-print("image-cursor-sync-debounce-ok")
+print("image-cursor-sync-coalescing-ok")
 vim.cmd("qa!")

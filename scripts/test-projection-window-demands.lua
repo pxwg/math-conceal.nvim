@@ -82,12 +82,15 @@ local function run()
   }
 
   local transactions = {}
+  local closed_windows = {}
   package.loaded["math-conceal.image.placement"] = {
     reconcile_window = function(winid, transaction)
       transactions[winid] = transaction
       return true
     end,
-    close_window = function() end,
+    close_window = function(winid)
+      closed_windows[#closed_windows + 1] = winid
+    end,
     close_buffer = function() end,
     release_image = function() end,
   }
@@ -205,6 +208,31 @@ local function run()
     assert_eq("math ready in each window", transactions[winid].upsert["track:1"].state, "ready")
     assert_eq("code ready in each window", transactions[winid].upsert["track:2"].state, "ready")
   end
+
+  dispatched = {}
+  local source_tab = vim.api.nvim_get_current_tabpage()
+  vim.cmd("tabnew")
+  projection.close_tab(source_tab)
+  projection._sync_demands(bufnr)
+  assert_eq("inactive tab releases both window placements", #closed_windows, 2)
+  local bs = require("math-conceal.image.state").get_buf_state(bufnr)
+  for _, item in pairs(bs.projections) do
+    assert_eq("inactive tab has no realization demand", next(item.desired_keys), nil)
+  end
+  vim.cmd("tabprevious")
+  projection._sync_demands(bufnr)
+  local ready_code, pending_code = 0, 0
+  for _, winid in ipairs(wins) do
+    assert_eq("tab return restores math", transactions[winid].upsert["track:1"].state, "ready")
+    if transactions[winid].upsert["track:2"].state == "ready" then
+      ready_code = ready_code + 1
+    else
+      pending_code = pending_code + 1
+    end
+  end
+  assert_eq("one inactive code realization stays warm", ready_code, 1)
+  assert_eq("other code layout is demanded again", pending_code, 1)
+  assert_eq("tab return dispatches only the evicted layout", #dispatched, 1)
 
   dispatched = {}
   tracks[1].rev, tracks[1].source_hash = 2, "math-v2"

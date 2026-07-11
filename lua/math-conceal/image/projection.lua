@@ -515,6 +515,28 @@ function M.on_layout_change(bufnr)
   require("math-conceal.image.preview").refresh(normalize_bufnr(bufnr))
 end
 
+function M.close_window(winid)
+  placement.close_window(winid)
+  for _, bs in pairs(state.buffers) do
+    if bs.placement_windows ~= nil then
+      bs.placement_windows[winid] = nil
+    end
+    if bs.window_placement_keys ~= nil then
+      bs.window_placement_keys[winid] = nil
+    end
+    bs.placement_window_key = nil
+  end
+end
+
+function M.close_tab(tabpage)
+  if tabpage == nil or not vim.api.nvim_tabpage_is_valid(tabpage) then
+    return
+  end
+  for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(tabpage)) do
+    M.close_window(winid)
+  end
+end
+
 function M.repair_source_reveal_refs(bufnr, refs)
   bufnr = normalize_bufnr(bufnr)
   local bs = state.get_buf_state(bufnr)

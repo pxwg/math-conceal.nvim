@@ -337,7 +337,7 @@ local function close_all_hidden_service_timers()
 end
 
 local function buffer_visible(bufnr)
-  for _, winid in ipairs(vim.fn.win_findbuf(bufnr)) do
+  for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) == bufnr then
       return true
     end
@@ -535,7 +535,7 @@ local function schedule_cursor_sync(bufnr)
   cursor_sync_pending[bufnr] = true
   local generation = (cursor_sync_generation[bufnr] or 0) + 1
   cursor_sync_generation[bufnr] = generation
-  vim.defer_fn(function()
+  vim.schedule(function()
     if cursor_sync_generation[bufnr] ~= generation then
       return
     end
@@ -543,7 +543,7 @@ local function schedule_cursor_sync(bufnr)
     if valid_loaded_buffer(bufnr) then
       sync_cursor_now(bufnr)
     end
-  end, 16)
+  end)
 end
 
 local function setup_autocmds()
@@ -643,6 +643,39 @@ local function setup_autocmds()
     end,
   })
 
+  vim.api.nvim_create_autocmd("TabLeave", {
+    group = augroup_id,
+    desc = "release inactive math-conceal image placements",
+    callback = function()
+      projection.close_tab(vim.api.nvim_get_current_tabpage())
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("TabEnter", {
+    group = augroup_id,
+    desc = "restore active math-conceal image placements",
+    callback = function()
+      for _, bufnr in ipairs(attached_bufnrs()) do
+        if buffer_visible(bufnr) then
+          close_hidden_service_timer(bufnr)
+        end
+        projection.on_layout_change(bufnr)
+        M._schedule_hidden_service_stop(bufnr)
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = augroup_id,
+    desc = "release closed math-conceal image window placement",
+    callback = function(ev)
+      local winid = tonumber(ev.match)
+      if winid ~= nil then
+        projection.close_window(winid)
+      end
+    end,
+  })
+
   vim.api.nvim_create_autocmd({ "BufHidden", "BufWinLeave" }, {
     group = augroup_id,
     desc = "stop idle math-conceal services for hidden buffers",
@@ -650,6 +683,9 @@ local function setup_autocmds()
       local bufnr = ev.buf
       vim.schedule(function()
         if valid_loaded_buffer(bufnr) then
+          if M._buffers[bufnr] ~= nil then
+            projection.on_layout_change(bufnr)
+          end
           M._schedule_hidden_service_stop(bufnr)
         end
       end)
