@@ -14,17 +14,25 @@ local function code_style(ctx, display_kind)
     return {}
   end
   local cfg = ctx.code_block or {}
+  local padding = math.max(0, tonumber(cfg.padding_cols) or 0)
   return {
     horizontal_align = "source",
     fit = {
-      left_padding_cols = math.max(0, tonumber(cfg.padding_cols) or 0),
+      left_padding_cols = 2 * padding,
       right_padding_cols = math.max(0, tonumber(cfg.right_padding_cols) or 1),
     },
   }
 end
 
-local function math_style(display_kind)
-  return display_kind == "block" and { horizontal_align = "center" } or {}
+local function math_style(display_kind, config)
+  if display_kind ~= "block" then
+    return {}
+  end
+  local padding = math.max(0, tonumber(config.block_padding_cols) or 0)
+  return {
+    horizontal_align = "center",
+    fit = { left_padding_cols = padding, right_padding_cols = padding },
+  }
 end
 
 local function apply_code_role(track, role, render_policy)
@@ -77,7 +85,7 @@ local function describe_formula(track, ctx, layout, config, projection_key)
     pending_visibility = "previous",
     source_rows = track.source_rows or math.max(1, track.end_row - track.row + 1),
     display_kind = display_kind,
-    placement_style = math_style(display_kind),
+    placement_style = math_style(display_kind, config),
     node = {
       node_id = projection_key,
       node_rev = track.rev or 0,

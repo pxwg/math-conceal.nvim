@@ -64,13 +64,16 @@ local function run()
   local code_layout = typst.layout(code_track, window, ctx, {})
   assert_eq("Typst code is window keyed", code_layout.key:sub(1, 7), "window:")
 
-  local math_desc = typst.describe(math_track, ctx, typst.layout(math_track, window, ctx, {}), {}, "track:1")
+  local math_desc =
+    typst.describe(math_track, ctx, typst.layout(math_track, window, ctx, {}), { block_padding_cols = 4 }, "track:1")
   assert_eq("math pending keeps previous", math_desc.pending_visibility, "previous")
   assert_eq("block math centers", math_desc.placement_style.horizontal_align, "center")
+  assert_eq("block math reserves left fit padding", math_desc.placement_style.fit.left_padding_cols, 4)
+  assert_eq("block math reserves right fit padding", math_desc.placement_style.fit.right_padding_cols, 4)
   local code_desc = typst.describe(code_track, ctx, code_layout, {}, "track:2")
   assert_eq("code uses flow batch", code_desc.batch_kind, "code_flow")
   assert_eq("code pending reveals source", code_desc.pending_visibility, "source")
-  assert_eq("code block left padding", code_desc.meta.variants.block.placement_style.fit.left_padding_cols, 2)
+  assert_eq("code block horizontal padding", code_desc.meta.variants.block.placement_style.fit.left_padding_cols, 4)
   assert_eq("code block right padding", code_desc.meta.variants.block.placement_style.fit.right_padding_cols, 3)
 
   local accepted = typst.accept_response({

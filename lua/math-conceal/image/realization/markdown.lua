@@ -13,6 +13,7 @@ function M.describe(track, ctx, layout, config, projection_key)
   local key = common.realization_key(track, ctx, config, layout.key, "markdown-math")
   local source, line_map = wrapper.build_slot_document(track, ctx, config)
   local display_kind = track.source_display_kind or "inline"
+  local block_padding = math.max(0, tonumber(config.block_padding_cols) or 0)
   return {
     adapter = "markdown",
     batch_kind = "formula",
@@ -22,7 +23,10 @@ function M.describe(track, ctx, layout, config, projection_key)
     pending_visibility = "previous",
     source_rows = track.source_rows or math.max(1, track.end_row - track.row + 1),
     display_kind = display_kind,
-    placement_style = display_kind == "block" and { horizontal_align = "center" } or {},
+    placement_style = display_kind == "block" and {
+      horizontal_align = "center",
+      fit = { left_padding_cols = block_padding, right_padding_cols = block_padding },
+    } or {},
     node = {
       node_id = projection_key,
       node_rev = track.rev or 0,
