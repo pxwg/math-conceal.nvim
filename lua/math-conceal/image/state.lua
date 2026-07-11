@@ -1,9 +1,6 @@
 local M = {}
 
-M.display_ns = vim.api.nvim_create_namespace("math-conceal.image.display")
-M.aux_ns = vim.api.nvim_create_namespace("math-conceal.image.display.aux")
 M.preview_ns = vim.api.nvim_create_namespace("math-conceal.image.preview")
-M.placement_ns = vim.api.nvim_create_namespace("math-conceal.image.placement")
 
 M._cell_px_w = nil
 M._cell_px_h = nil
@@ -45,8 +42,6 @@ function M.get_buf_state(bufnr)
   if M.buffers[bufnr] == nil then
     M.buffers[bufnr] = {
       projections = {},
-      projections_by_track_id = {},
-      display_assets = {},
       live_preview = {
         extmark_id = nil,
         visible_asset = nil,
@@ -60,8 +55,6 @@ function M.get_buf_state(bufnr)
         idle_timer = nil,
       },
       context = nil,
-      pending_batches = {},
-      cursor_revealed = {},
       context_rev = 0,
       context_signature = nil,
     }

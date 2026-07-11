@@ -6,15 +6,8 @@ local surface_api = require("math-conceal.image.placement.surface")
 local terminal = require("math-conceal.image.terminal")
 local track_view = require("math-conceal.image.track-view")
 local tracker = require("math-conceal.image.tracker")
-local window_node_slot = require("math-conceal.image.placement.window-node-slot")
 
 local M = {}
-
-local backends = {
-  window_node_slot = window_node_slot,
-}
-
-window_node_slot.setup()
 
 local strategies = {
   inline = inline,
@@ -129,7 +122,7 @@ local function source_signature(record)
   return table.concat({ "source", tostring(record.image_id or ""), tostring(record.realization_key or "") }, ":")
 end
 
-local function materialize_record(surface, record, view, show_source, force_geometry)
+local function apply_record(surface, record, view, show_source, force_geometry)
   if show_source or view == nil then
     local signature = source_signature(record)
     if record.signature ~= signature or record.placed == true or #(record.extmark_ids or {}) > 0 then
@@ -221,13 +214,7 @@ function M.reconcile_window(winid, transaction)
     for key in pairs(changed) do
       local record = surface.records[key]
       if record ~= nil then
-        materialize_record(
-          surface,
-          record,
-          views[key],
-          source[key] == true,
-          transaction.refresh and transaction.refresh[key]
-        )
+        apply_record(surface, record, views[key], source[key] == true, transaction.refresh and transaction.refresh[key])
       end
     end
   end
@@ -251,84 +238,12 @@ function M.release_image(image_id)
   surface_api.release_image(image_id)
 end
 
-local function backend_for_intent(intent)
-  if intent == nil then
-    return nil
-  end
-  local name = intent.backend or "window_node_slot"
-  return backends[name]
-end
-
-function M.available(name)
-  local backend = backends[name or "window_node_slot"]
-  return backend ~= nil and (type(backend.available) ~= "function" or backend.available())
-end
-
-function M.sync(bufnr, intent)
-  local backend = backend_for_intent(intent)
-  if backend == nil or type(backend.sync) ~= "function" then
-    return false
-  end
-  return backend.sync(bufnr, intent)
-end
-
-function M.close_key(bufnr, key)
-  for _, backend in pairs(backends) do
-    if type(backend.close_key) == "function" then
-      backend.close_key(bufnr, key)
-    end
-  end
-end
-
-function M.close_all(bufnr)
-  surface_api.close_buffer(bufnr)
-  for _, backend in pairs(backends) do
-    if type(backend.close_all) == "function" then
-      backend.close_all(bufnr)
-    end
-  end
-end
-
-function M.reconcile(bufnr, keep_keys)
-  for _, backend in pairs(backends) do
-    if type(backend.reconcile) == "function" then
-      backend.reconcile(bufnr, keep_keys)
-    end
-  end
-end
-
-function M.refresh_buf(bufnr)
-  local changed = false
-  for _, backend in pairs(backends) do
-    if type(backend.refresh_buf) == "function" then
-      changed = backend.refresh_buf(bufnr) or changed
-    end
-  end
-  return changed
-end
-
-function M.refresh_geometry(bufnr, opts)
-  local changed = false
-  for _, backend in pairs(backends) do
-    if type(backend.refresh_geometry) == "function" then
-      changed = backend.refresh_geometry(bufnr, opts) or changed
-    end
-  end
-  return changed
-end
-
-function M.batch(fn)
-  if type(fn) ~= "function" then
-    return nil
-  end
-  return fn()
+function M.available()
+  return surface_api.available()
 end
 
 function M._state()
-  return {
-    surface = surface_api._state(),
-    window_node_slot = window_node_slot._state(),
-  }
+  return { surface = surface_api._state() }
 end
 
 return M
