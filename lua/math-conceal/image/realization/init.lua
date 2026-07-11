@@ -1,6 +1,10 @@
 local M = {}
 
 local adapters = {}
+local builtins = {
+  markdown = "math-conceal.image.realization.markdown",
+  typst = "math-conceal.image.realization.typst",
+}
 
 local required_methods = {
   "layout",
@@ -32,11 +36,14 @@ function M.register(name, adapter)
 end
 
 function M.get(name)
+  if adapters[name] == nil and builtins[name] ~= nil then
+    M.register(name, require(builtins[name]))
+  end
   return adapters[name]
 end
 
 function M.require(name)
-  local adapter = adapters[name]
+  local adapter = M.get(name)
   if adapter == nil then
     error("no realization adapter registered for source kind: " .. tostring(name), 2)
   end

@@ -126,14 +126,14 @@ local function flow_block_config(ctx)
   }
 end
 
-local function flow_block_layout(bufnr, ctx, config)
+local function flow_block_layout(bufnr, ctx, config, window_layout)
   local state = require("math-conceal.image.state")
   local cfg = flow_block_config(ctx)
   local baseline = baseline_pt(config)
   local pad_cols = math.max(0, cfg.padding_cols or 0)
   local right_pad_cols = math.max(0, cfg.right_padding_cols or 1)
   local min_cols = math.max(1, cfg.min_cols or 8)
-  local win_cols = state.visible_text_width(bufnr)
+  local win_cols = window_layout and window_layout.text_width or state.visible_text_width(bufnr)
   local usable_cols = math.max(min_cols, win_cols - 2 * pad_cols - right_pad_cols)
   local cell_w, cell_h = state.cell_size()
   local cell_w_pt
@@ -156,8 +156,8 @@ local function flow_block_layout(bufnr, ctx, config)
   }
 end
 
-function M.flow_block_wrap(bufnr, ctx, config)
-  local layout = flow_block_layout(bufnr, ctx, config or {})
+function M.flow_block_wrap(bufnr, ctx, config, window_layout)
+  local layout = flow_block_layout(bufnr, ctx, config or {}, window_layout)
   return string.format(
     "#context {\n"
       .. "  set page(width: %gpt, height: auto, margin: (x: 0pt, y: 0pt), fill: none)\n"
@@ -188,10 +188,10 @@ local function code_render_policy(track)
   return nil
 end
 
-function M.render_layout_key(track, ctx, config)
+function M.render_layout_key(track, ctx, config, window_layout)
   local render_policy = code_render_policy(track)
   if render_policy == "block_constrained" or render_policy == "block" then
-    local layout = flow_block_layout(track.bufnr, ctx, config or {})
+    local layout = flow_block_layout(track.bufnr, ctx, config or {}, window_layout)
     return table.concat({
       "code-block-flow-v7",
       tostring(layout.baseline),
@@ -317,7 +317,7 @@ local function render_input(track, ctx)
   return "#" .. call .. "(" .. typst_string_literal(content) .. ")"
 end
 
-function M.build_slot_document(track, ctx, config)
+function M.build_slot_document(track, ctx, config, window_layout)
   local parts = {}
   local cur_line, cur_col = 1, 1
   local function append(text)
@@ -344,7 +344,7 @@ function M.build_slot_document(track, ctx, config)
   local is_code_block = render_policy == "block_constrained" or render_policy == "block"
   local prefix, suffix = "", ""
   if is_code_block then
-    prefix, suffix = M.flow_block_wrap(track.bufnr, ctx, config)
+    prefix, suffix = M.flow_block_wrap(track.bufnr, ctx, config, window_layout)
   else
     prefix, suffix = M.inline_wrap(config, source_rows, {
       naturalize = render_policy == "inline_naturalized",
