@@ -91,6 +91,19 @@ function M.clear_artifacts(surface, record)
   record.extmark_ids = {}
 end
 
+function M.artifacts_valid(surface, record)
+  if surface == nil or record == nil or #(record.extmark_ids or {}) == 0 or not valid_buf(surface.bufnr) then
+    return false
+  end
+  for _, id in ipairs(record.extmark_ids) do
+    local mark = vim.api.nvim_buf_get_extmark_by_id(surface.bufnr, surface.ns, id, { details = true })
+    if mark[1] == nil or ((mark[3] or {}).invalid == true) then
+      return false
+    end
+  end
+  return true
+end
+
 function M.add_extmark(surface, row, col, opts)
   return vim.api.nvim_buf_set_extmark(surface.bufnr, surface.ns, row, col, opts)
 end
