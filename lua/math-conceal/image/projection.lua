@@ -251,15 +251,18 @@ local function place_windows(bufnr, wins, bs, tracks_by_key, adapter, desired_by
     if not active[winid] then
       placement.close_window(winid)
       bs.window_placement_keys[winid] = nil
+      bs.window_realization_keys[winid] = nil
     end
   end
 
   for _, winid in ipairs(wins) do
     local previous = bs.window_placement_keys[winid] or {}
     local current = {}
+    local realization_keys = {}
     local transaction = { upsert = {}, close = {}, conceal_in_normal = config.conceal_in_normal == true }
     for key, demand in pairs(desired_by_win[winid] or {}) do
       current[key] = true
+      realization_keys[key] = demand.descriptor.key
       local projection = bs.projections[key]
       local track = tracks_by_key[key]
       local asset = projection and projection.realizations[demand.descriptor.key] or nil
@@ -283,9 +286,32 @@ local function place_windows(bufnr, wins, bs, tracks_by_key, adapter, desired_by
     end
     placement.reconcile_window(winid, transaction)
     bs.window_placement_keys[winid] = current
+    bs.window_realization_keys[winid] = realization_keys
   end
   bs.placement_windows = active
   bs.placement_window_key = window_set_key(wins)
+end
+
+local function place_ready_realization(bufnr, bs, projection, track, adapter, asset, config)
+  for _, winid in ipairs(active_windows(bufnr)) do
+    local placement_keys = bs.window_placement_keys[winid]
+    local realization_keys = bs.window_realization_keys[winid]
+    if
+      placement_keys ~= nil
+      and placement_keys[projection.key] == true
+      and realization_keys ~= nil
+      and realization_keys[projection.key] == asset.key
+    then
+      local request = adapter.placement_request(asset, track, config)
+      if request ~= nil then
+        placement.reconcile_window(winid, {
+          upsert = { [projection.key] = request },
+          conceal_in_normal = config.conceal_in_normal == true,
+          visibility_scope = "realization",
+        })
+      end
+    end
+  end
 end
 
 local syncing = {}
@@ -304,6 +330,7 @@ local function sync_demands(bufnr)
     local adapter_name, adapter = adapter_for(binding)
     local bs = state.get_buf_state(bufnr)
     bs.window_placement_keys = bs.window_placement_keys or {}
+    bs.window_realization_keys = bs.window_realization_keys or {}
     bs.placement_windows = bs.placement_windows or {}
     local ctx = context.resolve(bufnr, binding, tracker.get_context(bufnr), image.config)
     bs.context = ctx
@@ -443,7 +470,6 @@ function M.handle_service_response(bufnr, resp, meta)
   if accepted.status ~= "ready" then
     projection.failed[descriptor.key] = true
     projection.status = "failed"
-    sync_demands(bufnr)
     return
   end
 
@@ -472,7 +498,6 @@ function M.handle_service_response(bufnr, resp, meta)
     terminal.delete_image(asset.image_id)
     projection.failed[descriptor.key] = true
     projection.status = "failed"
-    sync_demands(bufnr)
     return
   end
 
@@ -484,7 +509,7 @@ function M.handle_service_response(bufnr, resp, meta)
   projection.failed[descriptor.key] = nil
   projection.status = "ready"
   touch_asset(bs, projection, asset)
-  sync_demands(bufnr)
+  place_ready_realization(bufnr, bs, projection, track, adapter, asset, require("math-conceal.image").config)
 end
 
 function M.sync_cursor(bufnr, opts)
@@ -523,6 +548,9 @@ function M.close_window(winid)
     end
     if bs.window_placement_keys ~= nil then
       bs.window_placement_keys[winid] = nil
+    end
+    if bs.window_realization_keys ~= nil then
+      bs.window_realization_keys[winid] = nil
     end
     bs.placement_window_key = nil
   end

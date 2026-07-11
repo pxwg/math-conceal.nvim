@@ -84,5 +84,14 @@ source = conflict.resolve({ block = ready("sandwich") }, {
 }, {})
 assert_true("sandwich block reveals", source.block)
 
+records.parent.source_visible = true
+records.child.source_visible = false
+source = conflict.resolve_incremental(records, views, {
+  cursor = { row = 1, col = 0 },
+  mode = "n",
+}, { parent = true })
+assert_false("incremental ready parent renders", source.parent)
+assert_true("incremental ready parent suppresses nested child", source.child)
+
 print("placement-conflict-ok")
 vim.cmd("qa!")

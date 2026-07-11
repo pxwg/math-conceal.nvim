@@ -82,10 +82,12 @@ local function run()
   }
 
   local transactions = {}
+  local transaction_history = {}
   local closed_windows = {}
   package.loaded["math-conceal.image.placement"] = {
     reconcile_window = function(winid, transaction)
       transactions[winid] = transaction
+      transaction_history[#transaction_history + 1] = { winid = winid, transaction = transaction }
       return true
     end,
     close_window = function(winid)
@@ -187,6 +189,8 @@ local function run()
   end
   assert_eq("three realization descriptors", descriptor_count, 3)
 
+  transaction_history = {}
+
   for _, batch in ipairs(vim.deepcopy(dispatched)) do
     for _, descriptor in ipairs(batch.descriptors) do
       projection.handle_service_response(bufnr, {
@@ -204,9 +208,19 @@ local function run()
       })
     end
   end
+  assert_eq("ready responses submit four matching window updates", #transaction_history, 4)
+  local ready_by_win = {}
+  for _, item in ipairs(transaction_history) do
+    assert_eq("ready update contains one track", vim.tbl_count(item.transaction.upsert), 1)
+    assert_eq("ready update uses realization visibility scope", item.transaction.visibility_scope, "realization")
+    ready_by_win[item.winid] = ready_by_win[item.winid] or {}
+    for key, request in pairs(item.transaction.upsert) do
+      ready_by_win[item.winid][key] = request.state
+    end
+  end
   for _, winid in ipairs(wins) do
-    assert_eq("math ready in each window", transactions[winid].upsert["track:1"].state, "ready")
-    assert_eq("code ready in each window", transactions[winid].upsert["track:2"].state, "ready")
+    assert_eq("math ready in each window", ready_by_win[winid]["track:1"], "ready")
+    assert_eq("code ready in each window", ready_by_win[winid]["track:2"], "ready")
   end
 
   dispatched = {}

@@ -105,16 +105,26 @@ local function resolve_views(surface)
   return views
 end
 
-local function visibility_state(surface, conceal_in_normal)
+local function visibility_opts(surface, conceal_in_normal)
   local cursor = vim.api.nvim_win_get_cursor(surface.win)
   local mode = vim.api.nvim_get_mode().mode or ""
-  local views = resolve_views(surface)
-  local source = conflict.resolve(surface.records, views, {
+  return {
     cursor = { row = cursor[1] - 1, col = cursor[2] },
     selection = visual_selection(surface.win),
     mode = mode,
     conceal_in_normal = conceal_in_normal == true,
-  })
+  }
+end
+
+local function visibility_state(surface, conceal_in_normal, changed, incremental)
+  local views = resolve_views(surface)
+  local opts = visibility_opts(surface, conceal_in_normal)
+  local source
+  if incremental == true then
+    source = conflict.resolve_incremental(surface.records, views, opts, changed)
+  else
+    source = conflict.resolve(surface.records, views, opts)
+  end
   return views, source
 end
 
@@ -202,11 +212,16 @@ function M.reconcile_window(winid, transaction)
     changed[key] = true
   end
 
-  local views, source = visibility_state(surface, transaction.conceal_in_normal)
+  local incremental = transaction.visibility_scope == "realization"
+    and next(transaction.close or {}) == nil
+    and next(transaction.refresh or {}) == nil
+  local views, source = visibility_state(surface, transaction.conceal_in_normal, changed, incremental)
   for key, record in pairs(surface.records) do
-    local desired_source = source[key] == true
-    if record.source_visible ~= desired_source then
-      changed[key] = true
+    if not incremental or source[key] ~= nil then
+      local desired_source = source[key] == true
+      if record.source_visible ~= desired_source then
+        changed[key] = true
+      end
     end
   end
 

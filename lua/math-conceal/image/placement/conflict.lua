@@ -97,6 +97,34 @@ local function direct_parent_child(left_key, left, right_key, right)
     or (right.cursor_nested == true and right.parent_key == left_key)
 end
 
+local function intrinsically_source(records, views, opts, key)
+  local record = records and records[key] or nil
+  local request = record and record.request or nil
+  local view = views and views[key] or nil
+  if
+    request == nil
+    or request.state ~= "ready"
+    or view == nil
+    or (request.display_kind == "block" and request.source_boundary_role == "sandwich")
+  then
+    return true
+  end
+  if selection_collides(opts.selection, view) then
+    return true
+  end
+  if opts.conceal_in_normal ~= true or opts.mode ~= "n" then
+    if cursor_collides(opts.cursor, view) then
+      return true
+    end
+  end
+  for other_key, other in pairs(views or {}) do
+    if other_key ~= key and views_overlap(view, other) and not direct_parent_child(key, view, other_key, other) then
+      return true
+    end
+  end
+  return false
+end
+
 function M.resolve(records, views, opts)
   opts = opts or {}
   local source = {}
@@ -148,6 +176,59 @@ function M.resolve(records, views, opts)
     end
   end
 
+  return source
+end
+
+-- Realization completion changes readiness, but not TrackView geometry or
+-- cursor/selection facts. Recompute that record and propagate only through its
+-- cursor-nested descendants; unrelated records retain the last full result.
+function M.resolve_incremental(records, views, opts, changed_keys)
+  opts = opts or {}
+  local source = {}
+  local children = {}
+  for key, view in pairs(views or {}) do
+    if view ~= nil and view.cursor_nested == true and view.parent_key ~= nil then
+      children[view.parent_key] = children[view.parent_key] or {}
+      children[view.parent_key][#children[view.parent_key] + 1] = key
+    end
+  end
+
+  local queue, queued = {}, {}
+  local function enqueue(key)
+    if key ~= nil and records[key] ~= nil and queued[key] ~= true then
+      queued[key] = true
+      queue[#queue + 1] = key
+    end
+  end
+  for key in pairs(changed_keys or {}) do
+    enqueue(key)
+  end
+
+  local index = 1
+  while index <= #queue do
+    local key = queue[index]
+    index = index + 1
+    queued[key] = nil
+    local record = records[key]
+    local view = views and views[key] or nil
+    local desired = intrinsically_source(records, views, opts, key)
+    if desired ~= true and view ~= nil and view.cursor_nested == true then
+      local parent_source = source[view.parent_key]
+      if parent_source == nil then
+        local parent = records[view.parent_key]
+        parent_source = parent == nil or parent.source_visible == true
+      end
+      if parent_source ~= true then
+        desired = true
+      end
+    end
+    source[key] = desired
+    if record.source_visible ~= desired then
+      for _, child_key in ipairs(children[key] or {}) do
+        enqueue(child_key)
+      end
+    end
+  end
   return source
 end
 
