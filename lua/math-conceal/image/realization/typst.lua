@@ -49,6 +49,7 @@ local function code_variant(track, ctx, config, layout, role, policy)
     line_map = line_map,
     display_kind = role,
     placement_style = code_style(ctx, role),
+    source_rows = display_track.source_rows,
   }
 end
 
@@ -72,7 +73,9 @@ local function describe_formula(track, ctx, layout, config, projection_key)
     batch_kind = "formula",
     key = key,
     layout_key = layout.key,
+    layout = layout,
     pending_visibility = "previous",
+    source_rows = track.source_rows or math.max(1, track.end_row - track.row + 1),
     display_kind = display_kind,
     placement_style = math_style(display_kind),
     node = {
@@ -236,6 +239,7 @@ function M.accept_response(resp, descriptor)
       height_px = resp.height_px,
       display_kind = descriptor.display_kind,
       placement_style = descriptor.placement_style,
+      source_rows = descriptor.source_rows,
       diagnostics = resp.diagnostics or {},
     }
   end
@@ -257,6 +261,7 @@ function M.accept_response(resp, descriptor)
     height_px = resp.height_px,
     display_kind = valid and resp.layout_role or nil,
     placement_style = valid and variant.placement_style or nil,
+    source_rows = valid and variant.source_rows or nil,
     line_map = variant and variant.line_map or nil,
     diagnostics = resp.render_diagnostics or {},
     flow_diagnostics = resp.flow_diagnostics or {},

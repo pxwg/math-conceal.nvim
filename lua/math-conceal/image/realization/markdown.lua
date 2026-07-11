@@ -18,7 +18,9 @@ function M.describe(track, ctx, layout, config, projection_key)
     batch_kind = "formula",
     key = key,
     layout_key = layout.key,
+    layout = layout,
     pending_visibility = "previous",
+    source_rows = track.source_rows or math.max(1, track.end_row - track.row + 1),
     display_kind = display_kind,
     placement_style = display_kind == "block" and { horizontal_align = "center" } or {},
     node = {
@@ -87,6 +89,7 @@ function M.accept_response(resp, descriptor)
     height_px = resp.height_px,
     display_kind = descriptor.display_kind,
     placement_style = descriptor.placement_style,
+    source_rows = descriptor.source_rows,
     diagnostics = resp.diagnostics or {},
   }
 end
