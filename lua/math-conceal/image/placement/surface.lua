@@ -299,6 +299,38 @@ function M.source_fragments(surface, view, display_kind)
   return fragments
 end
 
+function M.placeholder_line(record, image_row, prefix_cols)
+  prefix_cols = math.max(0, math.floor(tonumber(prefix_cols) or 0))
+  local chunks = {}
+  if prefix_cols > 0 then
+    chunks[#chunks + 1] = { string.rep(" ", prefix_cols), "" }
+  end
+  chunks[#chunks + 1] = { grid.placeholder_row(image_row, record.grid.cols), record.hl }
+  return chunks
+end
+
+function M.conceal_fragment(surface, fragment, carries_slot, ids)
+  if fragment.fragment_only and not carries_slot then
+    ids[#ids + 1] = M.add_extmark(surface, fragment.row, 0, {
+      conceal_lines = "",
+      end_row = fragment.row,
+      invalidate = true,
+      priority = M.CONCEAL_PRIORITY,
+    })
+    return
+  end
+  if fragment.end_col <= fragment.col then
+    return
+  end
+  ids[#ids + 1] = M.add_extmark(surface, fragment.row, fragment.col, {
+    end_row = fragment.row,
+    end_col = fragment.end_col,
+    conceal = "",
+    invalidate = true,
+    priority = M.CONCEAL_PRIORITY,
+  })
+end
+
 function M._state()
   return { available = M.available(), surfaces_by_win = surfaces_by_win }
 end
