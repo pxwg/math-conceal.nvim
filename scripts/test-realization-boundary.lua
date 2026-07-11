@@ -24,6 +24,7 @@ local function run()
     "$ after",
   })
   local boundary = require("math-conceal.image.realization.boundary")
+  local tracker = require("math-conceal.image.tracker")
 
   assert_eq("inline has no boundary role", boundary.role({ bufnr = bufnr }, "inline"), nil)
   assert_eq(
@@ -51,6 +52,16 @@ local function run()
     boundary.role({ bufnr = bufnr, row = 4, col = 7, end_row = 6, end_col = 1 }, "block"),
     "prefix"
   )
+
+  local original_source_line = tracker.source_line
+  tracker.source_line = function()
+    error("tracker source failure")
+  end
+  local source_ok, source_err =
+    pcall(boundary.role, { bufnr = bufnr, row = 0, col = 2, end_row = 0, end_col = 5 }, "block")
+  tracker.source_line = original_source_line
+  assert_eq("tracker source errors propagate", source_ok, false)
+  assert(tostring(source_err):find("tracker source failure", 1, true) ~= nil, tostring(source_err))
 
   local registry = require("math-conceal.image.realization")
   local ok = pcall(registry.register, "invalid", {})

@@ -45,11 +45,7 @@ function M.line(surface, row)
   if surface == nil or not valid_buf(surface.bufnr) then
     return ""
   end
-  local ok, line = pcall(tracker.source_line, surface.bufnr, row)
-  if ok and type(line) == "string" then
-    return line
-  end
-  return vim.api.nvim_buf_get_lines(surface.bufnr, row, row + 1, false)[1] or ""
+  return tracker.source_line(surface.bufnr, row)
 end
 
 function M.line_len(surface, row)

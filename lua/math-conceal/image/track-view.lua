@@ -20,11 +20,7 @@ local function line_count(bufnr)
 end
 
 local function source_line(bufnr, row)
-  local ok, line = pcall(tracker.source_line, bufnr, row)
-  if ok and type(line) == "string" then
-    return line
-  end
-  return vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
+  return tracker.source_line(bufnr, row)
 end
 
 local function window_text_width(winid)

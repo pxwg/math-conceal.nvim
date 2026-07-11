@@ -7,11 +7,7 @@ local function is_blank(text)
 end
 
 local function source_line(view, row)
-  local ok, line = pcall(tracker.source_line, view.bufnr, row)
-  if ok and type(line) == "string" then
-    return line
-  end
-  return vim.api.nvim_buf_get_lines(view.bufnr, row, row + 1, false)[1] or ""
+  return tracker.source_line(view.bufnr, row)
 end
 
 function M.role(view, display_kind)
