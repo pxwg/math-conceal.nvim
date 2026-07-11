@@ -4,6 +4,7 @@ local placement = require("math-conceal.image.placement")
 local quickfix = require("math-conceal.image.quickfix")
 local realization_common = require("math-conceal.image.realization.common")
 local realization_registry = require("math-conceal.image.realization")
+local repair_event = require("math-conceal.image.repair-event")
 local session = require("math-conceal.image.session")
 local state = require("math-conceal.image.state")
 local terminal = require("math-conceal.image.terminal")
@@ -313,9 +314,59 @@ local function ordered_batches(batches)
   return ordered
 end
 
+local function queue_descriptor(bs, batches, adapter_name, projection, descriptor, priority)
+  if
+    projection.realizations[descriptor.key] ~= nil
+    or projection.pending[descriptor.key] ~= nil
+    or projection.failed[descriptor.key] == true
+  then
+    return
+  end
+  local token = next_token(bs)
+  descriptor.pending_token = token
+  descriptor.meta.pending_token = token
+  projection.pending[descriptor.key] = { token = token, descriptor = descriptor }
+  add_to_batch(batches, adapter_name, descriptor, priority)
+end
+
+local function dispatch_batches(bufnr, binding, adapter, batches, ctx, config, on_failure)
+  for _, batch in ipairs(ordered_batches(batches)) do
+    batch.request_id = request_id(bufnr)
+    batch.context = ctx
+    batch.config = config
+    if not adapter.dispatch_batch(bufnr, binding, batch) then
+      local bs = state.get_buf_state(bufnr)
+      for _, descriptor in ipairs(batch.descriptors) do
+        local projection = bs.projections[descriptor.meta.projection_key]
+        local pending = projection and projection.pending[descriptor.key] or nil
+        if pending ~= nil and pending.token == descriptor.pending_token then
+          projection.pending[descriptor.key] = nil
+          projection.failed[descriptor.key] = true
+        end
+      end
+      if on_failure ~= nil then
+        on_failure()
+      end
+    end
+  end
+end
+
 local function descriptor_for(projection, track, adapter, ctx, window_ctx, config)
   local layout = adapter.layout(track, window_ctx, ctx, config)
   return adapter.describe(track, ctx, layout, config, projection.key)
+end
+
+local function request_for_demand(bs, projection, track, adapter, descriptor, config)
+  local asset = projection and projection.realizations[descriptor.key] or nil
+  if asset ~= nil then
+    touch_asset(bs, projection, asset)
+    return adapter.placement_request(asset, track, config)
+  end
+  if descriptor.pending_visibility == "previous" and projection and projection.visible_asset ~= nil then
+    touch_asset(bs, projection, projection.visible_asset)
+    return adapter.placement_request(projection.visible_asset, track, config)
+  end
+  return source_request(track, projection and projection.failed[descriptor.key] and "failed" or "pending")
 end
 
 local function place_windows(bufnr, wins, bs, tracks_by_key, adapter, desired_by_win, config)
@@ -341,18 +392,7 @@ local function place_windows(bufnr, wins, bs, tracks_by_key, adapter, desired_by
       realization_keys[key] = demand.descriptor.key
       local projection = bs.projections[key]
       local track = tracks_by_key[key]
-      local asset = projection and projection.realizations[demand.descriptor.key] or nil
-      local request
-      if asset ~= nil then
-        touch_asset(bs, projection, asset)
-        request = adapter.placement_request(asset, track, config)
-      elseif demand.descriptor.pending_visibility == "previous" and projection and projection.visible_asset ~= nil then
-        touch_asset(bs, projection, projection.visible_asset)
-        request = adapter.placement_request(projection.visible_asset, track, config)
-      else
-        request =
-          source_request(track, projection and projection.failed[demand.descriptor.key] and "failed" or "pending")
-      end
+      local request = request_for_demand(bs, projection, track, adapter, demand.descriptor, config)
       transaction.upsert[key] = request or source_request(track, "unavailable")
     end
     for key in pairs(previous) do
@@ -366,6 +406,117 @@ local function place_windows(bufnr, wins, bs, tracks_by_key, adapter, desired_by
   end
   bs.placement_windows = active
   bs.placement_window_key = window_set_key(wins)
+end
+
+local function wanted_realizations(bs)
+  local wanted = {}
+  for _, projection in pairs(bs.projections or {}) do
+    for key in pairs(projection.desired_keys or {}) do
+      wanted[key] = true
+    end
+  end
+  return wanted
+end
+
+local function repair_track_keys(event)
+  local keys = repair_event.ref_set(event.checked_refs)
+  repair_event.merge_keys(keys, repair_event.ref_set(event.born_refs))
+  repair_event.merge_keys(keys, repair_event.context_dependent_key_set(event))
+  return keys
+end
+
+local function sync_repair(event)
+  local bufnr = event.bufnr
+  local image = require("math-conceal.image")
+  local binding = image.get_binding(bufnr)
+  if binding == nil or not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  local adapter_name, adapter = adapter_for(binding)
+  local bs = state.get_buf_state(bufnr)
+  bs.window_placement_keys = bs.window_placement_keys or {}
+  bs.window_realization_keys = bs.window_realization_keys or {}
+  bs.placement_windows = bs.placement_windows or {}
+  local ctx = context.resolve(bufnr, binding, event.context, image.config)
+  bs.context = ctx
+  local tracks_by_key = repair_event.tracks_by_key(event)
+  local keys = repair_track_keys(event)
+  local affected = {}
+  for key in pairs(keys) do
+    local track = tracks_by_key[key]
+    if track ~= nil and track.state == "valid" and track.invalid ~= true then
+      affected[key] = track
+      ensure_projection(bs, bufnr, track)
+    end
+  end
+
+  local retired = repair_event.ref_set(event.retired_refs)
+  for key in pairs(retired) do
+    local projection = bs.projections[key]
+    if projection ~= nil then
+      cleanup_projection(projection)
+      bs.projections[key] = nil
+    end
+  end
+  if next(affected) == nil and next(retired) == nil then
+    return
+  end
+
+  local wins = active_windows(bufnr)
+  local tracks = ordered_tracks(affected, wins)
+  local geometry = repair_event.ref_set(event.geometry_changed_refs)
+  local batches = {}
+  local desired = {}
+  local transactions = {}
+  for _, item in ipairs(tracks) do
+    desired[item.key] = {}
+  end
+  for _, winid in ipairs(wins) do
+    local window_ctx = realization_common.window_context(winid, image.config)
+    local transaction = {
+      upsert = {},
+      close = vim.deepcopy(retired),
+      refresh = {},
+      conceal_in_normal = image.config.conceal_in_normal == true,
+    }
+    transactions[winid] = transaction
+    bs.window_placement_keys[winid] = bs.window_placement_keys[winid] or {}
+    bs.window_realization_keys[winid] = bs.window_realization_keys[winid] or {}
+    for key in pairs(retired) do
+      bs.window_placement_keys[winid][key] = nil
+      bs.window_realization_keys[winid][key] = nil
+    end
+    for _, item in ipairs(tracks) do
+      local key, track = item.key, item.track
+      local projection = bs.projections[key]
+      local descriptor = descriptor_for(projection, track, adapter, ctx, window_ctx, image.config)
+      descriptor.meta = descriptor.meta or {}
+      descriptor.meta.ref = vim.deepcopy(projection.ref)
+      desired[key][descriptor.key] = true
+      bs.window_placement_keys[winid][key] = true
+      bs.window_realization_keys[winid][key] = descriptor.key
+      transaction.upsert[key] = request_for_demand(bs, projection, track, adapter, descriptor, image.config)
+        or source_request(track, "unavailable")
+      if geometry[key] then
+        transaction.refresh[key] = true
+      end
+      queue_descriptor(bs, batches, adapter_name, projection, descriptor, item.priority)
+    end
+  end
+
+  for key, desired_keys in pairs(desired) do
+    bs.projections[key].desired_keys = desired_keys
+  end
+  session.prune_full(bufnr, wanted_realizations(bs))
+  for _, winid in ipairs(wins) do
+    placement.reconcile_window(winid, transactions[winid])
+  end
+  for key in pairs(affected) do
+    evict_inactive_realizations(bs, bs.projections[key])
+  end
+
+  dispatch_batches(bufnr, binding, adapter, batches, ctx, image.config)
 end
 
 local function place_ready_realization(bufnr, bs, projection, track, adapter, asset, config)
@@ -433,17 +584,7 @@ local function sync_demands(bufnr)
         desired_by_win[winid][key] = { descriptor = descriptor }
         projection.desired_keys[descriptor.key] = true
         wanted_realizations[descriptor.key] = true
-        if
-          projection.realizations[descriptor.key] == nil
-          and projection.pending[descriptor.key] == nil
-          and projection.failed[descriptor.key] ~= true
-        then
-          local token = next_token(bs)
-          descriptor.pending_token = token
-          descriptor.meta.pending_token = token
-          projection.pending[descriptor.key] = { token = token, descriptor = descriptor }
-          add_to_batch(batches, adapter_name, descriptor, item.priority)
-        end
+        queue_descriptor(bs, batches, adapter_name, projection, descriptor, item.priority)
       end
     end
 
@@ -463,24 +604,11 @@ local function sync_demands(bufnr)
       evict_inactive_realizations(bs, projection)
     end
 
-    for _, batch in ipairs(ordered_batches(batches)) do
-      batch.request_id = request_id(bufnr)
-      batch.context = ctx
-      batch.config = image.config
-      if not adapter.dispatch_batch(bufnr, binding, batch) then
-        for _, descriptor in ipairs(batch.descriptors) do
-          local projection = bs.projections[descriptor.meta.projection_key]
-          local pending = projection and projection.pending[descriptor.key] or nil
-          if pending ~= nil and pending.token == descriptor.pending_token then
-            projection.pending[descriptor.key] = nil
-            projection.failed[descriptor.key] = true
-          end
-        end
-        vim.schedule(function()
-          sync_demands(bufnr)
-        end)
-      end
-    end
+    dispatch_batches(bufnr, binding, adapter, batches, ctx, image.config, function()
+      vim.schedule(function()
+        sync_demands(bufnr)
+      end)
+    end)
   end, debug.traceback)
   syncing[bufnr] = nil
   if not ok then
@@ -489,18 +617,12 @@ local function sync_demands(bufnr)
 end
 
 function M.on_tracker_repair(event)
-  local bufnr = event.bufnr
-  local bs = state.get_buf_state(bufnr)
-  for _, ref in ipairs(event.retired_refs or {}) do
-    local key = tracker.track_ref_key(ref)
-    local projection = bs.projections[key]
-    if projection ~= nil then
-      cleanup_projection(projection)
-      bs.projections[key] = nil
-    end
+  if event.initial == true or event.force == true then
+    sync_demands(event.bufnr)
+  else
+    sync_repair(event)
   end
-  sync_demands(bufnr)
-  require("math-conceal.image.preview").schedule(bufnr, { immediate = true })
+  require("math-conceal.image.preview").schedule(event.bufnr, { immediate = true })
 end
 
 function M.handle_service_response(bufnr, resp, meta)

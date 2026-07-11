@@ -80,6 +80,7 @@ local function run()
       source_rows = 1,
       source_display_kind = "inline",
       object_kind = "math",
+      prelude_count = 1,
     },
   }
   local function track_key(track)
@@ -105,8 +106,9 @@ local function run()
     end,
   }
   package.loaded["math-conceal.image.context"] = {
-    resolve = function()
-      return { context_id = "ctx", context_rev = 1, workspace = { outputs_dir = "/tmp" } }
+    resolve = function(_, _, tracker_context)
+      local rev = tracker_context and tracker_context.context_rev or 1
+      return { context_id = "ctx:" .. rev, context_rev = rev, workspace = { outputs_dir = "/tmp" } }
     end,
   }
 
@@ -145,6 +147,7 @@ local function run()
   }
 
   local dispatched = {}
+  local described = {}
   local adapter = {}
   function adapter.layout(track, window)
     if track.object_kind == "code" then
@@ -153,7 +156,8 @@ local function run()
     return { key = "shared", signature = "shared" }
   end
   function adapter.describe(track, ctx, layout, _config, projection_key)
-    local key = track.source_hash .. ":" .. layout.key
+    described[#described + 1] = projection_key
+    local key = table.concat({ track.source_hash, ctx.context_id, layout.key }, ":")
     return {
       adapter = "typst",
       batch_kind = track.object_kind == "code" and "code_flow" or "formula",
@@ -210,7 +214,7 @@ local function run()
   }
 
   local projection = require("math-conceal.image.projection")
-  projection.on_tracker_repair({ bufnr = bufnr, retired_refs = {} })
+  projection.on_tracker_repair({ bufnr = bufnr, initial = true, tracks = tracks, retired_refs = {} })
   assert_eq("shared math plus two code layouts", #dispatched, 3)
   assert_eq("visible formula batch enters the full lane first", dispatched[1].kind, "formula")
   assert_eq("visible formula is first inside its batch", dispatched[1].descriptors[1].node.node_id, "track:3")
@@ -281,13 +285,115 @@ local function run()
   assert_eq("tab return dispatches only the evicted layout", #dispatched, 1)
 
   dispatched = {}
+  described = {}
+  projection.on_tracker_repair({
+    bufnr = bufnr,
+    tracks = tracks,
+    checked_refs = {},
+    identity_changed_refs = {},
+    geometry_changed_refs = {},
+    born_refs = {},
+    retired_refs = {},
+    context = { context_rev = 2, changed_unit_indexes = { 1 }, units = { {} } },
+  })
+  assert_eq("context repair describes only dependent track per window", #described, 2)
+  assert_eq("context repair dispatches only dependent shared realization", #dispatched, 1)
+  for _, winid in ipairs(wins) do
+    assert_eq("context repair upserts dependent track", transactions[winid].upsert["track:3"].state, "ready")
+    assert_eq("context repair leaves independent math untouched", transactions[winid].upsert["track:1"], nil)
+  end
+
+  dispatched = {}
+  described = {}
+  tracks[3].row, tracks[3].end_row = 49, 49
+  projection.on_tracker_repair({
+    bufnr = bufnr,
+    tracks = tracks,
+    checked_refs = { tracks[3] },
+    identity_changed_refs = {},
+    geometry_changed_refs = { tracks[3] },
+    born_refs = {},
+    retired_refs = {},
+    context = { context_rev = 2, changed_unit_indexes = {}, units = { {} } },
+  })
+  assert_eq("geometry repair describes one track per window", #described, 2)
+  assert_eq("geometry-only repair does not dispatch", #dispatched, 0)
+  for _, winid in ipairs(wins) do
+    assert_eq("geometry repair forces affected placement measure", transactions[winid].refresh["track:3"], true)
+  end
+
+  dispatched = {}
+  described = {}
   tracks[1].rev, tracks[1].source_hash = 2, "math-v2"
   tracks[2].rev, tracks[2].source_hash = 2, "code-v2"
-  projection.on_tracker_repair({ bufnr = bufnr, retired_refs = {} })
+  projection.on_tracker_repair({
+    bufnr = bufnr,
+    tracks = tracks,
+    checked_refs = { tracks[1], tracks[2] },
+    identity_changed_refs = { tracks[1], tracks[2] },
+    geometry_changed_refs = {},
+    born_refs = {},
+    retired_refs = {},
+    context = { context_rev = 2, changed_unit_indexes = {}, units = { {} } },
+  })
+  assert_eq("repair describes two affected tracks per window", #described, 4)
+  assert_eq("repair dispatches shared math and two code layouts", #dispatched, 3)
   for _, winid in ipairs(wins) do
     assert_eq("math pending keeps previous asset", transactions[winid].upsert["track:1"].state, "ready")
     assert_eq("code pending reveals source", transactions[winid].upsert["track:2"].state, "source")
+    assert_eq("repair does not upsert unaffected track", transactions[winid].upsert["track:3"], nil)
   end
+
+  local born = {
+    bufnr = bufnr,
+    tracker_generation = 1,
+    generation = 1,
+    track_id = 4,
+    rev = 1,
+    state = "valid",
+    row = 60,
+    col = 0,
+    end_row = 60,
+    end_col = 3,
+    source_hash = "born-math-v1",
+    source_rows = 1,
+    source_display_kind = "inline",
+    object_kind = "math",
+  }
+  tracks[#tracks + 1] = born
+  dispatched = {}
+  described = {}
+  projection.on_tracker_repair({
+    bufnr = bufnr,
+    tracks = tracks,
+    checked_refs = {},
+    identity_changed_refs = {},
+    geometry_changed_refs = {},
+    born_refs = { born },
+    retired_refs = {},
+    context = { context_rev = 2, changed_unit_indexes = {}, units = { {} } },
+  })
+  assert_eq("born repair describes new track per window", #described, 2)
+  assert_eq("born repair dispatches one shared realization", #dispatched, 1)
+  for _, winid in ipairs(wins) do
+    assert_eq("born repair upserts new track", transactions[winid].upsert["track:4"].state, "source")
+  end
+
+  tracks[#tracks] = nil
+  projection.on_tracker_repair({
+    bufnr = bufnr,
+    tracks = tracks,
+    checked_refs = { born },
+    identity_changed_refs = {},
+    geometry_changed_refs = {},
+    born_refs = {},
+    retired_refs = { born },
+    context = { context_rev = 2, changed_unit_indexes = {}, units = { {} } },
+  })
+  for _, winid in ipairs(wins) do
+    assert_eq("retired repair closes removed track", transactions[winid].close["track:4"], true)
+  end
+  assert_eq("retired repair drops projection", bs.projections["track:4"], nil)
 
   print("projection-window-demands-ok")
 end
