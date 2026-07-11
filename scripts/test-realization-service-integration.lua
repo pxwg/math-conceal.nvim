@@ -77,7 +77,7 @@ local function run()
     },
   })
 
-  local function render_buffer(filetype, lines)
+  local function render_buffer(filetype, lines, expected_ready)
     local bufnr = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_set_current_buf(bufnr)
     vim.bo[bufnr].filetype = filetype
@@ -85,22 +85,24 @@ local function run()
     assert_true(filetype .. " attach", image.attach_buf(bufnr))
     require("math-conceal.image.projection").force_render(bufnr)
     assert_true(
-      filetype .. " realization becomes ready",
+      filetype .. " realizations become ready",
       vim.wait(10000, function()
         local bs = require("math-conceal.image.state").get_buf_state(bufnr)
+        local ready = 0
         for _, projection in pairs(bs.projections or {}) do
           if projection.status == "ready" and projection.visible_asset ~= nil then
-            return true
+            ready = ready + 1
           end
         end
-        return false
+        return ready == expected_ready
       end, 10)
     )
     return bufnr
   end
 
-  local typst_buf = render_buffer("typst", { "Inline $x + y$.", "", "$ x^2 + y^2 = z^2 $" })
-  local markdown_buf = render_buffer("markdown", { "Inline $x + y$.", "", "$$", "x^2 + y^2 = z^2", "$$" })
+  local typst_buf =
+    render_buffer("typst", { "Inline $x + y$.", "", "$ x^2 + y^2 = z^2 $", "", "#rect(width: 100%)[code]" }, 3)
+  local markdown_buf = render_buffer("markdown", { "Inline $x + y$.", "", "$$", "x^2 + y^2 = z^2", "$$" }, 2)
   assert_true("images uploaded", #terminal_calls.sent >= 2)
   assert_true("placements created", #terminal_calls.placed >= 2)
 

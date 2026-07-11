@@ -305,7 +305,6 @@ end
 
 function M.render_code_flow(bufnr, binding, payload, meta)
   meta = meta or {}
-  meta.kind = "code_flow_render"
   local service = M.ensure(bufnr, binding)
   if service == nil or service.job_id == nil then
     return false
