@@ -741,6 +741,7 @@ local function setup_autocmds()
 end
 
 function M.setup(cfg)
+  require("math-conceal.image.capability").assert_supported()
   detach_all()
   M.config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), cfg or {})
   if not vim.list_contains({ "colorscheme", "simple", "none" }, M.config.styling_type) then
