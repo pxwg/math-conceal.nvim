@@ -14,10 +14,23 @@ local function run()
 
   local bufnr = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_set_current_buf(bufnr)
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "$x$", "#rect(width: 100%)" })
+  local lines = {}
+  for index = 1, 100 do
+    lines[index] = ""
+  end
+  lines[1] = "$x$"
+  lines[51] = "$z$"
+  lines[52] = "#rect(width: 100%)"
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
   vim.cmd("vsplit")
   local wins = vim.api.nvim_tabpage_list_wins(0)
   vim.api.nvim_win_set_width(wins[1], 30)
+  for _, winid in ipairs(wins) do
+    vim.api.nvim_win_set_cursor(winid, { 51, 0 })
+    vim.api.nvim_win_call(winid, function()
+      vim.cmd("normal! zt")
+    end)
+  end
 
   local tracks = {
     {
@@ -43,14 +56,30 @@ local function run()
       track_id = 2,
       rev = 1,
       state = "valid",
-      row = 1,
+      row = 51,
       col = 0,
-      end_row = 1,
+      end_row = 51,
       end_col = 18,
       source_hash = "code-v1",
       source_rows = 1,
       source_display_kind = "inline",
       object_kind = "code",
+    },
+    {
+      bufnr = bufnr,
+      tracker_generation = 1,
+      generation = 1,
+      track_id = 3,
+      rev = 1,
+      state = "valid",
+      row = 50,
+      col = 0,
+      end_row = 50,
+      end_col = 3,
+      source_hash = "visible-math-v1",
+      source_rows = 1,
+      source_display_kind = "inline",
+      object_kind = "math",
     },
   }
   local function track_key(track)
@@ -183,11 +212,13 @@ local function run()
   local projection = require("math-conceal.image.projection")
   projection.on_tracker_repair({ bufnr = bufnr, retired_refs = {} })
   assert_eq("shared math plus two code layouts", #dispatched, 3)
+  assert_eq("visible formula batch enters the full lane first", dispatched[1].kind, "formula")
+  assert_eq("visible formula is first inside its batch", dispatched[1].descriptors[1].node.node_id, "track:3")
   local descriptor_count = 0
   for _, batch in ipairs(dispatched) do
     descriptor_count = descriptor_count + #batch.descriptors
   end
-  assert_eq("three realization descriptors", descriptor_count, 3)
+  assert_eq("four realization descriptors", descriptor_count, 4)
 
   transaction_history = {}
 
@@ -208,7 +239,7 @@ local function run()
       })
     end
   end
-  assert_eq("ready responses submit four matching window updates", #transaction_history, 4)
+  assert_eq("ready responses submit six matching window updates", #transaction_history, 6)
   local ready_by_win = {}
   for _, item in ipairs(transaction_history) do
     assert_eq("ready update contains one track", vim.tbl_count(item.transaction.upsert), 1)
@@ -220,6 +251,7 @@ local function run()
   end
   for _, winid in ipairs(wins) do
     assert_eq("math ready in each window", ready_by_win[winid]["track:1"], "ready")
+    assert_eq("visible math ready in each window", ready_by_win[winid]["track:3"], "ready")
     assert_eq("code ready in each window", ready_by_win[winid]["track:2"], "ready")
   end
 

@@ -34,6 +34,64 @@ local function window_set_key(wins)
   return table.concat(wins or {}, ",")
 end
 
+local function window_viewport(winid)
+  local ok, viewport = pcall(vim.api.nvim_win_call, winid, function()
+    return { top = vim.fn.line("w0") - 1, bottom = vim.fn.line("w$") - 1 }
+  end)
+  if not ok or type(viewport) ~= "table" then
+    return nil
+  end
+  return viewport
+end
+
+local function priority_before(left, right)
+  for _, field in ipairs({ "outside", "distance", "row", "col" }) do
+    if left[field] ~= right[field] then
+      return left[field] < right[field]
+    end
+  end
+  return left.key < right.key
+end
+
+local function track_priority(key, track, viewports)
+  local distance = math.huge
+  for _, viewport in ipairs(viewports) do
+    if track.end_row >= viewport.top and track.row <= viewport.bottom then
+      distance = 0
+      break
+    elseif track.end_row < viewport.top then
+      distance = math.min(distance, viewport.top - track.end_row)
+    else
+      distance = math.min(distance, track.row - viewport.bottom)
+    end
+  end
+  return {
+    outside = distance == 0 and 0 or 1,
+    distance = distance,
+    row = track.row or 0,
+    col = track.col or 0,
+    key = key,
+  }
+end
+
+local function ordered_tracks(tracks_by_key, wins)
+  local viewports = {}
+  for _, winid in ipairs(wins) do
+    local viewport = window_viewport(winid)
+    if viewport ~= nil then
+      viewports[#viewports + 1] = viewport
+    end
+  end
+  local ordered = {}
+  for key, track in pairs(tracks_by_key or {}) do
+    ordered[#ordered + 1] = { key = key, track = track, priority = track_priority(key, track, viewports) }
+  end
+  table.sort(ordered, function(left, right)
+    return priority_before(left.priority, right.priority)
+  end)
+  return ordered
+end
+
 local function request_id(bufnr)
   local bs = state.get_buf_state(bufnr)
   bs.next_request_id = (bs.next_request_id or 0) + 1
@@ -222,19 +280,37 @@ local function batch_key(adapter_name, descriptor)
   return table.concat({ adapter_name, descriptor.batch_kind, descriptor.layout_key or "shared" }, "\0")
 end
 
-local function add_to_batch(batches, adapter_name, descriptor)
+local function add_to_batch(batches, adapter_name, descriptor, priority)
   local key = batch_key(adapter_name, descriptor)
   local batch = batches[key]
   if batch == nil then
     batch = {
+      key = key,
       adapter_name = adapter_name,
       kind = descriptor.batch_kind,
       layout = descriptor.layout,
       descriptors = {},
+      priority = priority,
     }
     batches[key] = batch
+  elseif priority_before(priority, batch.priority) then
+    batch.priority = priority
   end
   batch.descriptors[#batch.descriptors + 1] = descriptor
+end
+
+local function ordered_batches(batches)
+  local ordered = vim.tbl_values(batches or {})
+  table.sort(ordered, function(left, right)
+    if priority_before(left.priority, right.priority) then
+      return true
+    end
+    if priority_before(right.priority, left.priority) then
+      return false
+    end
+    return left.key < right.key
+  end)
+  return ordered
 end
 
 local function descriptor_for(projection, track, adapter, ctx, window_ctx, config)
@@ -336,18 +412,20 @@ local function sync_demands(bufnr)
     bs.context = ctx
     local tracks_by_key = track_view.by_key(bufnr, { require_valid = true })
     prune_projection_table(bs, tracks_by_key)
-    for _, track in pairs(tracks_by_key) do
-      ensure_projection(bs, bufnr, track)
+    local wins = active_windows(bufnr)
+    local tracks = ordered_tracks(tracks_by_key, wins)
+    for _, item in ipairs(tracks) do
+      ensure_projection(bs, bufnr, item.track)
     end
 
-    local wins = active_windows(bufnr)
     local desired_by_win = {}
     local wanted_realizations = {}
     local batches = {}
     for _, winid in ipairs(wins) do
       local window_ctx = realization_common.window_context(winid, image.config)
       desired_by_win[winid] = {}
-      for key, track in pairs(tracks_by_key) do
+      for _, item in ipairs(tracks) do
+        local key, track = item.key, item.track
         local projection = bs.projections[key]
         local descriptor = descriptor_for(projection, track, adapter, ctx, window_ctx, image.config)
         descriptor.meta = descriptor.meta or {}
@@ -364,7 +442,7 @@ local function sync_demands(bufnr)
           descriptor.pending_token = token
           descriptor.meta.pending_token = token
           projection.pending[descriptor.key] = { token = token, descriptor = descriptor }
-          add_to_batch(batches, adapter_name, descriptor)
+          add_to_batch(batches, adapter_name, descriptor, item.priority)
         end
       end
     end
@@ -385,7 +463,7 @@ local function sync_demands(bufnr)
       evict_inactive_realizations(bs, projection)
     end
 
-    for _, batch in pairs(batches) do
+    for _, batch in ipairs(ordered_batches(batches)) do
       batch.request_id = request_id(bufnr)
       batch.context = ctx
       batch.config = image.config
