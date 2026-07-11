@@ -98,9 +98,9 @@ function M.signature(record, layout)
     parts[#parts + 1] = tostring(carrier.row) .. "@" .. tostring(carrier.raw_height)
     for _, segment in ipairs(carrier.segments) do
       parts[#parts + 1] = table.concat({
-        tostring(segment.start_vcol or 0),
-        tostring(segment.end_vcol or 0),
-        tostring(segment.byte_col or 0),
+        tostring(segment.start_vcol),
+        tostring(segment.end_vcol),
+        tostring(segment.byte_col),
       }, ",")
     end
   end
@@ -148,8 +148,8 @@ function M.apply(surface, record, view, layout)
   for _, carrier in ipairs(layout.carrier_rows) do
     for index = 1, carrier.raw_height do
       if image_row <= record.grid.rows then
-        local segment = carrier.segments[index] or {}
-        ids[#ids + 1] = surface_api.add_extmark(surface, carrier.row, segment.byte_col or 0, {
+        local segment = assert(carrier.segments[index], "measured source segment is missing")
+        ids[#ids + 1] = surface_api.add_extmark(surface, carrier.row, segment.byte_col, {
           virt_text = surface_api.placeholder_line(record, image_row, 0),
           virt_text_pos = "overlay",
           virt_text_win_col = layout.prefix_cols,

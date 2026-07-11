@@ -35,11 +35,13 @@ local function run()
     "  b",
     "  $",
   })
+  vim.cmd("vsplit")
   vim.api.nvim_win_set_width(0, 24)
   vim.wo.wrap = true
 
   local surface_api = require("math-conceal.image.placement.surface")
   local isolated = require("math-conceal.image.placement.strategy.isolated-block")
+  local track_view = require("math-conceal.image.track-view")
   local surface = assert(surface_api.ensure(vim.api.nvim_get_current_win(), bufnr))
   local request = {
     state = "ready",
@@ -60,6 +62,21 @@ local function run()
     end_row = 3,
     end_col = 3,
   }
+
+  local measured = assert(track_view.measure_source_layout(view, surface.win, { require_valid = true }))
+  assert_true("narrow source row wraps", measured.rows[2].screen_height > 1)
+  for _, row_layout in ipairs(measured.rows) do
+    assert_eq("every screen row has an exact source segment", #row_layout.segments, row_layout.screen_height)
+  end
+
+  local original_text_height = vim.api.nvim_win_text_height
+  vim.api.nvim_win_text_height = function()
+    error("measurement unavailable")
+  end
+  local measure_ok, measure_err = pcall(track_view.measure_source_layout, view, surface.win, { require_valid = true })
+  vim.api.nvim_win_text_height = original_text_height
+  assert_eq("window measurement failure propagates", measure_ok, false)
+  assert_true("measurement error is preserved", tostring(measure_err):find("measurement unavailable", 1, true) ~= nil)
 
   isolated.prepare_measure(surface, record, view)
   local layout = assert(isolated.measure(surface, record, view))
