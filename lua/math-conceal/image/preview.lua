@@ -587,6 +587,7 @@ local function render_projection_preview(bufnr, projection, track, cursor_row, c
   local req_id = request_id(bufnr)
   local payload = {
     type = "render_formulas",
+    lane = "preview",
     backend = ctx.backend or "typst",
     request_id = req_id,
     cache_key = preview_service_cache_key(projection, track, ctx, image.config),

@@ -4,28 +4,30 @@ local M = {}
 local services = {}
 local send_next_payload
 
+-- One process per buffer, with independent request ownership per lane.
+local FULL_LANE = "full"
+local PREVIEW_LANE = "preview"
+
 local function notify(message, level)
   vim.schedule(function()
     vim.notify("[math-conceal.image] " .. message, level or vim.log.levels.WARN)
   end)
 end
 
-local function service_for(bufnr, kind)
-  kind = kind or "full"
-  services[bufnr] = services[bufnr] or {}
-  services[bufnr][kind] = services[bufnr][kind]
+local function service_for(bufnr)
+  services[bufnr] = services[bufnr]
     or {
       bufnr = bufnr,
-      kind = kind,
       line_buffer = "",
       stderr_buffer = "",
       active = {},
+      active_request_ids = {},
     }
-  return services[bufnr][kind]
+  return services[bufnr]
 end
 
-local function service_kind_for_meta(meta)
-  return meta ~= nil and meta.kind == "live_preview" and "preview" or "full"
+local function lane_for_meta(meta)
+  return meta ~= nil and meta.kind == "live_preview" and PREVIEW_LANE or FULL_LANE
 end
 
 local function same_full_context(left, right)
@@ -103,8 +105,8 @@ local function merged_full_request(existing, payload, meta)
   return merged
 end
 
-local function queue_payload(service, payload, meta)
-  if meta ~= nil and meta.kind == "live_preview" then
+local function queue_payload(service, lane, payload, meta)
+  if lane == PREVIEW_LANE then
     service.pending_preview = copy_request(payload, meta)
     return true
   end
@@ -115,7 +117,7 @@ local function queue_payload(service, payload, meta)
   return true
 end
 
-local function send_payload(service, payload, meta)
+local function send_payload(service, lane, payload, meta)
   local ok, json = pcall(vim.json.encode, payload)
   if not ok then
     notify("failed to encode render request: " .. tostring(json), vim.log.levels.ERROR)
@@ -126,14 +128,15 @@ local function send_payload(service, payload, meta)
   meta.expected = #(payload.nodes or {})
   meta.received = 0
   meta.request_id = payload.request_id
+  meta.lane = lane
   service.active[payload.request_id] = meta
-  service.active_request_id = payload.request_id
+  service.active_request_ids[lane] = payload.request_id
 
   local sent = vim.fn.chansend(service.job_id, json .. "\n")
   if sent == 0 then
     service.active[payload.request_id] = nil
-    if service.active_request_id == payload.request_id then
-      service.active_request_id = nil
+    if service.active_request_ids[lane] == payload.request_id then
+      service.active_request_ids[lane] = nil
     end
     notify("failed to write render request", vim.log.levels.ERROR)
     return false
@@ -169,19 +172,21 @@ local function pop_pending_full(service)
   return next_payload
 end
 
-send_next_payload = function(service)
-  if service == nil or service.active_request_id ~= nil or service.job_id == nil then
+send_next_payload = function(service, lane)
+  if service == nil or service.active_request_ids[lane] ~= nil or service.job_id == nil then
     return
   end
 
-  local next_payload = pop_pending_full(service)
-  if next_payload == nil then
+  local next_payload
+  if lane == PREVIEW_LANE then
     next_payload = service.pending_preview
     service.pending_preview = nil
+  else
+    next_payload = pop_pending_full(service)
   end
 
-  if next_payload ~= nil and not send_payload(service, next_payload.payload, next_payload.meta) then
-    send_next_payload(service)
+  if next_payload ~= nil and not send_payload(service, lane, next_payload.payload, next_payload.meta) then
+    send_next_payload(service, lane)
   end
 end
 
@@ -204,10 +209,11 @@ local function handle_line(service, line)
     meta.received = (meta.received or 0) + 1
     if meta.received >= (meta.expected or 1) then
       service.active[decoded.request_id] = nil
-      if service.active_request_id == decoded.request_id then
-        service.active_request_id = nil
+      local lane = meta.lane or FULL_LANE
+      if service.active_request_ids[lane] == decoded.request_id then
+        service.active_request_ids[lane] = nil
       end
-      send_next_payload(service)
+      send_next_payload(service, lane)
     end
   end
 end
@@ -243,8 +249,8 @@ local function on_stderr(bufnr, _, data)
   end
 end
 
-function M.ensure(bufnr, binding, kind)
-  local service = service_for(bufnr, kind)
+function M.ensure(bufnr, binding, _kind)
+  local service = service_for(bufnr)
   if service.job_id ~= nil and vim.fn.jobwait({ service.job_id }, 0)[1] == -1 then
     return service
   end
@@ -271,16 +277,11 @@ function M.ensure(bufnr, binding, kind)
       on_stderr(bufnr, job_id, data)
     end,
     on_exit = function(_, code)
-      local bucket = services[bufnr]
-      local current = bucket and bucket[service.kind] or nil
-      if current == service then
-        bucket[service.kind] = nil
-        if next(bucket) == nil then
-          services[bufnr] = nil
-        end
+      if services[bufnr] == service then
+        services[bufnr] = nil
       end
       if code ~= 0 and service.stopping ~= true then
-        notify(service.kind .. " service exited with code " .. tostring(code), vim.log.levels.WARN)
+        notify("service exited with code " .. tostring(code), vim.log.levels.WARN)
       end
     end,
   })
@@ -296,49 +297,62 @@ end
 
 function M.render_formulas(bufnr, binding, payload, meta)
   meta = meta or {}
-  local service = M.ensure(bufnr, binding, service_kind_for_meta(meta))
+  local lane = lane_for_meta(meta)
+  local service = M.ensure(bufnr, binding)
   if service == nil or service.job_id == nil then
     return false
   end
 
-  if service.active_request_id ~= nil then
-    return queue_payload(service, payload, meta)
+  if service.active_request_ids[lane] ~= nil then
+    return queue_payload(service, lane, payload, meta)
   end
 
-  return send_payload(service, payload, meta)
+  return send_payload(service, lane, payload, meta)
 end
 
 function M.render_code_flow(bufnr, binding, payload, meta)
   meta = meta or {}
   meta.kind = "code_flow_render"
-  local service = M.ensure(bufnr, binding, "full")
+  local service = M.ensure(bufnr, binding)
   if service == nil or service.job_id == nil then
     return false
   end
 
-  if service.active_request_id ~= nil then
-    return queue_payload(service, payload, meta)
+  if service.active_request_ids[FULL_LANE] ~= nil then
+    return queue_payload(service, FULL_LANE, payload, meta)
   end
 
-  return send_payload(service, payload, meta)
+  return send_payload(service, FULL_LANE, payload, meta)
 end
 
 function M.cancel_live_preview(bufnr)
-  local bucket = services[bufnr]
-  local service = bucket and bucket.preview or nil
+  local service = services[bufnr]
   if service ~= nil then
     service.pending_preview = nil
   end
 end
 
-local function service_idle(service)
+local function lane_idle(service, lane)
   if service == nil then
     return true
   end
-  return service.active_request_id == nil
-    and next(service.active or {}) == nil
-    and service.pending_preview == nil
-    and (service.pending_full == nil or next(service.pending_full) == nil)
+  if service.active_request_ids[lane] ~= nil then
+    return false
+  end
+  if lane == PREVIEW_LANE then
+    return service.pending_preview == nil
+  end
+  return service.pending_full == nil or next(service.pending_full) == nil
+end
+
+local function service_idle(service)
+  return lane_idle(service, FULL_LANE) and lane_idle(service, PREVIEW_LANE) and next(service.active or {}) == nil
+end
+
+local function reset_preview_lane(service)
+  if service ~= nil and service.job_id ~= nil then
+    pcall(vim.fn.chansend, service.job_id, vim.json.encode({ type = "reset_lane", lane = PREVIEW_LANE }) .. "\n")
+  end
 end
 
 local function stop_service(service)
@@ -350,50 +364,40 @@ local function stop_service(service)
 end
 
 function M.stop_if_idle(bufnr, kind)
-  local bucket = services[bufnr]
-  if bucket == nil then
+  local service = services[bufnr]
+  if service == nil then
     return true
   end
 
-  if kind ~= nil then
-    local service = bucket[kind]
-    if service == nil then
-      return true
-    end
-    if not service_idle(service) then
+  if kind == PREVIEW_LANE then
+    if not lane_idle(service, PREVIEW_LANE) then
       return false
     end
-    M.stop(bufnr, kind)
+    service.pending_preview = nil
+    reset_preview_lane(service)
     return true
   end
 
-  for _, service in pairs(bucket) do
-    if not service_idle(service) then
-      return false
-    end
+  if not service_idle(service) then
+    return false
   end
   M.stop(bufnr)
   return true
 end
 
 function M.stop(bufnr, kind)
-  local bucket = services[bufnr]
-  if bucket == nil then
+  local service = services[bufnr]
+  if service == nil then
     return
   end
 
-  if kind ~= nil then
-    stop_service(bucket[kind])
-    bucket[kind] = nil
-    if next(bucket) == nil then
-      services[bufnr] = nil
-    end
+  if kind == PREVIEW_LANE then
+    service.pending_preview = nil
+    reset_preview_lane(service)
     return
   end
 
-  for _, service in pairs(bucket) do
-    stop_service(service)
-  end
+  stop_service(service)
   services[bufnr] = nil
 end
 

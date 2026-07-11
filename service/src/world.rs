@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::SystemTime;
 
 use time::OffsetDateTime;
@@ -15,14 +15,60 @@ use typst_kit::download::{Downloader, ProgressSink};
 use typst_kit::fonts::{FontSlot, Fonts};
 use typst_kit::package::PackageStorage;
 
+type LibraryKey = Vec<(String, String)>;
+type SharedLibraries = Mutex<HashMap<LibraryKey, Arc<LazyHash<Library>>>>;
+
+// Expensive immutable Typst resources are process-wide so full and preview
+// lane compilers do not repeat font discovery or package/library state.
+struct SharedWorldResources {
+    book: LazyHash<FontBook>,
+    fonts: Vec<FontSlot>,
+    packages: PackageStorage,
+    libraries: SharedLibraries,
+}
+
+fn shared_world_resources() -> Arc<SharedWorldResources> {
+    static SHARED: OnceLock<Arc<SharedWorldResources>> = OnceLock::new();
+    Arc::clone(SHARED.get_or_init(|| {
+        let fonts = Fonts::searcher().search();
+        Arc::new(SharedWorldResources {
+            book: LazyHash::new(fonts.book),
+            fonts: fonts.fonts,
+            packages: PackageStorage::new(
+                std::env::var_os("TYPST_PACKAGE_CACHE_PATH").map(PathBuf::from),
+                std::env::var_os("TYPST_PACKAGE_PATH").map(PathBuf::from),
+                Downloader::new("typst-concealer-service"),
+            ),
+            libraries: Mutex::new(HashMap::new()),
+        })
+    }))
+}
+
+fn shared_library(
+    shared: &SharedWorldResources,
+    inputs: &HashMap<String, String>,
+) -> Arc<LazyHash<Library>> {
+    let mut key: Vec<_> = inputs
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    key.sort_unstable();
+    let mut libraries = shared.libraries.lock().unwrap();
+    Arc::clone(libraries.entry(key).or_insert_with(|| {
+        Arc::new(LazyHash::new(
+            Library::builder()
+                .with_inputs(to_dict(inputs.clone()))
+                .build(),
+        ))
+    }))
+}
+
 pub struct ConcealerWorld {
     entry_id: FileId,
     source: Source,
     root: PathBuf,
-    library: LazyHash<Library>,
-    book: LazyHash<FontBook>,
-    fonts: Vec<FontSlot>,
-    packages: PackageStorage,
+    library: Arc<LazyHash<Library>>,
+    shared: Arc<SharedWorldResources>,
     virtual_sources: Mutex<HashMap<FileId, Source>>,
     sources: Mutex<HashMap<FileId, Source>>,
     files: Mutex<HashMap<FileId, Bytes>>,
@@ -33,19 +79,13 @@ pub struct ConcealerWorld {
 impl ConcealerWorld {
     pub fn new() -> Self {
         let entry_id = FileId::new(None, VirtualPath::new("/main.typ"));
-        let fonts = Fonts::searcher().search();
+        let shared = shared_world_resources();
         Self {
             entry_id,
             source: Source::new(entry_id, String::new()),
             root: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-            library: LazyHash::new(Library::default()),
-            book: LazyHash::new(fonts.book),
-            fonts: fonts.fonts,
-            packages: PackageStorage::new(
-                std::env::var_os("TYPST_PACKAGE_CACHE_PATH").map(PathBuf::from),
-                std::env::var_os("TYPST_PACKAGE_PATH").map(PathBuf::from),
-                Downloader::new("typst-concealer-service"),
-            ),
+            library: shared_library(&shared, &HashMap::new()),
+            shared,
             virtual_sources: Mutex::new(HashMap::new()),
             sources: Mutex::new(HashMap::new()),
             files: Mutex::new(HashMap::new()),
@@ -78,11 +118,7 @@ impl ConcealerWorld {
 
         // Phase 1: Only rebuild library when inputs change
         if inputs != self.prev_inputs {
-            self.library = LazyHash::new(
-                Library::builder()
-                    .with_inputs(to_dict(inputs.clone()))
-                    .build(),
-            );
+            self.library = shared_library(&self.shared, &inputs);
             self.prev_inputs = inputs;
         }
 
@@ -170,7 +206,7 @@ impl ConcealerWorld {
 
         if let Some(spec) = id.package() {
             let mut progress = ProgressSink;
-            let root = self.packages.prepare_package(spec, &mut progress)?;
+            let root = self.shared.packages.prepare_package(spec, &mut progress)?;
             return id
                 .vpath()
                 .resolve(&root)
@@ -189,7 +225,7 @@ impl World for ConcealerWorld {
     }
 
     fn book(&self) -> &LazyHash<FontBook> {
-        &self.book
+        &self.shared.book
     }
 
     fn main(&self) -> FileId {
@@ -252,7 +288,7 @@ impl World for ConcealerWorld {
     }
 
     fn font(&self, index: usize) -> Option<Font> {
-        self.fonts.get(index)?.get()
+        self.shared.fonts.get(index)?.get()
     }
 
     fn today(&self, offset: Option<i64>) -> Option<Datetime> {

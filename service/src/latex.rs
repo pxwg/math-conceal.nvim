@@ -647,6 +647,7 @@ mod tests {
 
     fn latex_request(root: PathBuf, output_dir: PathBuf) -> RenderFormulasRequest {
         RenderFormulasRequest {
+            lane: None,
             backend: Some("latex".to_string()),
             request_id: "latex:test".to_string(),
             cache_key: None,
