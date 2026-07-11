@@ -71,7 +71,7 @@ function M.send_image(path, image_id)
     return false
   end
 
-  queue("q=2,f=100,t=t,i=" .. image_id .. ";" .. vim.base64.encode(path))
+  queue("q=2,f=100,t=f,i=" .. image_id .. ";" .. vim.base64.encode(path))
   flush_if_unbatched()
   return true
 end
