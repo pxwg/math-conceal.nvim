@@ -95,6 +95,12 @@ function M.add_extmark(surface, row, col, opts)
   return vim.api.nvim_buf_set_extmark(surface.bufnr, surface.ns, row, col, opts)
 end
 
+function M.clear_range(surface, view)
+  if surface ~= nil and view ~= nil and valid_buf(surface.bufnr) then
+    pcall(vim.api.nvim_buf_clear_namespace, surface.bufnr, surface.ns, view.row, view.end_row + 1)
+  end
+end
+
 function M.redraw(surface, start_row, end_row)
   if
     surface == nil
@@ -329,6 +335,22 @@ function M.conceal_fragment(surface, fragment, carries_slot, ids)
     invalidate = true,
     priority = M.CONCEAL_PRIORITY,
   })
+end
+
+function M.source_cols(view, row)
+  if view == nil or row < view.row or row > view.end_row then
+    return nil, nil
+  end
+  if view.row == view.end_row then
+    return view.col, view.end_col
+  end
+  if row == view.row then
+    return view.col, math.huge
+  end
+  if row == view.end_row then
+    return 0, view.end_col
+  end
+  return 0, math.huge
 end
 
 function M._state()
