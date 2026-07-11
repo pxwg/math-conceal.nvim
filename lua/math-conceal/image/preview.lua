@@ -1,5 +1,5 @@
 local context = require("math-conceal.image.context")
-local display = require("math-conceal.image.display")
+local display = require("math-conceal.image.preview-display")
 local session = require("math-conceal.image.session")
 local state = require("math-conceal.image.state")
 local terminal = require("math-conceal.image.terminal")

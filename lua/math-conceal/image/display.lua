@@ -1,27 +1,10 @@
-local codes = require("math-conceal.image.kitty-codes")
+local grid = require("math-conceal.image.grid")
 local state = require("math-conceal.image.state")
 
 local M = {}
 
-local function capacity()
-  return math.max(1, #codes.diacritics - 1)
-end
-
-local function clamp_cells(cols, rows)
-  local cap = capacity()
-  cols = math.max(1, math.min(cap, math.floor(tonumber(cols) or 1)))
-  rows = math.max(1, math.min(cap, math.floor(tonumber(rows) or 1)))
-  return cols, rows
-end
-
-local function placeholder_row(row, cols)
-  row = math.max(1, math.min(#codes.diacritics, row))
-  local line = {}
-  for col = 0, cols - 1 do
-    line[#line + 1] = codes.placeholder .. codes.diacritics[row] .. codes.diacritics[col + 1]
-  end
-  return table.concat(line)
-end
+local clamp_cells = grid.clamp
+local placeholder_row = grid.placeholder_row
 
 function M.placeholder_row(row, cols)
   return placeholder_row(row, cols)
@@ -137,28 +120,8 @@ local function line_extmark_opts(bufnr, row, virt_text, virt_lines)
 end
 
 function M.cell_dimensions(track, width_px, height_px, config)
-  width_px = math.max(1, tonumber(width_px) or 1)
-  height_px = math.max(1, tonumber(height_px) or 1)
   local source_rows = track.source_rows or math.max(1, track.end_row - track.row + 1)
-  local cell_w, cell_h = state.cell_size()
-  local cols, rows
-
-  if cell_w ~= nil and cell_h ~= nil then
-    if track.source_display_kind ~= "block" and source_rows == 1 then
-      local aspect = width_px / height_px
-      cols = math.max(1, math.floor(cell_h * aspect / cell_w + 0.5))
-      rows = 1
-    else
-      cols = math.max(1, math.floor(width_px / cell_w + 0.5))
-      rows = math.max(1, math.floor(height_px / cell_h + 0.5))
-    end
-  elseif track.source_display_kind ~= "block" and source_rows == 1 then
-    cols = math.max(1, math.floor((width_px / height_px) * 2))
-    rows = 1
-  else
-    cols = math.ceil((width_px / height_px) * 2) * source_rows
-    rows = source_rows
-  end
+  local cols, rows = grid.natural_dimensions(track.source_display_kind, source_rows, width_px, height_px)
 
   if track.source_display_kind == "block" then
     local max_cols
@@ -172,144 +135,6 @@ function M.cell_dimensions(track, width_px, height_px, config)
   end
 
   return clamp_cells(cols, rows)
-end
-
-function M.preview_cell_dimensions(width_px, height_px)
-  width_px = math.max(1, tonumber(width_px) or 1)
-  height_px = math.max(1, tonumber(height_px) or 1)
-  local cell_w, cell_h = state.cell_size()
-  local cols, rows
-
-  if cell_w ~= nil and cell_h ~= nil then
-    cols = math.max(1, math.floor(width_px / cell_w + 0.5))
-    rows = math.max(1, math.floor(height_px / cell_h + 0.5))
-  else
-    cols = math.max(1, math.floor((width_px / height_px) * 2 + 0.5))
-    rows = 1
-  end
-
-  return clamp_cells(cols, rows)
-end
-
-local function active_window_for_bufnr(bufnr)
-  local current = vim.api.nvim_get_current_win()
-  if vim.api.nvim_win_is_valid(current) and vim.api.nvim_win_get_buf(current) == bufnr then
-    return current
-  end
-
-  local wins = vim.fn.win_findbuf(bufnr)
-  for _, winid in ipairs(wins) do
-    if vim.api.nvim_win_is_valid(winid) then
-      return winid
-    end
-  end
-  return nil
-end
-
-local function preview_left_pad_cols(bufnr, row, col)
-  local winid = active_window_for_bufnr(bufnr)
-  if winid == nil then
-    local line = (vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false) or { "" })[1] or ""
-    return vim.fn.strdisplaywidth(line:sub(1, col))
-  end
-
-  local sp = vim.fn.screenpos(winid, row + 1, col + 1)
-  local winpos = vim.api.nvim_win_get_position(winid)
-  local wininfo = vim.fn.getwininfo(winid)[1] or {}
-  local textoff = wininfo.textoff or 0
-  local screen_col = math.max(1, (sp.col or 1) - winpos[2] - textoff)
-  return screen_col - 1
-end
-
-local function range_screen_rect(bufnr, start_row, start_col, end_row, end_col)
-  local winid = active_window_for_bufnr(bufnr)
-  if winid == nil then
-    return nil
-  end
-
-  local start_sp = vim.fn.screenpos(winid, start_row + 1, start_col + 1)
-  local end_sp = vim.fn.screenpos(winid, end_row + 1, math.max(start_col + 1, end_col))
-  if start_sp == nil or end_sp == nil or (start_sp.row or 0) <= 0 or (end_sp.row or 0) <= 0 then
-    return nil
-  end
-
-  return {
-    top = math.max(0, (start_sp.row or 1) - 1),
-    bottom = math.max(0, (end_sp.row or 1) - 1),
-  }
-end
-
-local function choose_preview_vertical(bufnr, preview, start_row, start_col, end_row, end_col, rows)
-  local preferred = (preview and preview.vertical) or "above"
-  local rect = range_screen_rect(bufnr, start_row, start_col, end_row, end_col)
-  if rect == nil then
-    return preferred
-  end
-
-  local editor_h = math.max(1, vim.o.lines - vim.o.cmdheight)
-  local above_fits = rect.top - rows >= 0
-  local below_fits = rect.bottom + rows + 1 <= editor_h
-  if preferred == "above" and above_fits then
-    return "above"
-  end
-  if preferred == "below" and below_fits then
-    return "below"
-  end
-  if below_fits then
-    return "below"
-  end
-  if above_fits then
-    return "above"
-  end
-  return preferred
-end
-
-function M.clear_preview(preview, bufnr)
-  if preview == nil then
-    return
-  end
-  bufnr = bufnr or preview.bufnr
-  if preview.extmark_id ~= nil and bufnr ~= nil and vim.api.nvim_buf_is_valid(bufnr) then
-    pcall(vim.api.nvim_buf_del_extmark, bufnr, state.preview_ns, preview.extmark_id)
-  end
-  preview.extmark_id = nil
-end
-
-function M.show_preview(bufnr, preview, track, asset)
-  if
-    preview == nil
-    or track == nil
-    or asset == nil
-    or asset.image_id == nil
-    or not vim.api.nvim_buf_is_valid(bufnr)
-  then
-    return false
-  end
-
-  local start_row, start_col, end_row, end_col = display_range(track)
-  local cols, rows = clamp_cells(asset.cols, asset.rows)
-  asset.cols = cols
-  asset.rows = rows
-  local vertical = choose_preview_vertical(bufnr, preview, start_row, start_col, end_row, end_col, rows)
-  preview.vertical = vertical
-
-  local pad = preview_left_pad_cols(bufnr, start_row, start_col)
-  local pad_text = pad > 0 and string.rep(" ", pad) or ""
-  local hl = state.image_hl_group(asset.image_id)
-  local lines = {}
-  for row = 1, rows do
-    lines[#lines + 1] = { { pad_text, "" }, { placeholder_row(row, cols), hl } }
-  end
-
-  local anchor_row = vertical == "above" and start_row or end_row
-  preview.extmark_id = vim.api.nvim_buf_set_extmark(bufnr, state.preview_ns, anchor_row, 0, {
-    id = preview.extmark_id,
-    invalidate = true,
-    priority = 230,
-    virt_lines = lines,
-    virt_lines_above = vertical == "above",
-  })
-  return true
 end
 
 function M.reveal(projection)
