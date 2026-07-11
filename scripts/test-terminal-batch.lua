@@ -27,11 +27,16 @@ local function run()
   add_repo_to_path()
 
   package.loaded["math-conceal.image.terminal"] = nil
-  package.loaded["math-conceal.image.state"] = package.loaded["math-conceal.image.state"]
-    or {
-      release_placement_id = function() end,
-      release_image_id = function() end,
-    }
+  local released_placements = {}
+  local released_images = {}
+  package.loaded["math-conceal.image.state"] = {
+    release_placement_id = function(id)
+      released_placements[#released_placements + 1] = id
+    end,
+    release_image_id = function(id)
+      released_images[#released_images + 1] = id
+    end,
+  }
 
   local writes = {}
   local original_ui_send = vim.api.nvim_ui_send
@@ -62,6 +67,16 @@ local function run()
   assert_eq("nested batch flushes at outer boundary", #writes, 3)
   assert_true("nested batch includes inner placement", writes[3]:find("p=13", 1, true) ~= nil)
   assert_true("nested batch includes outer placement", writes[3]:find("p=14", 1, true) ~= nil)
+
+  terminal.delete_placement(1, 15)
+  assert_eq("placement delete flushes immediately", #writes, 4)
+  assert_true("placement delete retains shared image data", writes[4]:find("d=i,i=1,p=15", 1, true) ~= nil)
+  assert_eq("placement id is released", released_placements[1], 15)
+
+  terminal.delete_image(1)
+  assert_eq("image delete flushes immediately", #writes, 5)
+  assert_true("image delete requests backing data release", writes[5]:find("d=I,i=1", 1, true) ~= nil)
+  assert_eq("image id is released", released_images[1], 1)
 
   vim.api.nvim_ui_send = original_ui_send
 end
