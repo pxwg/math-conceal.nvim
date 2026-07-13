@@ -31,13 +31,14 @@ local function run()
   vim.api.nvim_set_current_buf(bufnr)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
     "  $",
-    "  this source row is long enough to wrap in a narrow window",
+    "  " .. string.rep("x", 88),
     "  b",
     "  $",
   })
   vim.cmd("vsplit")
   vim.api.nvim_win_set_width(0, 24)
   vim.wo.wrap = true
+  vim.wo.breakindent = true
 
   local surface_api = require("math-conceal.image.placement.surface")
   local isolated = require("math-conceal.image.placement.strategy.isolated-block")
@@ -64,7 +65,15 @@ local function run()
   }
 
   local measured = assert(track_view.measure_source_layout(view, surface.win, { require_valid = true }))
-  assert_true("narrow source row wraps", measured.rows[2].screen_height > 1)
+  assert_eq("breakindented source row height", measured.rows[2].screen_height, 4)
+  assert_eq("breakindented segment 1 start", measured.rows[2].segments[1].start_vcol, 0)
+  assert_eq("breakindented segment 2 start", measured.rows[2].segments[2].start_vcol, 24)
+  assert_eq("breakindented segment 3 start", measured.rows[2].segments[3].start_vcol, 48)
+  assert_eq("breakindented segment 4 start", measured.rows[2].segments[4].start_vcol, 72)
+  assert_eq("breakindented segment 1 byte", measured.rows[2].segments[1].byte_col, 0)
+  assert_eq("breakindented segment 2 byte", measured.rows[2].segments[2].byte_col, 24)
+  assert_eq("breakindented segment 3 byte", measured.rows[2].segments[3].byte_col, 46)
+  assert_eq("breakindented segment 4 byte", measured.rows[2].segments[4].byte_col, 68)
   for _, row_layout in ipairs(measured.rows) do
     assert_eq("every screen row has an exact source segment", #row_layout.segments, row_layout.screen_height)
   end

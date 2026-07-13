@@ -49,16 +49,50 @@ local function integer_field(result, field, minimum)
   return value
 end
 
-local function next_wrap_boundary(winid, row, start_vcol, final_vcol)
+local function remaining_wrap_height(winid, row, start_vcol, cache)
+  local cached = cache[start_vcol]
+  if cached ~= nil then
+    return cached
+  end
   local result = text_height(winid, {
     start_row = row,
     end_row = row,
     start_vcol = start_vcol,
-    max_height = 1,
   })
-  local boundary = integer_field(result, "end_vcol", 0)
-  if boundary > final_vcol or (boundary <= start_vcol and final_vcol > start_vcol) then
+  if integer_field(result, "end_row", 0) ~= row then
+    error("nvim_win_text_height measured outside the requested source row", 3)
+  end
+  if integer_field(result, "fill", 0) ~= 0 then
+    error("math-conceal image placement cannot map fill rows to source columns", 3)
+  end
+  local height = integer_field(result, "all", 0)
+  cache[start_vcol] = height
+  return height
+end
+
+local function next_wrap_boundary(winid, row, start_vcol, remaining_height, final_vcol, cache)
+  if remaining_height <= 1 or start_vcol >= final_vcol then
     error("nvim_win_text_height returned a non-progressing wrap boundary", 3)
+  end
+
+  local low = start_vcol + 1
+  local high = final_vcol
+  -- start_vcol is rounded down to its native screen row, so the first
+  -- remaining-height decrease is the next wrapped screen-row start.
+  while low < high do
+    local middle = math.floor((low + high) / 2)
+    if remaining_wrap_height(winid, row, middle, cache) < remaining_height then
+      high = middle
+    else
+      low = middle + 1
+    end
+  end
+
+  local boundary = low
+  local before = remaining_wrap_height(winid, row, boundary - 1, cache)
+  local after = remaining_wrap_height(winid, row, boundary, cache)
+  if before ~= remaining_height or after ~= remaining_height - 1 then
+    error("nvim_win_text_height returned an inexact wrap boundary", 3)
   end
   return boundary
 end
@@ -91,20 +125,25 @@ local function oracle_row_layout(winid, row)
       byte_col = 0,
     }
   else
+    local starts = { 0 }
+    local cache = { [0] = screen_height }
     local start_vcol = 0
-    for index = 1, screen_height do
-      local end_vcol = next_wrap_boundary(winid, row, start_vcol, final_vcol)
-      segments[#segments + 1] = {
-        start_vcol = start_vcol,
-        end_vcol = end_vcol,
-        byte_col = byte_col_for_vcol(winid, row, start_vcol),
-      }
-      if index < screen_height and end_vcol >= final_vcol then
-        error("nvim_win_text_height ended wrapped source before its measured height", 3)
-      end
-      start_vcol = end_vcol
+    local remaining_height = screen_height
+    while remaining_height > 1 do
+      start_vcol = next_wrap_boundary(winid, row, start_vcol, remaining_height, final_vcol, cache)
+      starts[#starts + 1] = start_vcol
+      remaining_height = remaining_height - 1
     end
-    if segments[#segments].end_vcol ~= final_vcol then
+
+    for index, segment_start in ipairs(starts) do
+      local segment_end = starts[index + 1] or final_vcol
+      segments[#segments + 1] = {
+        start_vcol = segment_start,
+        end_vcol = segment_end,
+        byte_col = byte_col_for_vcol(winid, row, segment_start),
+      }
+    end
+    if #segments ~= screen_height or segments[#segments].end_vcol ~= final_vcol then
       error("nvim_win_text_height wrap boundaries do not reach the measured line end", 3)
     end
   end
