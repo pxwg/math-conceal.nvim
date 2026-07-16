@@ -376,7 +376,7 @@ local function place_windows(bufnr, wins, bs, tracks_by_key, adapter, desired_by
   end
   for winid in pairs(bs.placement_windows or {}) do
     if not active[winid] then
-      placement.close_window(winid)
+      placement.close_window(winid, bufnr)
       bs.window_placement_keys[winid] = nil
       bs.window_realization_keys[winid] = nil
     end

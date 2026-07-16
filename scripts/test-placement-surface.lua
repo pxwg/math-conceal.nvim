@@ -99,6 +99,14 @@ local function run()
   assert_eq("single source fragment", #fragments, 1)
   assert_true("surrounding whitespace keeps fragment-only", fragments[1].fragment_only)
 
+  local replacement_bufnr = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(narrow, replacement_bufnr)
+  local replacement_surface = assert(surface.ensure(narrow, replacement_bufnr))
+  local placement = require("math-conceal.image.placement")
+  assert_eq("stale owner close is rejected", placement.close_window(narrow, bufnr), false)
+  assert_eq("replacement surface remains current", surface._state().surfaces_by_win[narrow], replacement_surface)
+  assert_eq("current owner close succeeds", placement.close_window(narrow, replacement_bufnr), true)
+
   surface.close_buffer(bufnr)
   assert_eq("all surfaces close", next(surface._state().surfaces_by_win), nil)
 

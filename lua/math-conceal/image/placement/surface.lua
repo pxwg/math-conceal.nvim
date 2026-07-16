@@ -257,8 +257,13 @@ function M.close(surface)
   end
 end
 
-function M.close_window(winid)
-  M.close(surfaces_by_win[winid])
+function M.close_window(winid, owner_bufnr)
+  local surface = surfaces_by_win[winid]
+  if surface == nil or (owner_bufnr ~= nil and surface.bufnr ~= owner_bufnr) then
+    return false
+  end
+  M.close(surface)
+  return true
 end
 
 function M.close_buffer(bufnr)

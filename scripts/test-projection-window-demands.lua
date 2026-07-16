@@ -121,8 +121,8 @@ local function run()
       transaction_history[#transaction_history + 1] = { winid = winid, transaction = transaction }
       return true
     end,
-    close_window = function(winid)
-      closed_windows[#closed_windows + 1] = winid
+    close_window = function(winid, owner_bufnr)
+      closed_windows[#closed_windows + 1] = { winid = winid, owner_bufnr = owner_bufnr }
     end,
     close_buffer = function() end,
     release_image = function() end,
@@ -394,6 +394,17 @@ local function run()
     assert_eq("retired repair closes removed track", transactions[winid].close["track:4"], true)
   end
   assert_eq("retired repair drops projection", bs.projections["track:4"], nil)
+
+  closed_windows = {}
+  local other_bufnr = vim.api.nvim_create_buf(false, true)
+  for _, winid in ipairs(wins) do
+    vim.api.nvim_win_set_buf(winid, other_bufnr)
+  end
+  projection._sync_demands(bufnr)
+  assert_eq("hidden buffer releases both window placements", #closed_windows, 2)
+  for _, closed in ipairs(closed_windows) do
+    assert_eq("stale window close names its buffer owner", closed.owner_bufnr, bufnr)
+  end
 
   print("projection-window-demands-ok")
 end

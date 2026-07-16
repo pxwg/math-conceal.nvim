@@ -241,8 +241,8 @@ function M.reconcile_window(winid, transaction)
   return true
 end
 
-function M.close_window(winid)
-  surface_api.close_window(winid)
+function M.close_window(winid, owner_bufnr)
+  return surface_api.close_window(winid, owner_bufnr)
 end
 
 function M.close_buffer(bufnr)
