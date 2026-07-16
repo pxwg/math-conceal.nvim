@@ -45,44 +45,52 @@ local function run()
 
   local binary = vim.env.MATH_CONCEAL_SERVICE or "service/target/release/typst-concealer-service"
   assert_true("service executable", vim.fn.executable(binary) == 1)
-  local image = require("math-conceal.image")
-  image.setup({
-    enabled_by_default = false,
-    styling_type = "none",
-    live_preview_enabled = false,
-    renderers = {
-      typst = {
-        filetypes = { "typst" },
-        service_binary = binary,
-        source_kind = "typst",
-        scanner = "typst",
-        backend = "typst",
-        wrapper = "typst",
-        inputs = {},
-        code_render = { allow = {} },
-        code_block = { padding_cols = 0, right_padding_cols = 1, min_cols = 8 },
-        render_paths = { exclude = {} },
-      },
-      markdown = {
-        filetypes = { "markdown" },
-        service_binary = binary,
-        source_kind = "markdown",
-        scanner = "markdown",
-        backend = "typst",
-        wrapper = "mitex",
-        inputs = {},
-        mitex_package = "@preview/mitex:0.2.7",
-        render_paths = { exclude = {} },
+  local conceal = require("math-conceal")
+  conceal.setup({
+    image = {
+      enabled = true,
+      enabled_by_default = false,
+      styling_type = "none",
+      live_preview_enabled = false,
+      renderers = {
+        typst = {
+          filetypes = { "typst" },
+          service_binary = binary,
+          source_kind = "typst",
+          scanner = "typst",
+          backend = "typst",
+          wrapper = "typst",
+          inputs = {},
+          code_render = { allow = {} },
+          code_block = { padding_cols = 0, right_padding_cols = 1, min_cols = 8 },
+          render_paths = { exclude = {} },
+        },
+        markdown = {
+          filetypes = { "markdown" },
+          service_binary = binary,
+          source_kind = "markdown",
+          scanner = "markdown",
+          backend = "typst",
+          wrapper = "mitex",
+          inputs = {},
+          mitex_package = "@preview/mitex:0.2.7",
+          render_paths = { exclude = {} },
+        },
       },
     },
   })
+  local image = require("math-conceal.image")
 
-  local function render_buffer(filetype, lines, expected_ready)
+  local function render_buffer(filetype, lines, expected_ready, source)
     local bufnr = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_set_current_buf(bufnr)
     vim.bo[bufnr].filetype = filetype
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-    assert_true(filetype .. " attach", image.attach_buf(bufnr))
+    local attachment = conceal.attach(bufnr, {
+      source = source,
+      surfaces = { unicode = false, image = true },
+    })
+    assert_true(filetype .. " attach", attachment.image)
     require("math-conceal.image.projection").force_render(bufnr)
     assert_true(
       filetype .. " realizations become ready",
@@ -97,17 +105,34 @@ local function run()
         return ready == expected_ready
       end, 10)
     )
-    return bufnr
+    return bufnr, attachment
   end
 
-  local typst_buf =
+  local typst_buf, typst_attachment =
     render_buffer("typst", { "Inline $x + y$.", "", "$ x^2 + y^2 = z^2 $", "", "#rect(width: 100%)[code]" }, 3)
-  local markdown_buf = render_buffer("markdown", { "Inline $x + y$.", "", "$$", "x^2 + y^2 = z^2", "$$" }, 2)
+  local markdown_path = vim.fs.normalize(vim.fn.fnamemodify("/tmp/math-conceal-preview.md", ":p"))
+  local markdown_buf, markdown_attachment = render_buffer(
+    "snacks_picker_preview",
+    { "Inline $x + y$.", "", "$$", "x^2 + y^2 = z^2", "$$" },
+    2,
+    {
+      kind = "markdown",
+      filetype = "markdown",
+      path = markdown_path,
+    }
+  )
+  local markdown_binding = image.get_binding(markdown_buf)
+  assert_true("preview binding uses Markdown renderer", markdown_binding.kind == "markdown")
+  assert_true("preview binding keeps logical filetype", markdown_binding.filetype == "markdown")
+  assert_true("preview binding keeps real path", markdown_binding.path == markdown_path)
+  assert_true("preview source helper uses explicit source", image.source_kind_for_bufnr(markdown_buf) == "markdown")
   assert_true("images uploaded", #terminal_calls.sent >= 2)
   assert_true("placements created", #terminal_calls.placed >= 2)
 
-  image.disable_buf(typst_buf)
-  image.disable_buf(markdown_buf)
+  assert_true("Typst attachment detaches", typst_attachment:detach())
+  assert_true("Markdown attachment detaches", markdown_attachment:detach())
+  assert_true("Typst image binding released", image.get_binding(typst_buf) == nil)
+  assert_true("Markdown image binding released", image.get_binding(markdown_buf) == nil)
   print("realization-service-integration-ok")
 end
 

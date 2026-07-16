@@ -8,9 +8,22 @@ local M = {}
 ---@class MathConcealImageAttachContext
 ---@field bufnr integer
 ---@field kind string
+---@field source_kind string
 ---@field filetype string
 ---@field path string
 ---@field cwd string
+
+---@class MathConcealImageSource
+---@field kind string?
+---@field filetype string?
+---@field path string?
+---@field cwd string?
+---@field renderer string?
+
+---@class MathConcealImageAttachOptions
+---@field renderer string?
+---@field source MathConcealImageSource?
+---@field replace boolean?
 
 ---@alias MathConcealImageRootResolver fun(ctx: MathConcealImageAttachContext): string?
 ---@alias MathConcealImageInputsResolver fun(ctx: MathConcealImageAttachContext): table|string[]?
@@ -152,13 +165,16 @@ local function default_root(ctx)
   return dir
 end
 
-local function buffer_context(bufnr, kind)
+local function buffer_context(bufnr, kind, source)
+  source = source or {}
+  local spec = M.config.renderers[kind] or {}
   return {
     bufnr = bufnr,
     kind = kind,
-    filetype = vim.bo[bufnr].filetype,
-    path = normalize_path(vim.api.nvim_buf_get_name(bufnr)),
-    cwd = vim.uv.cwd(),
+    source_kind = source.kind or spec.source_kind or spec.scanner or kind,
+    filetype = source.filetype or vim.bo[bufnr].filetype,
+    path = normalize_path(source.path or vim.api.nvim_buf_get_name(bufnr)),
+    cwd = normalize_path(source.cwd or vim.uv.cwd()),
   }
 end
 
@@ -286,7 +302,7 @@ local function path_excluded(spec, ctx)
 end
 
 local function make_binding(kind, spec, ctx)
-  local source_kind = spec.source_kind or spec.scanner or kind
+  local source_kind = ctx.source_kind or spec.source_kind or spec.scanner or kind
   return {
     bufnr = ctx.bufnr,
     kind = kind,
@@ -402,15 +418,58 @@ function M._schedule_hidden_service_stop(bufnr)
   )
 end
 
+local function renderer_kind_for_source(bufnr, opts)
+  opts = opts or {}
+  local source = opts.source or {}
+  local explicit = opts.renderer or source.renderer
+  if explicit ~= nil then
+    return M.config.renderers[explicit] ~= nil and explicit or nil
+  end
+
+  local filetype = source.filetype or vim.bo[bufnr].filetype
+  local by_filetype = M._ft_to_renderer[filetype]
+  if by_filetype ~= nil then
+    return by_filetype
+  end
+
+  if source.kind ~= nil then
+    if M.config.renderers[source.kind] ~= nil then
+      return source.kind
+    end
+    for kind, spec in pairs(M.config.renderers or {}) do
+      if (spec.source_kind or spec.scanner or kind) == source.kind then
+        return kind
+      end
+    end
+  end
+end
+
 function M.renderer_kind_for_bufnr(bufnr)
   bufnr = normalize_bufnr(bufnr)
   if not valid_loaded_buffer(bufnr) then
     return nil
   end
-  return M._ft_to_renderer[vim.bo[bufnr].filetype]
+  local binding = M._buffers[bufnr]
+  return binding and binding.kind or renderer_kind_for_source(bufnr)
+end
+
+---@param bufnr integer?
+---@param source MathConcealImageSource
+---@return string?
+function M.renderer_kind_for_source(bufnr, source)
+  bufnr = normalize_bufnr(bufnr)
+  if not valid_loaded_buffer(bufnr) then
+    return nil
+  end
+  return renderer_kind_for_source(bufnr, { source = source })
 end
 
 function M.source_kind_for_bufnr(bufnr)
+  bufnr = normalize_bufnr(bufnr)
+  local binding = M._buffers[bufnr]
+  if binding ~= nil then
+    return binding.source_kind
+  end
   local kind = M.renderer_kind_for_bufnr(bufnr)
   local spec = kind and M.config.renderers[kind] or nil
   return spec and (spec.source_kind or spec.scanner or kind) or nil
@@ -420,42 +479,100 @@ function M.is_supported_bufnr(bufnr)
   return M.renderer_kind_for_bufnr(bufnr) ~= nil
 end
 
-function M.is_render_allowed(bufnr)
+function M.is_render_allowed(bufnr, source)
   bufnr = normalize_bufnr(bufnr)
-  local kind = M.renderer_kind_for_bufnr(bufnr)
+  local binding = source == nil and M._buffers[bufnr] or nil
+  local kind = binding and binding.kind or renderer_kind_for_source(bufnr, { source = source })
   if kind == nil then
     return false
   end
   local spec = M.config.renderers[kind]
-  return not path_excluded(spec, buffer_context(bufnr, kind))
+  if source == nil and binding ~= nil then
+    source = {
+      kind = binding.source_kind,
+      filetype = binding.filetype,
+      path = binding.path,
+    }
+  end
+  return not path_excluded(spec, buffer_context(bufnr, kind, source))
 end
 
-function M.attach_buf(bufnr)
+local function same_binding(a, b)
+  if a == nil or b == nil then
+    return false
+  end
+  for _, key in ipairs({
+    "kind",
+    "source_kind",
+    "scanner",
+    "backend",
+    "wrapper",
+    "filetype",
+    "path",
+    "service_binary",
+    "root",
+    "header",
+    "preamble_file",
+    "mitex_package",
+  }) do
+    if a[key] ~= b[key] then
+      return false
+    end
+  end
+  return vim.deep_equal(a.inputs, b.inputs) and vim.deep_equal(a.code_block, b.code_block)
+end
+
+---@param bufnr integer?
+---@param opts MathConcealImageAttachOptions?
+---@return boolean
+function M.attach_buf(bufnr, opts)
   bufnr = normalize_bufnr(bufnr)
+  opts = opts or {}
+  if not valid_loaded_buffer(bufnr) then
+    return false
+  end
+
   local keep_resume = resume_on_read[bufnr] == true
-  local kind = M.renderer_kind_for_bufnr(bufnr)
+  local kind = renderer_kind_for_source(bufnr, opts)
   if kind == nil then
     M.disable_buf(bufnr, { keep_resume = keep_resume })
     return false
   end
 
   local spec = M.config.renderers[kind]
-  local ctx = buffer_context(bufnr, kind)
+  local ctx = buffer_context(bufnr, kind, opts.source)
   if path_excluded(spec, ctx) then
     M.disable_buf(bufnr, { keep_resume = keep_resume })
     return false
   end
 
   local binding = make_binding(kind, spec, ctx)
+  local current = M._buffers[bufnr]
+  if current ~= nil and opts.replace ~= true and same_binding(current, binding) then
+    close_hidden_service_timer(bufnr)
+    resume_on_read[bufnr] = nil
+    window_options.attach(bufnr, "image")
+    return true
+  end
+  if current ~= nil then
+    M.disable_buf(bufnr, { keep_resume = keep_resume })
+  end
+
   close_hidden_service_timer(bufnr)
   M._buffers[bufnr] = binding
   resume_on_read[bufnr] = nil
   window_options.attach(bufnr, "image")
-  tracker.attach(bufnr, {
+  local attached = tracker.attach(bufnr, {
     kind = binding.scanner or binding.source_kind or kind,
     debug = tracker_debug_enabled(),
     on_repair = projection.on_tracker_repair,
   })
+  if not attached then
+    M._buffers[bufnr] = nil
+    window_options.detach(bufnr, "image")
+    projection.detach(bufnr)
+    return false
+  end
   return true
 end
 
@@ -463,8 +580,8 @@ function M.get_binding(bufnr)
   return M._buffers[normalize_bufnr(bufnr)]
 end
 
-function M.enable_buf(bufnr)
-  return M.attach_buf(bufnr)
+function M.enable_buf(bufnr, opts)
+  return M.attach_buf(bufnr, opts)
 end
 
 function M.disable_buf(bufnr, opts)

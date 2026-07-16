@@ -112,6 +112,48 @@ math-conceal injects only into windows showing attached buffers. The default
 on the cursor line during Insert mode; set it to `"nci"` to keep the previous
 always-concealed cursor-line behavior.
 
+## Buffer Attachment API
+
+`attach()` is the common entry point for ASCII/Unicode and graphical conceal.
+Ordinary filetype buffers are attached automatically. Integrations for virtual
+or preview buffers can provide the logical source independently of the
+buffer's concrete `filetype` and name:
+
+```lua
+local conceal = require("math-conceal")
+local attachment = conceal.attach(bufnr, {
+  source = {
+    kind = "markdown", -- "latex", "markdown", or "typst"
+    filetype = "markdown",
+    path = "/absolute/path/to/note.md",
+  },
+  surfaces = {
+    unicode = true,
+    image = true,
+  },
+  mode = "presentation",
+})
+
+attachment:detach()
+```
+
+`path` supplies the real source provenance for renderer roots, imports, and
+path filters when the attached buffer is anonymous. `image = true` still
+requires top-level `image.enabled = true`; graphical attachment is available
+for Typst and Markdown, while LaTeX uses ASCII/Unicode conceal only.
+
+Calls return owner-qualified handles. Multiple integrations may attach the
+same logical source to one buffer, and detaching one handle leaves the other
+owners active. Re-attaching with the same explicit `owner` replaces that
+owner's request and makes its old handle stale. Use
+`resolve_source(bufnr, source)`, `get_attachment(bufnr)`, `refresh()`, or
+`detach(bufnr)` for custom integrations and lifecycle inspection.
+
+The source descriptor determines the Tree-sitter root parser explicitly.
+math-conceal obtains that parser but does not start or stop Tree-sitter
+highlighting, so preview hosts remain responsible for their own highlighter
+lifecycle.
+
 ## Equation Conceal
 
 `math-conceal.nvim` can also render equations as terminal graphics using the renderer

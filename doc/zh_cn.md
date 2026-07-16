@@ -114,6 +114,46 @@ window-local conceal 选项。默认 `concealcursor = "n"`，Normal 模式保持
 conceal 行为，可以设为 `"nci"`。当 window 不再显示已 attach buffer 时，
 插件会恢复原 window 选项，避免污染其他 window。
 
+## Buffer Attach API
+
+`attach()` 是 ASCII/Unicode 符号 conceal 与图形化 image conceal 的统一
+buffer 入口。普通 filetype buffer 会自动 attach；虚拟 buffer 或 preview
+buffer 的适配器可以显式传入逻辑 source，不需要修改 buffer 自身的
+`filetype` 或名字：
+
+```lua
+local conceal = require("math-conceal")
+local attachment = conceal.attach(bufnr, {
+  source = {
+    kind = "markdown", -- "latex"、"markdown" 或 "typst"
+    filetype = "markdown",
+    path = "/absolute/path/to/note.md",
+  },
+  surfaces = {
+    unicode = true,
+    image = true,
+  },
+  mode = "presentation",
+})
+
+attachment:detach()
+```
+
+匿名 preview buffer 应传入真实 `path`，以便 image renderer 正确解析
+project root、import、preamble 和 path filter。`image = true` 仍受顶层
+`image.enabled` 控制；Typst 与 Markdown 支持 image conceal，原生 LaTeX
+本次只支持 ASCII/Unicode conceal。
+
+每次 attach 都会返回带 owner 的 handle。同一个逻辑 source 可以有多个
+owner；释放一个 handle 不会移除其他 owner。使用相同显式 `owner` 再次
+attach 会替换该 owner 的请求，并使旧 handle 失效。自定义适配器还可以
+使用 `resolve_source()`、`get_attachment()`、`refresh()` 和 `detach()`。
+
+source descriptor 会显式选择 Tree-sitter root parser。math-conceal 获取并
+使用 parser，但不调用 `vim.treesitter.start()` 或
+`vim.treesitter.stop()`；Tree-sitter highlighting 生命周期仍由编辑器或
+preview host 管理。
+
 ## 数学公式 Conceal
 
 本插件可以将数学公式渲染为终端图形。渲染器源自 [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer)，该 fork 基于 [PartyWumpus/typst-concealer](https://github.com/PartyWumpus/typst-concealer)。该功能依赖 kitty graphics protocol，适用于 kitty、Ghostty 等兼容终端。
