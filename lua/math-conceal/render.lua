@@ -14,6 +14,7 @@ local queries = {
 
 local query_obj_cache = {}
 local buffer_cache = {}
+local parser_callbacks = setmetatable({}, { __mode = "k" })
 -- Viewport caching: store computed node lists per window
 local win_states = {}
 local range_cache_limit = 64
@@ -251,16 +252,20 @@ local function get_query_trees(cache, spec)
   return trees
 end
 
-local function get_root_parser_lang(buf, parser_lang)
-  if parser_lang == "latex" and vim.bo[buf].filetype == "markdown" then
+local function get_root_parser_lang(buf, config)
+  if config.root_lang ~= nil then
+    return config.root_lang
+  end
+  if config.parser_lang == "latex" and vim.bo[buf].filetype == "markdown" then
     return "markdown"
   end
 
-  return parser_lang
+  return config.parser_lang
 end
 
 local function get_buffer_specs(buf, config)
-  if config.parser_lang == "latex" and vim.bo[buf].filetype == "markdown" then
+  local root_lang = get_root_parser_lang(buf, config)
+  if config.parser_lang == "latex" and root_lang == "markdown" then
     local specs = {}
 
     local markdown_query = get_runtime_highlights_query("markdown")
@@ -668,7 +673,7 @@ end
 ---@param buf number
 ---@param config table
 local function attach_to_buffer(buf, config)
-  local root_lang = get_root_parser_lang(buf, config.parser_lang)
+  local root_lang = get_root_parser_lang(buf, config)
   local specs = get_buffer_specs(buf, config)
   if #specs == 0 then
     return false
@@ -698,31 +703,34 @@ local function attach_to_buffer(buf, config)
     range_cache_order = {},
   }
 
-  parser:register_cbs({
-    on_changedtree = function(changes)
-      vim.schedule(function()
-        if not vim.api.nvim_buf_is_valid(buf) then
-          return
-        end
-
-        if not changes or vim.tbl_isempty(changes) then
-          redraw_buf(buf)
-          return
-        end
-
-        for _, change in ipairs(changes) do
-          local start_row = change[1]
-          local end_row = change[4]
-
-          if end_row == 2 ^ 32 - 1 then
-            redraw_buf(buf)
-          else
-            redraw_buf(buf, { start_row, end_row + 1 })
+  if parser_callbacks[parser] ~= true then
+    parser_callbacks[parser] = true
+    parser:register_cbs({
+      on_changedtree = function(changes)
+        vim.schedule(function()
+          if not vim.api.nvim_buf_is_valid(buf) or buffer_cache[buf] == nil then
+            return
           end
-        end
-      end)
-    end,
-  })
+
+          if not changes or vim.tbl_isempty(changes) then
+            redraw_buf(buf)
+            return
+          end
+
+          for _, change in ipairs(changes) do
+            local start_row = change[1]
+            local end_row = change[4]
+
+            if end_row == 2 ^ 32 - 1 then
+              redraw_buf(buf)
+            else
+              redraw_buf(buf, { start_row, end_row + 1 })
+            end
+          end
+        end)
+      end,
+    })
+  end
 
   ensure_buffer_cleanup_autocmds(buf)
 
@@ -781,26 +789,68 @@ local function get_conceal_query(language, names)
   return table.concat(output, "\n")
 end
 
----Attach to a specific buffer
+---Attach to a specific buffer.
 ---@param buf number
----@param lang string
+---@param lang string|{lang:string?, conceal_lang:string?, root_lang:string?, extra_query_string:string?}
+---@return boolean
 function M.attach(buf, lang)
   if buf == 0 then
     buf = vim.api.nvim_get_current_buf()
   end
-  local config = active_configs[lang]
-  if not config then
-    return
+
+  local attach_opts = type(lang) == "table" and lang or {}
+  local conceal_lang = type(lang) == "string" and lang or attach_opts.conceal_lang or attach_opts.lang
+  local active = active_configs[conceal_lang]
+  if not active then
+    return false
+  end
+
+  local config = vim.tbl_extend("force", {}, active, {
+    root_lang = attach_opts.root_lang,
+  })
+  if attach_opts.extra_query_string ~= nil and attach_opts.extra_query_string ~= "" then
+    config.query_string = config.query_string .. "\n" .. strip_extends(attach_opts.extra_query_string)
   end
 
   if not attach_to_buffer(buf, config) then
-    return
+    return false
   end
 
   window_options.attach(buf, "render")
   for _, win in ipairs(buf_wins(buf)) do
     redraw_win(win)
   end
+  return true
+end
+
+---Detach ASCII/Unicode conceal rendering from one buffer.
+---@param buf number?
+function M.detach(buf)
+  if buf == 0 or buf == nil then
+    buf = vim.api.nvim_get_current_buf()
+  end
+
+  buffer_cache[buf] = nil
+  window_options.detach(buf, "render")
+  buffer_cleanup_autocmds[buf] = nil
+  pcall(vim.api.nvim_clear_autocmds, { group = augroup, buffer = buf })
+  if vim.api.nvim_buf_is_valid(buf) then
+    pcall(vim.api.nvim_buf_clear_namespace, buf, line_ns_id, 0, -1)
+  end
+  for win_id, state in pairs(win_states) do
+    if state.buf == buf then
+      win_states[win_id] = nil
+    end
+  end
+end
+
+---@param buf number?
+---@return boolean
+function M.is_attached(buf)
+  if buf == 0 or buf == nil then
+    buf = vim.api.nvim_get_current_buf()
+  end
+  return buffer_cache[buf] ~= nil
 end
 
 ---Setup math conceal rendering for Typst/Latex files
@@ -811,13 +861,11 @@ function M.setup(opts, lang)
   window_options.setup(opts.opt)
   M.set_default_buffer_config(opts.buffer)
   local conceal = opts.conceal or {}
-  local file_lang = utils.lang_to_ft(lang)
   local parser_lang = utils.lang_to_lt(lang)
 
   local query_string = get_conceal_query(parser_lang, conceal)
   query_string = strip_extends(query_string)
   active_configs[lang] = {
-    file_lang = file_lang,
     parser_lang = parser_lang,
     base_query_string = query_string,
     extra_query_string = "",
@@ -825,10 +873,6 @@ function M.setup(opts, lang)
   }
 
   setup_decoration_provider()
-
-  if vim.bo.filetype == file_lang then
-    M.attach(vim.api.nvim_get_current_buf(), lang)
-  end
 end
 
 ---Set the default ASCII/Unicode conceal config used by buffers without overrides.

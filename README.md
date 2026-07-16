@@ -112,6 +112,86 @@ math-conceal injects only into windows showing attached buffers. The default
 on the cursor line during Insert mode; set it to `"nci"` to keep the previous
 always-concealed cursor-line behavior.
 
+## Buffer Attachment API
+
+`attach()` is the common entry point for ASCII/Unicode and graphical conceal.
+Ordinary filetype buffers are attached automatically. Integrations for virtual
+or preview buffers can provide the logical source independently of the
+buffer's concrete `filetype` and name:
+
+```lua
+local conceal = require("math-conceal")
+local attachment = conceal.attach(bufnr, {
+  source = {
+    kind = "markdown", -- "latex", "markdown", or "typst"
+    filetype = "markdown",
+    path = "/absolute/path/to/note.md",
+  },
+  surfaces = {
+    unicode = true,
+    image = true,
+  },
+  mode = "presentation",
+})
+
+attachment:detach()
+```
+
+`path` supplies the real source provenance for renderer roots, imports, and
+path filters when the attached buffer is anonymous. `image = true` still
+requires top-level `image.enabled = true`; graphical attachment is available
+for Typst and Markdown, while LaTeX uses ASCII/Unicode conceal only.
+
+Calls return owner-qualified handles. Multiple integrations may attach the
+same logical source to one buffer, and detaching one handle leaves the other
+owners active. Re-attaching with the same explicit `owner` replaces that
+owner's request and makes its old handle stale. Use
+`resolve_source(bufnr, source)`, `get_attachment(bufnr)`, `refresh()`, or
+`detach(bufnr)` for custom integrations and lifecycle inspection.
+
+The source descriptor determines the Tree-sitter root parser explicitly.
+math-conceal obtains that parser but does not start or stop Tree-sitter
+highlighting, so preview hosts remain responsible for their own highlighter
+lifecycle.
+
+### Snacks picker previews
+
+The stock `Snacks.picker.preview.file` previewer is adapted automatically when
+Snacks is available. Scratch previews use `presentation` mode, while previews
+that reuse an already-loaded buffer preserve that buffer's existing mode and
+attachment owner. Typst, Markdown, and LaTeX previews receive Unicode conceal;
+Typst and Markdown also request image conceal when it is globally enabled.
+
+```lua
+require("math-conceal").setup({
+  integrations = {
+    snacks = {
+      enabled = true, -- default
+      unicode = true,
+      image = true,
+      mode = "presentation",
+    },
+  },
+})
+```
+
+Disable the default adapter with `integrations.snacks = false`. Custom Snacks
+previewers can reuse the same lifecycle:
+
+```lua
+local snacks_conceal = require("math-conceal.integrations.snacks")
+
+opts.preview = snacks_conceal.wrap(my_synchronous_previewer, {
+  source = function(ctx, bufnr, detected)
+    return detected -- customize kind, filetype, or path here
+  end,
+})
+```
+
+For asynchronous previewers, call `snacks_conceal.sync(ctx, opts)` after the
+preview content has been committed and `snacks_conceal.detach(ctx)` during
+custom cleanup.
+
 ## Equation Conceal
 
 `math-conceal.nvim` can also render equations as terminal graphics using the renderer

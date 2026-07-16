@@ -162,6 +162,108 @@ Options:
   require("math-conceal").setup_buffer(bufnr, { mode = "edit" })
 <
 
+                                                *math-conceal-attachment-api*
+BUFFER ATTACHMENT API
+
+`attach()` is the common buffer entry point for ASCII/Unicode and graphical
+conceal. Normal filetype buffers use it through the bundled ftplugins. Virtual
+or preview-buffer integrations can supply a logical source independently of
+that buffer's concrete 'filetype' and name:
+>
+  local conceal = require("math-conceal")
+  local attachment = conceal.attach(bufnr, {
+    source = {
+      kind = "markdown", -- latex, markdown, or typst
+      filetype = "markdown",
+      path = "/absolute/path/to/note.md",
+    },
+    surfaces = {
+      unicode = true,
+      image = true,
+    },
+    mode = "presentation",
+  })
+
+  attachment:detach()
+<
+
+`source.kind` selects one built-in logical source profile:
+
+- `latex`: LaTeX root parser and ASCII/Unicode conceal.
+- `markdown`: Markdown root parser, injected LaTeX conceal, and the configured
+  Markdown image renderer.
+- `typst`: Typst root parser and the configured Typst image renderer.
+
+`source.filetype` is the logical source filetype exposed to renderer resolvers.
+`source.path` is the real absolute source path used for project roots, imports,
+preambles, and path filters. It should be supplied for anonymous preview
+buffers. `surfaces.image=true` remains gated by `image.enabled`; native LaTeX
+image rendering is not currently provided.
+
+Every call returns an owner-qualified attachment handle. Multiple owners may
+attach the same source. Detaching one handle preserves the other owners.
+Passing the same `owner` to a later `attach()` replaces that owner's request;
+the old handle then becomes stale and cannot detach the replacement.
+
+Additional helpers:
+>
+  conceal.resolve_source(bufnr, source)
+  conceal.get_attachment(bufnr)
+  attachment:refresh()
+  conceal.detach(attachment)
+  conceal.detach(bufnr)
+<
+
+math-conceal explicitly obtains the source profile's Tree-sitter parser. It
+does not own `vim.treesitter.start()` or `vim.treesitter.stop()`; editor and
+preview hosts remain responsible for Tree-sitter highlighting lifecycle.
+
+                                                     *math-conceal-snacks*
+SNACKS PICKER PREVIEWS
+
+When Snacks is available, math-conceal automatically wraps the stock
+`Snacks.picker.preview.file` previewer. Typst, Markdown, and LaTeX file previews
+receive ASCII/Unicode conceal. Typst and Markdown also request graphical
+conceal when `image.enabled=true`.
+
+Scratch preview buffers use presentation mode. If Snacks reuses an already
+loaded source buffer, the adapter preserves its existing buffer mode and adds a
+separate attachment owner, so closing the picker does not detach the ordinary
+filetype owner.
+
+Configuration:
+>
+  require("math-conceal").setup({
+    integrations = {
+      snacks = {
+        enabled = true, -- default
+        unicode = true,
+        image = true,
+        mode = "presentation",
+      },
+    },
+  })
+<
+
+Set `integrations.snacks=false` to disable the default adapter.
+
+Custom synchronous previewers can use the exported wrapper:
+>
+  local snacks_conceal = require("math-conceal.integrations.snacks")
+
+  opts.preview = snacks_conceal.wrap(my_previewer, {
+    source = function(ctx, bufnr, detected)
+      return detected
+    end,
+  })
+<
+
+The source callback may change the detected `kind`, `filetype`, or `path`.
+Custom asynchronous previewers should call `snacks_conceal.sync(ctx, opts)`
+after committing preview content, then `snacks_conceal.detach(ctx)` during
+cleanup. `resolve(ctx, opts)` is available when only source resolution is
+needed.
+
 ==============================================================================
 4. Equation conceal                                      *math-conceal-image*
 
@@ -476,7 +578,10 @@ Query helpers:
   image.is_render_allowed(bufnr)
 <
 
-Programmatic integrations should use the public image module API:
+Source-aware programmatic integrations should prefer the unified top-level
+`attach()` API described at |math-conceal-attachment-api| so ASCII/Unicode and
+image surfaces share one source descriptor and lifecycle. The image module
+controls remain available for image-only user commands and diagnostics:
 >
   local image = require("math-conceal.image")
   if image.is_supported_bufnr(bufnr) and image.is_render_allowed(bufnr) then
