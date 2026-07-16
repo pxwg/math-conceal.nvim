@@ -34,5 +34,6 @@ math-conceal-image.styling_type	math-conceal.txt	/*math-conceal-image.styling_ty
 math-conceal-intro	math-conceal.txt	/*math-conceal-intro*
 math-conceal-opt	math-conceal.txt	/*math-conceal-opt*
 math-conceal-setup	math-conceal.txt	/*math-conceal-setup*
+math-conceal-snacks	math-conceal.txt	/*math-conceal-snacks*
 math-conceal-troubleshooting	math-conceal.txt	/*math-conceal-troubleshooting*
 math-conceal.nvim	math-conceal.txt	/*math-conceal.nvim*

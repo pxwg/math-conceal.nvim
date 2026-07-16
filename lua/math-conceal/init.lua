@@ -25,6 +25,11 @@ local M = {
     buffer = {
       mode = "edit",
     },
+    integrations = {
+      snacks = {
+        enabled = true,
+      },
+    },
     image = {
       enabled = false,
       enabled_by_default = true,
@@ -126,7 +131,20 @@ local M = {
 --- @field ns_id integer
 --- @field buffer MathConcealBufferOptions?
 --- @field highlights table<string, table<string, string>>
+--- @field integrations MathConcealIntegrationsOptions?
 --- @field image MathConcealImageOptions?
+
+--- @class MathConcealIntegrationsOptions
+--- @field snacks MathConcealSnacksIntegrationOptions|false?
+
+--- @class MathConcealSnacksIntegrationOptions
+--- @field enabled boolean?
+--- @field unicode boolean?
+--- @field image boolean?
+--- @field mode "edit"|"preview"|"presentation"|false?
+--- @field surfaces MathConcealAttachSurfaces?
+--- @field source string|table|fun(ctx: table, bufnr: integer, source: table): table?
+--- @field filetype string|fun(ctx: table, bufnr: integer, path: string): string?
 
 --- @class MathConcealWindowOptions
 --- @field conceallevel integer?: Window-local conceallevel for attached buffers. Default 2.
@@ -777,6 +795,16 @@ function M.setup(opts)
   window_options.setup(M.opts.opt)
   render.set_default_buffer_config(M.opts.buffer)
   setup_image()
+
+  local snacks_opts = (M.opts.integrations or {}).snacks
+  local ok_snacks, snacks = pcall(require, "math-conceal.integrations.snacks")
+  if ok_snacks then
+    if snacks_opts == false or (type(snacks_opts) == "table" and snacks_opts.enabled == false) then
+      snacks.teardown()
+    else
+      pcall(snacks.setup, type(snacks_opts) == "table" and snacks_opts or {})
+    end
+  end
 
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr) then

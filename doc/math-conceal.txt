@@ -218,6 +218,52 @@ math-conceal explicitly obtains the source profile's Tree-sitter parser. It
 does not own `vim.treesitter.start()` or `vim.treesitter.stop()`; editor and
 preview hosts remain responsible for Tree-sitter highlighting lifecycle.
 
+                                                     *math-conceal-snacks*
+SNACKS PICKER PREVIEWS
+
+When Snacks is available, math-conceal automatically wraps the stock
+`Snacks.picker.preview.file` previewer. Typst, Markdown, and LaTeX file previews
+receive ASCII/Unicode conceal. Typst and Markdown also request graphical
+conceal when `image.enabled=true`.
+
+Scratch preview buffers use presentation mode. If Snacks reuses an already
+loaded source buffer, the adapter preserves its existing buffer mode and adds a
+separate attachment owner, so closing the picker does not detach the ordinary
+filetype owner.
+
+Configuration:
+>
+  require("math-conceal").setup({
+    integrations = {
+      snacks = {
+        enabled = true, -- default
+        unicode = true,
+        image = true,
+        mode = "presentation",
+      },
+    },
+  })
+<
+
+Set `integrations.snacks=false` to disable the default adapter.
+
+Custom synchronous previewers can use the exported wrapper:
+>
+  local snacks_conceal = require("math-conceal.integrations.snacks")
+
+  opts.preview = snacks_conceal.wrap(my_previewer, {
+    source = function(ctx, bufnr, detected)
+      return detected
+    end,
+  })
+<
+
+The source callback may change the detected `kind`, `filetype`, or `path`.
+Custom asynchronous previewers should call `snacks_conceal.sync(ctx, opts)`
+after committing preview content, then `snacks_conceal.detach(ctx)` during
+cleanup. `resolve(ctx, opts)` is available when only source resolution is
+needed.
+
 ==============================================================================
 4. Equation conceal                                      *math-conceal-image*
 

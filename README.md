@@ -154,6 +154,44 @@ math-conceal obtains that parser but does not start or stop Tree-sitter
 highlighting, so preview hosts remain responsible for their own highlighter
 lifecycle.
 
+### Snacks picker previews
+
+The stock `Snacks.picker.preview.file` previewer is adapted automatically when
+Snacks is available. Scratch previews use `presentation` mode, while previews
+that reuse an already-loaded buffer preserve that buffer's existing mode and
+attachment owner. Typst, Markdown, and LaTeX previews receive Unicode conceal;
+Typst and Markdown also request image conceal when it is globally enabled.
+
+```lua
+require("math-conceal").setup({
+  integrations = {
+    snacks = {
+      enabled = true, -- default
+      unicode = true,
+      image = true,
+      mode = "presentation",
+    },
+  },
+})
+```
+
+Disable the default adapter with `integrations.snacks = false`. Custom Snacks
+previewers can reuse the same lifecycle:
+
+```lua
+local snacks_conceal = require("math-conceal.integrations.snacks")
+
+opts.preview = snacks_conceal.wrap(my_synchronous_previewer, {
+  source = function(ctx, bufnr, detected)
+    return detected -- customize kind, filetype, or path here
+  end,
+})
+```
+
+For asynchronous previewers, call `snacks_conceal.sync(ctx, opts)` after the
+preview content has been committed and `snacks_conceal.detach(ctx)` during
+custom cleanup.
+
 ## Equation Conceal
 
 `math-conceal.nvim` can also render equations as terminal graphics using the renderer
