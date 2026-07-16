@@ -123,6 +123,7 @@ such as kitty and Ghostty.
 Graphical equation conceal supports Typst and Markdown math through
 [MiTeX](https://github.com/mitex-rs/mitex).
 Markdown math supports `$...$`, `$$...$$`, `\(...\)`, and `\[...\]` delimiters.
+The graphical path requires Neovim 0.11 or newer; ASCII/Unicode conceal does not.
 
 Enable it from the same setup table:
 
@@ -153,6 +154,12 @@ For source/lazy.nvim installs, build the bundled Rust service after installing o
 
 ```sh
 cargo build --release --manifest-path service/Cargo.toml
+```
+
+Check Neovim APIs, terminal support, adapters, and the render service with:
+
+```vim
+:checkhealth math-conceal
 ```
 
 Renderer-specific options live under `image.renderers.<name>`, including

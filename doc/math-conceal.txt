@@ -33,6 +33,8 @@ Graphical equation conceal supports:
 
 Graphical equation conceal uses the kitty graphics protocol. Use a compatible
 terminal such as kitty or Ghostty.
+The graphical path requires Neovim 0.11 or newer. ASCII/Unicode conceal does
+not require the image-path APIs.
 
 ==============================================================================
 2. Setup                                                *math-conceal-setup*
@@ -485,6 +487,13 @@ Programmatic integrations should use the public image module API:
 
 ==============================================================================
 8. Troubleshooting                            *math-conceal-troubleshooting*
+
+Run the built-in health checks first:
+>
+        :checkhealth math-conceal
+<
+They report Neovim/API compatibility, window-scoped placement support,
+terminal graphics support, realization adapters, and render service binaries.
 
 No rendered equations appear~
         Check terminal support first. Graphical equation conceal requires kitty

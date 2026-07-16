@@ -111,9 +111,13 @@ local function queue_payload(service, lane, payload, meta)
     return true
   end
 
-  local bucket = payload and payload.type or "render_formulas"
-  service.pending_full = service.pending_full or {}
-  service.pending_full[bucket] = merged_full_request(service.pending_full[bucket], payload, meta)
+  local bucket =
+    table.concat({ payload and payload.type or "render_formulas", payload and payload.cache_key or "" }, "\0")
+  service.pending_full = service.pending_full or { order = {}, by_key = {} }
+  if service.pending_full.by_key[bucket] == nil then
+    service.pending_full.order[#service.pending_full.order + 1] = bucket
+  end
+  service.pending_full.by_key[bucket] = merged_full_request(service.pending_full.by_key[bucket], payload, meta)
   return true
 end
 
@@ -150,24 +154,13 @@ local function pop_pending_full(service)
   if pending == nil then
     return nil
   end
-
-  for _, key in ipairs({ "render_formulas", "render_code_flow" }) do
-    local next_payload = pending[key]
-    if next_payload ~= nil then
-      pending[key] = nil
-      if next(pending) == nil then
-        service.pending_full = nil
-      end
-      return next_payload
-    end
-  end
-
-  local key, next_payload = next(pending)
+  local key = table.remove(pending.order, 1)
+  local next_payload = key and pending.by_key[key] or nil
   if key ~= nil then
-    pending[key] = nil
-    if next(pending) == nil then
-      service.pending_full = nil
-    end
+    pending.by_key[key] = nil
+  end
+  if #pending.order == 0 then
+    service.pending_full = nil
   end
   return next_payload
 end
@@ -312,7 +305,6 @@ end
 
 function M.render_code_flow(bufnr, binding, payload, meta)
   meta = meta or {}
-  meta.kind = "code_flow_render"
   local service = M.ensure(bufnr, binding)
   if service == nil or service.job_id == nil then
     return false
@@ -332,6 +324,41 @@ function M.cancel_live_preview(bufnr)
   end
 end
 
+function M.prune_full(bufnr, wanted_realizations)
+  local service = services[bufnr]
+  local pending = service and service.pending_full or nil
+  if pending == nil then
+    return
+  end
+  wanted_realizations = wanted_realizations or {}
+  local retained_order = {}
+  for _, bucket in ipairs(pending.order) do
+    local request = pending.by_key[bucket]
+    local nodes = {}
+    local node_meta = {}
+    for _, node in ipairs((request and request.payload and request.payload.nodes) or {}) do
+      local descriptor = request.meta.node_meta and request.meta.node_meta[node.node_id] or nil
+      local key = descriptor and (descriptor.key or (descriptor.meta and descriptor.meta.realization_key)) or nil
+      if key ~= nil and wanted_realizations[key] == true then
+        nodes[#nodes + 1] = node
+        node_meta[node.node_id] = descriptor
+      end
+    end
+    if #nodes > 0 then
+      request.payload.nodes = nodes
+      request.meta.node_meta = node_meta
+      request.meta.expected = #nodes
+      retained_order[#retained_order + 1] = bucket
+    else
+      pending.by_key[bucket] = nil
+    end
+  end
+  pending.order = retained_order
+  if #retained_order == 0 then
+    service.pending_full = nil
+  end
+end
+
 local function lane_idle(service, lane)
   if service == nil then
     return true
@@ -342,7 +369,7 @@ local function lane_idle(service, lane)
   if lane == PREVIEW_LANE then
     return service.pending_preview == nil
   end
-  return service.pending_full == nil or next(service.pending_full) == nil
+  return service.pending_full == nil or #service.pending_full.order == 0
 end
 
 local function service_idle(service)
@@ -399,6 +426,10 @@ function M.stop(bufnr, kind)
 
   stop_service(service)
   services[bufnr] = nil
+end
+
+function M._state()
+  return services
 end
 
 return M
