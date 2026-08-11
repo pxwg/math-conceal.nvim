@@ -493,12 +493,22 @@ Restrict rendering by path:
         `#show math.equation: ...` remain context-only; bare document
         transformers such as `#show: conf.with(...)` are not replayed into
         isolated render preludes.
+
+                                *math-conceal-image.renderers.typst.code_render.exclude*
+`image.renderers.typst.code_render.exclude`~
+        List or map of Typst code names removed from the effective allowlist.
+        Exclusions take precedence over built-in and explicitly allowed names.
+        Matching uses the tracked code expression's head: excluding `image`
+        excludes `#image(...)` and `#image.with(...)(...)`, but does not inspect
+        an `image` call nested inside another renderable expression such as
+        `#figure(...)`.
 >
         image = {
           renderers = {
             typst = {
               code_render = {
                 allow = { "theorem", "lemma", "remark" },
+                exclude = { "image" },
               },
             },
           },

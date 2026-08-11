@@ -244,12 +244,15 @@ Check Neovim APIs, terminal support, adapters, and the render service with:
 
 Renderer-specific options live under `image.renderers.<name>`, including
 `filetypes`, `service_binary`, `live_debounce`, `root`, `inputs`,
-`preamble_file`, `header`, `render_paths`, Typst's `code_render.allow`, and
-Markdown's `mitex_package`.
+`preamble_file`, `header`, `render_paths`, Typst's `code_render.allow` and
+`code_render.exclude`, and Markdown's `mitex_package`.
 
 Typst code rendering is intentionally allowlisted. math-conceal renders a
-built-in set of predictable Typst primitives by default; add project-wide custom
-function names with `code_render.allow`:
+built-in set of predictable Typst primitives by default. Add project-wide custom
+function names with `code_render.allow`, or remove names from the effective
+allowlist with `code_render.exclude`. Exclusions take precedence over both
+built-in and explicitly allowed names, and match the tracked code expression's
+head rather than recursively inspecting nested calls:
 
 ```lua
 require("math-conceal").setup({
@@ -259,6 +262,7 @@ require("math-conceal").setup({
       typst = {
         code_render = {
           allow = { "theorem", "lemma", "remark" },
+          exclude = { "image" },
         },
       },
     },

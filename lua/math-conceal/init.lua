@@ -45,6 +45,7 @@ local M = {
           live_debounce = 0,
           code_render = {
             allow = {},
+            exclude = {},
           },
         },
         markdown = {
@@ -179,7 +180,7 @@ local M = {
 --- @field header string?: Renderer-scoped Typst header.
 --- @field preamble_file string|fun(ctx: table): string?: Renderer-scoped Typst preamble file.
 --- @field mitex_package string?: Typst package spec for Markdown MiTeX rendering.
---- @field code_render table?: Typst code rendering policy. `allow` adds global user names to the built-in safe allowlist.
+--- @field code_render table?: Typst code rendering policy. `allow` adds names; `exclude` removes names from the effective allowlist and takes precedence.
 --- @field render_paths table?: Path filters for renderer attachment.
 
 --- @class MathConcealSource

@@ -30,6 +30,7 @@ math-conceal-image.renderers.render_paths	math-conceal.txt	/*math-conceal-image.
 math-conceal-image.renderers.root	math-conceal.txt	/*math-conceal-image.renderers.root*
 math-conceal-image.renderers.service_binary	math-conceal.txt	/*math-conceal-image.renderers.service_binary*
 math-conceal-image.renderers.typst.code_render.allow	math-conceal.txt	/*math-conceal-image.renderers.typst.code_render.allow*
+math-conceal-image.renderers.typst.code_render.exclude	math-conceal.txt	/*math-conceal-image.renderers.typst.code_render.exclude*
 math-conceal-image.styling_type	math-conceal.txt	/*math-conceal-image.styling_type*
 math-conceal-intro	math-conceal.txt	/*math-conceal-intro*
 math-conceal-opt	math-conceal.txt	/*math-conceal-opt*
