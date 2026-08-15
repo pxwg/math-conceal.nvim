@@ -54,17 +54,44 @@ local function run()
   add_repo_to_path()
 
   local image = require("math-conceal.image")
-  image.config.renderers.typst.code_render.allow = { "remark" }
-
   local tracker = require("math-conceal.image.tracker")
 
+  image.config.renderers.typst.code_render = { allow = {}, exclude = {} }
+  local default_buf = create_typst_buf({
+    '#image("direct.png")',
+    "$x$",
+  })
+  assert_true("default builtin buffer attaches", tracker.attach(default_buf, { kind = "typst" }))
+  local tracks = tracker.get_tracks(default_buf)
+  assert_eq("default builtin image remains renderable", #tracks, 2)
+  assert_true("default builtin image source is retained", has_source(tracks, '#image("direct.png")'))
+  tracker.detach(default_buf)
+
+  image.config.renderers.typst.code_render = { allow = { "image" }, exclude = { "image" } }
+  local exclude_buf = create_typst_buf({
+    '#image("direct.png")',
+    '#image.with(width: 1cm)("with.png")',
+    '#figure(image("nested.png"))',
+    "$x$",
+  })
+  assert_true("excluded builtin buffer attaches", tracker.attach(exclude_buf, { kind = "typst" }))
+  tracks = tracker.get_tracks(exclude_buf)
+  assert_eq("exclude wins over builtin and allow", #tracks, 2)
+  assert_eq("excluded builtin leaves math renderable", count_kind(tracks, "math"), 1)
+  assert_eq("exclude matches only the tracked code head", count_kind(tracks, "code"), 1)
+  assert_true("exclude removes direct image", not has_source(tracks, '#image("direct.png")'))
+  assert_true("exclude removes image.with", not has_source(tracks, "#image.with"))
+  assert_true("exclude does not inspect nested calls", has_source(tracks, '#figure(image("nested.png"))'))
+  tracker.detach(exclude_buf)
+
+  image.config.renderers.typst.code_render = { allow = { "remark" }, exclude = {} }
   local allow_buf = create_typst_buf({
     "#remark[",
     "  $a + b$",
     "]",
   })
   assert_true("allowlisted container attaches", tracker.attach(allow_buf, { kind = "typst" }))
-  local tracks = tracker.get_tracks(allow_buf)
+  tracks = tracker.get_tracks(allow_buf)
   assert_eq("allowlisted container emits only itself when inactive", #tracks, 1)
   assert_eq("allowlisted container is code", tracks[1].object_kind, "code")
   assert_true("allowlisted container source is retained", has_source(tracks, "#remark"))

@@ -206,7 +206,7 @@ local function code_candidate(bufnr, node)
   }
 end
 
-local function add_allow_name(out, value)
+local function add_code_name(out, value)
   if type(value) == "string" and value ~= "" then
     out[value] = true
     return
@@ -221,50 +221,56 @@ local function add_allow_name(out, value)
   end
 end
 
-local function configured_code_allowlist()
+local function configured_code_names(values)
+  local out = {}
+  if type(values) == "string" then
+    add_code_name(out, values)
+  elseif type(values) == "table" then
+    if vim.islist(values) then
+      for _, value in ipairs(values) do
+        add_code_name(out, value)
+      end
+    else
+      for key, value in pairs(values) do
+        if type(key) == "string" and value == true then
+          add_code_name(out, key)
+        else
+          add_code_name(out, value)
+        end
+      end
+    end
+  end
+  return out
+end
+
+local function configured_code_policy()
   local ok, image = pcall(require, "math-conceal.image")
   local renderer_cfg = nil
   if ok and type(image) == "table" and type(image.config) == "table" and type(image.config.renderers) == "table" then
     renderer_cfg = image.config.renderers.typst
   end
   local code_cfg = type(renderer_cfg) == "table" and renderer_cfg.code_render or nil
-  local allow = type(code_cfg) == "table" and (code_cfg.allow or code_cfg.allowlist or code_cfg.whitelist) or nil
-  local out = {}
-
-  if type(allow) == "string" then
-    add_allow_name(out, allow)
-  elseif type(allow) == "table" then
-    if vim.islist(allow) then
-      for _, value in ipairs(allow) do
-        add_allow_name(out, value)
-      end
-    else
-      for key, value in pairs(allow) do
-        if type(key) == "string" and value == true then
-          add_allow_name(out, key)
-        else
-          add_allow_name(out, value)
-        end
-      end
-    end
-  end
-
-  return out
+  return {
+    allow = configured_code_names(
+      type(code_cfg) == "table" and (code_cfg.allow or code_cfg.allowlist or code_cfg.whitelist) or nil
+    ),
+    exclude = configured_code_names(type(code_cfg) == "table" and code_cfg.exclude or nil),
+  }
 end
 
 local function path_uses_with(path)
   return type(path) == "table" and #path >= 2 and path[2] == "with"
 end
 
-local function exact_allowed_by_names(unit, names)
+local function exact_matches_names(unit, names)
   return type(names) == "table" and unit.code_name ~= nil and names[unit.code_name] == true
 end
 
-local function call_allowed_by_names(unit, names)
+local function call_matches_names(unit, names)
   if type(names) ~= "table" or unit.code_kind ~= "call" then
     return false
   end
-  if exact_allowed_by_names(unit, names) then
+  if exact_matches_names(unit, names) then
     return true
   end
   if path_uses_with(unit.code_path) and names[unit.code_root] == true then
@@ -277,15 +283,28 @@ local function is_builtin_renderable_code(unit)
   if unit.code_kind == "field" and unit.code_root ~= nil and builtin_code_field_roots[unit.code_root] == true then
     return true
   end
-  return call_allowed_by_names(unit, builtin_code_calls)
+  return call_matches_names(unit, builtin_code_calls)
 end
 
-local function is_user_renderable_code(unit, user_allowlist)
-  return call_allowed_by_names(unit, user_allowlist) or exact_allowed_by_names(unit, user_allowlist)
+local function is_user_renderable_code(unit, names)
+  return call_matches_names(unit, names) or exact_matches_names(unit, names)
 end
 
-local function is_renderable_code_unit(unit, user_allowlist)
-  return is_builtin_renderable_code(unit) or is_user_renderable_code(unit, user_allowlist)
+local function is_excluded_code(unit, names)
+  if call_matches_names(unit, names) or exact_matches_names(unit, names) then
+    return true
+  end
+  return type(names) == "table"
+    and unit.code_kind == "field"
+    and unit.code_root ~= nil
+    and names[unit.code_root] == true
+end
+
+local function is_renderable_code_unit(unit, policy)
+  if is_excluded_code(unit, policy.exclude) then
+    return false
+  end
+  return is_builtin_renderable_code(unit) or is_user_renderable_code(unit, policy.allow)
 end
 
 local function show_has_selector(node)
@@ -411,7 +430,7 @@ end
 local function append_visible_units_from_node(
   node,
   match_index,
-  user_allowlist,
+  code_policy,
   opts,
   units,
   transparent_depth,
@@ -434,7 +453,7 @@ local function append_visible_units_from_node(
       end
       return
     end
-    if entry.object_kind == "code" and is_renderable_code_unit(entry, user_allowlist) then
+    if entry.object_kind == "code" and is_renderable_code_unit(entry, code_policy) then
       units[#units + 1] = entry
       return
     end
@@ -444,18 +463,18 @@ local function append_visible_units_from_node(
 
   for child in node:iter_children() do
     if child:named() then
-      append_visible_units_from_node(child, match_index, user_allowlist, opts, units, transparent_depth, true)
+      append_visible_units_from_node(child, match_index, code_policy, opts, units, transparent_depth, true)
     end
   end
 end
 
-local function collect_visible_units(root, match_index, user_allowlist, opts)
+local function collect_visible_units(root, match_index, code_policy, opts)
   local units = {}
-  append_visible_units_from_node(root, match_index, user_allowlist, opts or {}, units, 0, true)
+  append_visible_units_from_node(root, match_index, code_policy, opts or {}, units, 0, true)
   return sort_units(units)
 end
 
-local function collect_nested_visible_units(container_entry, match_index, user_allowlist)
+local function collect_nested_visible_units(container_entry, match_index, code_policy)
   local units = {}
   if container_entry == nil or container_entry.node == nil then
     return units
@@ -463,7 +482,7 @@ local function collect_nested_visible_units(container_entry, match_index, user_a
 
   for child in container_entry.node:iter_children() do
     if child:named() then
-      append_visible_units_from_node(child, match_index, user_allowlist, { collect_context = false }, units, 0, true)
+      append_visible_units_from_node(child, match_index, code_policy, { collect_context = false }, units, 0, true)
     end
   end
   return sort_units(units)
@@ -600,8 +619,8 @@ local function build_scan(bufnr)
   end
 
   local root = tree:root()
-  local user_code_allowlist = configured_code_allowlist()
-  local units = collect_visible_units(root, build_match_index(bufnr, root, parsed_query), user_code_allowlist, {
+  local code_policy = configured_code_policy()
+  local units = collect_visible_units(root, build_match_index(bufnr, root, parsed_query), code_policy, {
     collect_context = true,
   })
   local nodes = {}
@@ -615,7 +634,7 @@ local function build_scan(bufnr)
       local record = context_record(bufnr, unit)
       record.index = #context_units + 1
       context_units[#context_units + 1] = record
-    elseif unit.object_kind == "code" and is_renderable_code_unit(unit, user_code_allowlist) then
+    elseif unit.object_kind == "code" and is_renderable_code_unit(unit, code_policy) then
       local prefixes = prefix_signatures(context_units)
       nodes[#nodes + 1] = node_record(bufnr, unit, context_units, prefixes)
     end
@@ -649,11 +668,11 @@ local function build_window_scan(bufnr, window, context_units)
   end
 
   local root = tree:root()
-  local user_code_allowlist = configured_code_allowlist()
+  local code_policy = configured_code_policy()
   local units = collect_visible_units(
     root,
     build_match_index(bufnr, root, parsed_query, window.row, window.end_row + 1),
-    user_code_allowlist,
+    code_policy,
     {
       collect_context = true,
     }
@@ -672,7 +691,7 @@ local function build_window_scan(bufnr, window, context_units)
     elseif
       unit.object_kind == "code"
       and range_intersects(unit, window)
-      and is_renderable_code_unit(unit, user_code_allowlist)
+      and is_renderable_code_unit(unit, code_policy)
     then
       nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
     end
@@ -700,17 +719,16 @@ local function build_nested_scan(bufnr, container, context_units)
   end
 
   local root = tree:root()
-  local user_code_allowlist = configured_code_allowlist()
+  local code_policy = configured_code_policy()
   local match_index = build_match_index(bufnr, root, parsed_query, container.row, container.end_row + 1)
-  local units =
-    collect_nested_visible_units(find_container_entry(match_index, container), match_index, user_code_allowlist)
+  local units = collect_nested_visible_units(find_container_entry(match_index, container), match_index, code_policy)
   local prefixes = prefix_signatures(context_units or {})
   local nodes = {}
 
   for _, unit in ipairs(units) do
     if unit.object_kind == "math" then
       nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
-    elseif unit.object_kind == "code" and is_renderable_code_unit(unit, user_code_allowlist) then
+    elseif unit.object_kind == "code" and is_renderable_code_unit(unit, code_policy) then
       nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
     end
   end

@@ -232,9 +232,9 @@ require("math-conceal").setup({
 cargo build --release --manifest-path service/Cargo.toml
 ```
 
-渲染器选项位于 `image.renderers.<name>`，包括 `filetypes`、`service_binary`、`live_debounce`、`root`、`inputs`、`preamble_file`、`header`、`render_paths`、Typst 的 `code_render.allow`，以及 Markdown 的 `mitex_package`。
+渲染器选项位于 `image.renderers.<name>`，包括 `filetypes`、`service_binary`、`live_debounce`、`root`、`inputs`、`preamble_file`、`header`、`render_paths`、Typst 的 `code_render.allow` 和 `code_render.exclude`，以及 Markdown 的 `mitex_package`。
 
-Typst code 渲染默认只允许一组内置的可预测 primitive；可以用 `code_render.allow` 增加项目级用户白名单：
+Typst code 渲染默认只允许一组内置的可预测 primitive。可以用 `code_render.allow` 增加项目级用户白名单，也可以用 `code_render.exclude` 从最终白名单中排除名称；`exclude` 优先于内置和显式允许的名称，并且只匹配被跟踪 code expression 的 head，不会递归检查嵌套调用：
 
 ```lua
 require("math-conceal").setup({
@@ -244,6 +244,7 @@ require("math-conceal").setup({
       typst = {
         code_render = {
           allow = { "theorem", "lemma", "remark" },
+          exclude = { "image" },
         },
       },
     },
