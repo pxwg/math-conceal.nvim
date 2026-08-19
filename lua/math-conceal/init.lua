@@ -180,6 +180,8 @@ local M = {
 --- @field header string?: Renderer-scoped Typst header.
 --- @field preamble_file string|fun(ctx: table): string?: Renderer-scoped Typst preamble file.
 --- @field mitex_package string?: Typst package spec for Markdown MiTeX rendering.
+--- @field mitex_preamble string?: LaTeX macro prelude prepended to each Markdown MiTeX formula.
+--- @field mitex_preamble_file string|fun(ctx: table): string?: File containing a LaTeX macro prelude for Markdown MiTeX formulas.
 --- @field code_render table?: Typst code rendering policy. `allow` adds names; `exclude` removes names from the effective allowlist and takes precedence.
 --- @field render_paths table?: Path filters for renderer attachment.
 

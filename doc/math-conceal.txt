@@ -558,6 +558,23 @@ Restrict rendering by path:
         Typst package spec used for Markdown LaTeX math conversion through
         MiTeX. Default: `@preview/mitex:0.2.7`.
 
+                                    *math-conceal-image.renderers.mitex_preamble*
+`image.renderers.markdown.mitex_preamble`~
+        String containing LaTeX macro definitions prepended to every Markdown
+        MiTeX inline and block formula. This is a MiTeX macro prelude, not a
+        full LaTeX document preamble: supported definitions such as
+        `\newcommand` and `\newenvironment` work, but `\usepackage` does not
+        load LaTeX packages.
+
+                               *math-conceal-image.renderers.mitex_preamble_file*
+`image.renderers.markdown.mitex_preamble_file`~
+        String or function returning an absolute file containing LaTeX macro
+        definitions for Markdown MiTeX rendering. Function form receives
+        `{ bufnr, kind, source_kind, filetype, path, cwd }`. File definitions
+        are prepended before `mitex_preamble`. After changing the external
+        file, call `require("math-conceal.image").rerender_buf()` to refresh
+        the current Markdown buffer.
+
 ==============================================================================
 7. Equation conceal API                              *math-conceal-image-api*
 

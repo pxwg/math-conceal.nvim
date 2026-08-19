@@ -298,6 +298,15 @@ local function markdown_math_content(track)
   return content, delimiter.display_kind
 end
 
+local function with_mitex_preamble(ctx, content)
+  local preamble = ctx.mitex_preamble
+  if type(preamble) ~= "string" or preamble == "" then
+    return content
+  end
+  local separator = preamble:sub(-1) == "\n" and "" or "\n"
+  return preamble .. separator .. content
+end
+
 local function render_input(track, ctx)
   if (track.object_kind or track.node_type) == "code" then
     local source = rewrite(ctx, track.bufnr, track.source or "")
@@ -314,7 +323,7 @@ local function render_input(track, ctx)
 
   local content, display_kind = markdown_math_content(track)
   local call = display_kind == "block" and "mitex" or "mi"
-  return "#" .. call .. "(" .. typst_string_literal(content) .. ")"
+  return "#" .. call .. "(" .. typst_string_literal(with_mitex_preamble(ctx, content)) .. ")"
 end
 
 function M.build_slot_document(track, ctx, config, window_layout)
