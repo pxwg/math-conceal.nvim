@@ -245,7 +245,42 @@ Check Neovim APIs, terminal support, adapters, and the render service with:
 Renderer-specific options live under `image.renderers.<name>`, including
 `filetypes`, `service_binary`, `live_debounce`, `root`, `inputs`,
 `preamble_file`, `header`, `render_paths`, Typst's `code_render.allow` and
-`code_render.exclude`, and Markdown's `mitex_package`.
+`code_render.exclude`, and Markdown's `mitex_package`, `mitex_preamble`, and
+`mitex_preamble_file`.
+
+Markdown MiTeX rendering can prepend reusable LaTeX macro definitions to every
+inline and block formula. File definitions are loaded before inline definitions:
+
+```lua
+require("math-conceal").setup({
+  image = {
+    enabled = true,
+    renderers = {
+      markdown = {
+        mitex_preamble = [[
+          \newcommand{\RR}{\mathbb{R}}
+        ]],
+        mitex_preamble_file = function(ctx)
+          return vim.fs.dirname(ctx.path) .. "/mitex-preamble.tex"
+        end,
+      },
+    },
+  },
+})
+```
+
+These options are MiTeX macro preludes, not full LaTeX document preambles:
+MiTeX-supported definitions such as `\newcommand` and `\newenvironment` work,
+but they do not load LaTeX packages with `\usepackage`. For example, a
+MiTeX-compatible `\slashed` approximation is:
+
+```tex
+\newcommand{\slashed}[1]{\not{#1}}
+```
+
+After changing an external preamble file, call
+`require("math-conceal.image").rerender_buf()` to refresh the current Markdown
+buffer.
 
 Typst code rendering is intentionally allowlisted. math-conceal renders a
 built-in set of predictable Typst primitives by default. Add project-wide custom

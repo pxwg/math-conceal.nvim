@@ -42,6 +42,8 @@ local M = {}
 ---@field header string?
 ---@field preamble_file string|function?
 ---@field mitex_package string?
+---@field mitex_preamble string?
+---@field mitex_preamble_file string|function?
 ---@field code_render { allow?: string[]|table<string, boolean>, exclude?: string[]|table<string, boolean> }?
 ---@field code_block { padding_cols?: integer, right_padding_cols?: integer, margin_pt?: number, min_cols?: integer }?
 ---@field render_paths table
@@ -118,6 +120,8 @@ local defaults = {
       header = "",
       preamble_file = nil,
       mitex_package = "@preview/mitex:0.2.7",
+      mitex_preamble = nil,
+      mitex_preamble_file = nil,
       render_paths = {
         exclude = {},
       },
@@ -313,6 +317,7 @@ local function make_binding(kind, spec, ctx)
     wrapper = spec.wrapper or kind,
     filetype = ctx.filetype,
     path = ctx.path,
+    cwd = ctx.cwd,
     enabled = true,
     service_binary = spec.service_binary,
     live_debounce = tonumber(spec.live_debounce) or 0,
@@ -321,6 +326,8 @@ local function make_binding(kind, spec, ctx)
     header = spec.header or "",
     preamble_file = spec.preamble_file,
     mitex_package = spec.mitex_package,
+    mitex_preamble = spec.mitex_preamble,
+    mitex_preamble_file = spec.mitex_preamble_file,
     code_block = vim.deepcopy(spec.code_block or {}),
   }
 end
@@ -510,11 +517,14 @@ local function same_binding(a, b)
     "wrapper",
     "filetype",
     "path",
+    "cwd",
     "service_binary",
     "root",
     "header",
     "preamble_file",
     "mitex_package",
+    "mitex_preamble",
+    "mitex_preamble_file",
   }) do
     if a[key] ~= b[key] then
       return false
@@ -611,9 +621,11 @@ end
 
 function M.rerender_buf(bufnr)
   bufnr = normalize_bufnr(bufnr)
-  if M._buffers[bufnr] == nil then
+  local binding = M._buffers[bufnr]
+  if binding == nil then
     return M.attach_buf(bufnr)
   end
+  require("math-conceal.image.context").invalidate_mitex_preamble(bufnr)
   projection.force_render(bufnr)
   return true
 end

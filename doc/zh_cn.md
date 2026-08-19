@@ -232,7 +232,35 @@ require("math-conceal").setup({
 cargo build --release --manifest-path service/Cargo.toml
 ```
 
-渲染器选项位于 `image.renderers.<name>`，包括 `filetypes`、`service_binary`、`live_debounce`、`root`、`inputs`、`preamble_file`、`header`、`render_paths`、Typst 的 `code_render.allow` 和 `code_render.exclude`，以及 Markdown 的 `mitex_package`。
+渲染器选项位于 `image.renderers.<name>`，包括 `filetypes`、`service_binary`、`live_debounce`、`root`、`inputs`、`preamble_file`、`header`、`render_paths`、Typst 的 `code_render.allow` 和 `code_render.exclude`，以及 Markdown 的 `mitex_package`、`mitex_preamble` 和 `mitex_preamble_file`。
+
+Markdown MiTeX 渲染可以在每个行内和块公式前载入可复用的 LaTeX 宏。文件中的定义先于内联定义载入：
+
+```lua
+require("math-conceal").setup({
+  image = {
+    enabled = true,
+    renderers = {
+      markdown = {
+        mitex_preamble = [[
+          \newcommand{\RR}{\mathbb{R}}
+        ]],
+        mitex_preamble_file = function(ctx)
+          return vim.fs.dirname(ctx.path) .. "/mitex-preamble.tex"
+        end,
+      },
+    },
+  },
+})
+```
+
+这两个选项是 MiTeX macro prelude，而不是完整的 LaTeX 文档 preamble：可以使用 MiTeX 支持的 `\newcommand`、`\newenvironment` 等定义，但不能通过 `\usepackage` 加载 LaTeX package。例如，可以这样近似实现 MiTeX 兼容的 `\slashed`：
+
+```tex
+\newcommand{\slashed}[1]{\not{#1}}
+```
+
+修改外部 preamble 文件后，可以调用 `require("math-conceal.image").rerender_buf()` 刷新当前 Markdown buffer。
 
 Typst code 渲染默认只允许一组内置的可预测 primitive。可以用 `code_render.allow` 增加项目级用户白名单，也可以用 `code_render.exclude` 从最终白名单中排除名称；`exclude` 优先于内置和显式允许的名称，并且只匹配被跟踪 code expression 的 head，不会递归检查嵌套调用：
 

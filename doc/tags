@@ -25,6 +25,8 @@ math-conceal-image.renderers.header	math-conceal.txt	/*math-conceal-image.render
 math-conceal-image.renderers.inputs	math-conceal.txt	/*math-conceal-image.renderers.inputs*
 math-conceal-image.renderers.live_debounce	math-conceal.txt	/*math-conceal-image.renderers.live_debounce*
 math-conceal-image.renderers.mitex_package	math-conceal.txt	/*math-conceal-image.renderers.mitex_package*
+math-conceal-image.renderers.mitex_preamble	math-conceal.txt	/*math-conceal-image.renderers.mitex_preamble*
+math-conceal-image.renderers.mitex_preamble_file	math-conceal.txt	/*math-conceal-image.renderers.mitex_preamble_file*
 math-conceal-image.renderers.preamble_file	math-conceal.txt	/*math-conceal-image.renderers.preamble_file*
 math-conceal-image.renderers.render_paths	math-conceal.txt	/*math-conceal-image.renderers.render_paths*
 math-conceal-image.renderers.root	math-conceal.txt	/*math-conceal-image.renderers.root*

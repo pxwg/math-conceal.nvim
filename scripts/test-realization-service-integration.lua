@@ -45,6 +45,8 @@ local function run()
 
   local binary = vim.env.MATH_CONCEAL_SERVICE or "service/target/release/typst-concealer-service"
   assert_true("service executable", vim.fn.executable(binary) == 1)
+  local mitex_preamble_file = vim.fn.tempname() .. ".tex"
+  vim.fn.writefile({ "\\newcommand{\\slashed}[1]{\\not{#1}}" }, mitex_preamble_file)
   local conceal = require("math-conceal")
   conceal.setup({
     image = {
@@ -74,6 +76,8 @@ local function run()
           wrapper = "mitex",
           inputs = {},
           mitex_package = "@preview/mitex:0.2.7",
+          mitex_preamble = "\\newcommand{\\RR}{\\mathbb{R}}",
+          mitex_preamble_file = mitex_preamble_file,
           render_paths = { exclude = {} },
         },
       },
@@ -113,7 +117,7 @@ local function run()
   local markdown_path = vim.fs.normalize(vim.fn.fnamemodify("/tmp/math-conceal-preview.md", ":p"))
   local markdown_buf, markdown_attachment = render_buffer(
     "snacks_picker_preview",
-    { "Inline $x + y$.", "", "$$", "x^2 + y^2 = z^2", "$$" },
+    { "Inline $\\slashed{x} \\in \\RR$.", "", "$$", "\\slashed{y} \\in \\RR", "$$" },
     2,
     {
       kind = "markdown",
@@ -126,6 +130,29 @@ local function run()
   assert_true("preview binding keeps logical filetype", markdown_binding.filetype == "markdown")
   assert_true("preview binding keeps real path", markdown_binding.path == markdown_path)
   assert_true("preview source helper uses explicit source", image.source_kind_for_bufnr(markdown_buf) == "markdown")
+  vim.fn.writefile({
+    "\\newcommand{\\slashed}[1]{\\not{#1}}",
+    "\\newcommand{\\ZZ}{\\mathbb{Z}}",
+  }, mitex_preamble_file)
+  assert_true("Markdown preamble rerender starts", image.rerender_buf(markdown_buf))
+  local refreshed_context = require("math-conceal.image.state").get_buf_state(markdown_buf).context
+  assert_true(
+    "Markdown preamble rerender reloads file",
+    refreshed_context.mitex_preamble:find("\\newcommand{\\ZZ}", 1, true) ~= nil
+  )
+  assert_true(
+    "Markdown preamble rerender becomes ready",
+    vim.wait(10000, function()
+      local bs = require("math-conceal.image.state").get_buf_state(markdown_buf)
+      local ready = 0
+      for _, projection in pairs(bs.projections or {}) do
+        if projection.status == "ready" and projection.visible_asset ~= nil then
+          ready = ready + 1
+        end
+      end
+      return ready == 2
+    end, 10)
+  )
   assert_true("images uploaded", #terminal_calls.sent >= 2)
   assert_true("placements created", #terminal_calls.placed >= 2)
 
@@ -133,6 +160,7 @@ local function run()
   assert_true("Markdown attachment detaches", markdown_attachment:detach())
   assert_true("Typst image binding released", image.get_binding(typst_buf) == nil)
   assert_true("Markdown image binding released", image.get_binding(markdown_buf) == nil)
+  vim.fn.delete(mitex_preamble_file)
   print("realization-service-integration-ok")
 end
 

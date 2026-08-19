@@ -36,26 +36,90 @@ local function signature(parts)
   return vim.fn.sha256(table.concat(normalized, "\0"))
 end
 
-local function resolve_preamble_file(bufnr, binding)
-  local preamble_file = binding and binding.preamble_file or nil
-  if type(preamble_file) == "function" then
-    local ok, path = pcall(preamble_file, {
-      bufnr = bufnr,
-      kind = binding.kind,
-      source_kind = binding.source_kind,
-      filetype = binding.filetype,
-      path = vim.api.nvim_buf_get_name(bufnr),
-      cwd = vim.uv.cwd(),
-    })
-    if ok and type(path) == "string" and path ~= "" then
-      return path
+local function resolver_context(bufnr, binding)
+  return {
+    bufnr = bufnr,
+    kind = binding.kind,
+    source_kind = binding.source_kind,
+    filetype = binding.filetype,
+    path = binding.path or vim.api.nvim_buf_get_name(bufnr),
+    cwd = binding.cwd or vim.uv.cwd(),
+  }
+end
+
+local function resolve_string_option(bufnr, binding, value)
+  if type(value) == "function" then
+    local ok, resolved = pcall(value, resolver_context(bufnr, binding))
+    if ok and type(resolved) == "string" and resolved ~= "" then
+      return resolved
     end
     return nil
   end
-  if type(preamble_file) == "string" and preamble_file ~= "" then
-    return preamble_file
+  if type(value) == "string" and value ~= "" then
+    return value
   end
   return nil
+end
+
+local function resolve_preamble_file(bufnr, binding)
+  return resolve_string_option(bufnr, binding, binding and binding.preamble_file or nil)
+end
+
+local function read_text_file(path)
+  local file, err = io.open(path, "rb")
+  if file == nil then
+    return nil, err
+  end
+  local ok, content = pcall(file.read, file, "*a")
+  file:close()
+  if not ok then
+    return nil, content
+  end
+  return content
+end
+
+local function resolve_mitex_preamble(bufnr, binding, bstate)
+  local cached = bstate.mitex_preamble_cache
+  if cached ~= nil then
+    return cached.content, cached.path
+  end
+
+  local parts = {}
+  local path = resolve_string_option(bufnr, binding, binding and binding.mitex_preamble_file or nil)
+  local abs = normalize(path)
+  if abs ~= nil then
+    local content, err = read_text_file(abs)
+    if content ~= nil and content ~= "" then
+      parts[#parts + 1] = content
+    elseif content == nil then
+      vim.schedule(function()
+        vim.notify_once(
+          string.format("[math-conceal.image] failed to read MiTeX preamble '%s': %s", abs, tostring(err)),
+          vim.log.levels.ERROR
+        )
+      end)
+    end
+  end
+
+  local inline = binding and binding.mitex_preamble or nil
+  if type(inline) == "string" and inline ~= "" then
+    parts[#parts + 1] = inline
+  end
+
+  local combined = ""
+  for _, part in ipairs(parts) do
+    if combined ~= "" and combined:sub(-1) ~= "\n" and part:sub(1, 1) ~= "\n" then
+      combined = combined .. "\n"
+    end
+    combined = combined .. part
+  end
+  combined = combined:gsub("\r\n", "\n"):gsub("\r", "\n")
+  bstate.mitex_preamble_cache = { content = combined, path = abs }
+  return combined, abs
+end
+
+function M.invalidate_mitex_preamble(bufnr)
+  state.get_buf_state(bufnr).mitex_preamble_cache = nil
 end
 
 local function resolve_preamble_include_line(bufnr, binding, effective_root)
@@ -81,6 +145,7 @@ function M.resolve(bufnr, binding, tracker_context, config)
   local ws = workspace.for_buffer(bufnr)
   local effective_root = path_rewrite.common_ancestor(source_root, ws.root)
   local context_units = vim.deepcopy((tracker_context and tracker_context.units) or {})
+  local mitex_preamble, mitex_preamble_path = resolve_mitex_preamble(bufnr, binding, bstate)
 
   local ctx = {
     bufnr = bufnr,
@@ -97,6 +162,8 @@ function M.resolve(bufnr, binding, tracker_context, config)
     source_kind = binding.source_kind or binding.kind,
     header = binding.header or "",
     mitex_package = binding.mitex_package,
+    mitex_preamble = mitex_preamble,
+    mitex_preamble_path = mitex_preamble_path,
     code_block = vim.deepcopy(binding.code_block or {}),
     context_units = context_units,
     preamble_include_line = resolve_preamble_include_line(bufnr, binding, effective_root),
@@ -116,6 +183,8 @@ function M.resolve(bufnr, binding, tracker_context, config)
     ctx.context_source,
     ctx.flow_context_source,
     ctx.mitex_package or "",
+    ctx.mitex_preamble_path or "",
+    ctx.mitex_preamble or "",
     tracker_context and tracker_context.signature or "",
     state.render_ppi(config),
   })
@@ -134,6 +203,8 @@ function M.resolve(bufnr, binding, tracker_context, config)
     ctx.inputs,
     ctx.context_source,
     ctx.mitex_package or "",
+    ctx.mitex_preamble_path or "",
+    ctx.mitex_preamble or "",
     state.render_ppi(config),
   })
   ctx.context_rev = bstate.context_rev
