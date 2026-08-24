@@ -212,7 +212,7 @@ function M.resolve(ctx, opts)
   if candidate == nil then
     return nil, bufnr
   end
-  local source = require("math-conceal").resolve_source(bufnr, candidate)
+  local source = require("math-conceal.nvim").resolve_source(bufnr, candidate)
   return source, bufnr, item_key(ctx, source and source.path or item_path(ctx))
 end
 
@@ -246,7 +246,7 @@ function M.sync(ctx, opts)
   if mode == false then
     mode = nil
   end
-  local ok, attachment = pcall(require("math-conceal").attach, bufnr, {
+  local ok, attachment = pcall(require("math-conceal.nvim").attach, bufnr, {
     source = source,
     surfaces = requested_surfaces(opts),
     mode = mode,
