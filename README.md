@@ -95,12 +95,102 @@ return {
       "phy",
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+    opt = {
+      conceallevel = 2,
+      concealcursor = "n",
+    },
     image = {
       enabled = true, -- set true to enable graphical equation conceal
     },
   },
 }
 ```
+
+The top-level `opt` table controls the Neovim window-local conceal options that
+math-conceal injects only into windows showing attached buffers. The default
+`concealcursor = "n"` keeps conceal active in Normal mode while revealing source
+on the cursor line during Insert mode; set it to `"nci"` to keep the previous
+always-concealed cursor-line behavior.
+
+## Buffer Attachment API
+
+`attach()` is the common entry point for ASCII/Unicode and graphical conceal.
+Ordinary filetype buffers are attached automatically. Integrations for virtual
+or preview buffers can provide the logical source independently of the
+buffer's concrete `filetype` and name:
+
+```lua
+local conceal = require("math-conceal")
+local attachment = conceal.attach(bufnr, {
+  source = {
+    kind = "markdown", -- "latex", "markdown", or "typst"
+    filetype = "markdown",
+    path = "/absolute/path/to/note.md",
+  },
+  surfaces = {
+    unicode = true,
+    image = true,
+  },
+  mode = "presentation",
+})
+
+attachment:detach()
+```
+
+`path` supplies the real source provenance for renderer roots, imports, and
+path filters when the attached buffer is anonymous. `image = true` still
+requires top-level `image.enabled = true`; graphical attachment is available
+for Typst and Markdown, while LaTeX uses ASCII/Unicode conceal only.
+
+Calls return owner-qualified handles. Multiple integrations may attach the
+same logical source to one buffer, and detaching one handle leaves the other
+owners active. Re-attaching with the same explicit `owner` replaces that
+owner's request and makes its old handle stale. Use
+`resolve_source(bufnr, source)`, `get_attachment(bufnr)`, `refresh()`, or
+`detach(bufnr)` for custom integrations and lifecycle inspection.
+
+The source descriptor determines the Tree-sitter root parser explicitly.
+math-conceal obtains that parser but does not start or stop Tree-sitter
+highlighting, so preview hosts remain responsible for their own highlighter
+lifecycle.
+
+### Snacks picker previews
+
+The stock `Snacks.picker.preview.file` previewer is adapted automatically when
+Snacks is available. Scratch previews use `presentation` mode, while previews
+that reuse an already-loaded buffer preserve that buffer's existing mode and
+attachment owner. Typst, Markdown, and LaTeX previews receive Unicode conceal;
+Typst and Markdown also request image conceal when it is globally enabled.
+
+```lua
+require("math-conceal").setup({
+  integrations = {
+    snacks = {
+      enabled = true, -- default
+      unicode = true,
+      image = true,
+      mode = "presentation",
+    },
+  },
+})
+```
+
+Disable the default adapter with `integrations.snacks = false`. Custom Snacks
+previewers can reuse the same lifecycle:
+
+```lua
+local snacks_conceal = require("math-conceal.integrations.snacks")
+
+opts.preview = snacks_conceal.wrap(my_synchronous_previewer, {
+  source = function(ctx, bufnr, detected)
+    return detected -- customize kind, filetype, or path here
+  end,
+})
+```
+
+For asynchronous previewers, call `snacks_conceal.sync(ctx, opts)` after the
+preview content has been committed and `snacks_conceal.detach(ctx)` during
+custom cleanup.
 
 ## Equation Conceal
 
@@ -113,6 +203,7 @@ such as kitty and Ghostty.
 Graphical equation conceal supports Typst and Markdown math through
 [MiTeX](https://github.com/mitex-rs/mitex).
 Markdown math supports `$...$`, `$$...$$`, `\(...\)`, and `\[...\]` delimiters.
+The graphical path requires Neovim 0.11 or newer; ASCII/Unicode conceal does not.
 
 Enable it from the same setup table:
 
@@ -145,14 +236,58 @@ For source/lazy.nvim installs, build the bundled Rust service after installing o
 cargo build --release --manifest-path service/Cargo.toml
 ```
 
+Check Neovim APIs, terminal support, adapters, and the render service with:
+
+```vim
+:checkhealth math-conceal
+```
+
 Renderer-specific options live under `image.renderers.<name>`, including
 `filetypes`, `service_binary`, `live_debounce`, `root`, `inputs`,
-`preamble_file`, `header`, `render_paths`, Typst's `code_render.allow`, and
-Markdown's `mitex_package`.
+`preamble_file`, `header`, `render_paths`, Typst's `code_render.allow` and
+`code_render.exclude`, and Markdown's `mitex_package`, `mitex_preamble`, and
+`mitex_preamble_file`.
+
+Markdown MiTeX rendering can prepend reusable LaTeX macro definitions to every
+inline and block formula. File definitions are loaded before inline definitions:
+
+```lua
+require("math-conceal").setup({
+  image = {
+    enabled = true,
+    renderers = {
+      markdown = {
+        mitex_preamble = [[
+          \newcommand{\RR}{\mathbb{R}}
+        ]],
+        mitex_preamble_file = function(ctx)
+          return vim.fs.dirname(ctx.path) .. "/mitex-preamble.tex"
+        end,
+      },
+    },
+  },
+})
+```
+
+These options are MiTeX macro preludes, not full LaTeX document preambles:
+MiTeX-supported definitions such as `\newcommand` and `\newenvironment` work,
+but they do not load LaTeX packages with `\usepackage`. For example, a
+MiTeX-compatible `\slashed` approximation is:
+
+```tex
+\newcommand{\slashed}[1]{\not{#1}}
+```
+
+After changing an external preamble file, call
+`require("math-conceal.image").rerender_buf()` to refresh the current Markdown
+buffer.
 
 Typst code rendering is intentionally allowlisted. math-conceal renders a
-built-in set of predictable Typst primitives by default; add project-wide custom
-function names with `code_render.allow`:
+built-in set of predictable Typst primitives by default. Add project-wide custom
+function names with `code_render.allow`, or remove names from the effective
+allowlist with `code_render.exclude`. Exclusions take precedence over both
+built-in and explicitly allowed names, and match the tracked code expression's
+head rather than recursively inspecting nested calls:
 
 ```lua
 require("math-conceal").setup({
@@ -162,6 +297,7 @@ require("math-conceal").setup({
       typst = {
         code_render = {
           allow = { "theorem", "lemma", "remark" },
+          exclude = { "image" },
         },
       },
     },

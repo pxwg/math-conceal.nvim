@@ -1,15 +1,29 @@
 local projection = require("math-conceal.image.projection")
 local state = require("math-conceal.image.state")
 local tracker = require("math-conceal.image.tracker")
+local window_options = require("math-conceal.window-options")
 
 local M = {}
 
 ---@class MathConcealImageAttachContext
 ---@field bufnr integer
 ---@field kind string
+---@field source_kind string
 ---@field filetype string
 ---@field path string
 ---@field cwd string
+
+---@class MathConcealImageSource
+---@field kind string?
+---@field filetype string?
+---@field path string?
+---@field cwd string?
+---@field renderer string?
+
+---@class MathConcealImageAttachOptions
+---@field renderer string?
+---@field source MathConcealImageSource?
+---@field replace boolean?
 
 ---@alias MathConcealImageRootResolver fun(ctx: MathConcealImageAttachContext): string?
 ---@alias MathConcealImageInputsResolver fun(ctx: MathConcealImageAttachContext): table|string[]?
@@ -28,7 +42,9 @@ local M = {}
 ---@field header string?
 ---@field preamble_file string|function?
 ---@field mitex_package string?
----@field code_render { allow?: string[]|table<string, boolean> }?
+---@field mitex_preamble string?
+---@field mitex_preamble_file string|function?
+---@field code_render { allow?: string[]|table<string, boolean>, exclude?: string[]|table<string, boolean> }?
 ---@field code_block { padding_cols?: integer, right_padding_cols?: integer, margin_pt?: number, min_cols?: integer }?
 ---@field render_paths table
 
@@ -44,6 +60,8 @@ local M = {}
 ---@field do_diagnostics boolean
 ---@field conceal_in_normal boolean
 ---@field live_preview_enabled boolean
+---@field preview_idle_timeout_ms integer
+---@field hidden_service_idle_ms integer
 ---@field block_padding_cols integer
 
 local defaults = {
@@ -59,6 +77,8 @@ local defaults = {
   do_diagnostics = true,
   conceal_in_normal = false,
   live_preview_enabled = true,
+  preview_idle_timeout_ms = 1000,
+  hidden_service_idle_ms = 2000,
   block_padding_cols = 0,
   renderers = {
     typst = {
@@ -75,6 +95,7 @@ local defaults = {
       preamble_file = nil,
       code_render = {
         allow = {},
+        exclude = {},
       },
       code_block = {
         padding_cols = 0,
@@ -99,6 +120,8 @@ local defaults = {
       header = "",
       preamble_file = nil,
       mitex_package = "@preview/mitex:0.2.7",
+      mitex_preamble = nil,
+      mitex_preamble_file = nil,
       render_paths = {
         exclude = {},
       },
@@ -114,6 +137,8 @@ local augroup_name = "math-conceal.image"
 local augroup_id = nil
 local cursor_sync_pending = {}
 local cursor_sync_generation = {}
+local resume_on_read = {}
+local hidden_service_timers = {}
 
 local function normalize_bufnr(bufnr)
   if bufnr == nil or bufnr == 0 then
@@ -145,13 +170,16 @@ local function default_root(ctx)
   return dir
 end
 
-local function buffer_context(bufnr, kind)
+local function buffer_context(bufnr, kind, source)
+  source = source or {}
+  local spec = M.config.renderers[kind] or {}
   return {
     bufnr = bufnr,
     kind = kind,
-    filetype = vim.bo[bufnr].filetype,
-    path = normalize_path(vim.api.nvim_buf_get_name(bufnr)),
-    cwd = vim.uv.cwd(),
+    source_kind = source.kind or spec.source_kind or spec.scanner or kind,
+    filetype = source.filetype or vim.bo[bufnr].filetype,
+    path = normalize_path(source.path or vim.api.nvim_buf_get_name(bufnr)),
+    cwd = normalize_path(source.cwd or vim.uv.cwd()),
   }
 end
 
@@ -279,7 +307,7 @@ local function path_excluded(spec, ctx)
 end
 
 local function make_binding(kind, spec, ctx)
-  local source_kind = spec.source_kind or spec.scanner or kind
+  local source_kind = ctx.source_kind or spec.source_kind or spec.scanner or kind
   return {
     bufnr = ctx.bufnr,
     kind = kind,
@@ -289,6 +317,7 @@ local function make_binding(kind, spec, ctx)
     wrapper = spec.wrapper or kind,
     filetype = ctx.filetype,
     path = ctx.path,
+    cwd = ctx.cwd,
     enabled = true,
     service_binary = spec.service_binary,
     live_debounce = tonumber(spec.live_debounce) or 0,
@@ -297,6 +326,8 @@ local function make_binding(kind, spec, ctx)
     header = spec.header or "",
     preamble_file = spec.preamble_file,
     mitex_package = spec.mitex_package,
+    mitex_preamble = spec.mitex_preamble,
+    mitex_preamble_file = spec.mitex_preamble_file,
     code_block = vim.deepcopy(spec.code_block or {}),
   }
 end
@@ -311,15 +342,142 @@ local function attached_bufnrs()
   return bufs
 end
 
+local function close_hidden_service_timer(bufnr)
+  local timer = hidden_service_timers[bufnr]
+  if timer == nil then
+    return
+  end
+  timer:stop()
+  if not timer:is_closing() then
+    timer:close()
+  end
+  hidden_service_timers[bufnr] = nil
+end
+
+local function close_all_hidden_service_timers()
+  for bufnr in pairs(hidden_service_timers) do
+    close_hidden_service_timer(bufnr)
+  end
+end
+
+local function buffer_visible(bufnr)
+  for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) == bufnr then
+      return true
+    end
+  end
+  return false
+end
+
+local function hidden_service_idle_ms()
+  local timeout = tonumber(M.config.hidden_service_idle_ms)
+  if timeout == nil then
+    timeout = 2000
+  end
+  return timeout
+end
+
+local function stop_hidden_services(bufnr)
+  hidden_service_timers[bufnr] = nil
+  if M._buffers[bufnr] == nil or buffer_visible(bufnr) then
+    return
+  end
+
+  local session = require("math-conceal.image.session")
+  local ok_preview, preview = pcall(require, "math-conceal.image.preview")
+  if ok_preview and type(preview.clear) == "function" then
+    pcall(preview.clear, bufnr, { skip_idle_stop = true })
+  end
+  session.stop(bufnr, "preview")
+  if not session.stop_if_idle(bufnr, "full") then
+    -- Full renders own projection pending state.  Do not cancel them from the
+    -- hidden-buffer path; try again after the same idle interval.
+    M._schedule_hidden_service_stop(bufnr)
+  end
+end
+
+function M._schedule_hidden_service_stop(bufnr)
+  bufnr = normalize_bufnr(bufnr)
+  if M._buffers[bufnr] == nil or buffer_visible(bufnr) then
+    close_hidden_service_timer(bufnr)
+    return
+  end
+
+  local timeout = hidden_service_idle_ms()
+  if timeout < 0 then
+    close_hidden_service_timer(bufnr)
+    return
+  end
+  if hidden_service_timers[bufnr] ~= nil then
+    return
+  end
+
+  local timer = vim.uv.new_timer()
+  hidden_service_timers[bufnr] = timer
+  timer:start(
+    math.max(0, timeout),
+    0,
+    vim.schedule_wrap(function()
+      if not timer:is_closing() then
+        timer:close()
+      end
+      stop_hidden_services(bufnr)
+    end)
+  )
+end
+
+local function renderer_kind_for_source(bufnr, opts)
+  opts = opts or {}
+  local source = opts.source or {}
+  local explicit = opts.renderer or source.renderer
+  if explicit ~= nil then
+    return M.config.renderers[explicit] ~= nil and explicit or nil
+  end
+
+  local filetype = source.filetype or vim.bo[bufnr].filetype
+  local by_filetype = M._ft_to_renderer[filetype]
+  if by_filetype ~= nil then
+    return by_filetype
+  end
+
+  if source.kind ~= nil then
+    if M.config.renderers[source.kind] ~= nil then
+      return source.kind
+    end
+    for kind, spec in pairs(M.config.renderers or {}) do
+      if (spec.source_kind or spec.scanner or kind) == source.kind then
+        return kind
+      end
+    end
+  end
+end
+
 function M.renderer_kind_for_bufnr(bufnr)
   bufnr = normalize_bufnr(bufnr)
   if not valid_loaded_buffer(bufnr) then
     return nil
   end
-  return M._ft_to_renderer[vim.bo[bufnr].filetype]
+  local binding = M._buffers[bufnr]
+  return binding and binding.kind or renderer_kind_for_source(bufnr)
+end
+
+---@param bufnr integer?
+---@param source MathConcealImageSource
+---@return string?
+function M.renderer_kind_for_source(bufnr, source)
+  bufnr = normalize_bufnr(bufnr)
+  if not valid_loaded_buffer(bufnr) then
+    return nil
+  end
+  return renderer_kind_for_source(bufnr, { source = source })
 end
 
 function M.source_kind_for_bufnr(bufnr)
+  bufnr = normalize_bufnr(bufnr)
+  local binding = M._buffers[bufnr]
+  if binding ~= nil then
+    return binding.source_kind
+  end
   local kind = M.renderer_kind_for_bufnr(bufnr)
   local spec = kind and M.config.renderers[kind] or nil
   return spec and (spec.source_kind or spec.scanner or kind) or nil
@@ -329,38 +487,103 @@ function M.is_supported_bufnr(bufnr)
   return M.renderer_kind_for_bufnr(bufnr) ~= nil
 end
 
-function M.is_render_allowed(bufnr)
+function M.is_render_allowed(bufnr, source)
   bufnr = normalize_bufnr(bufnr)
-  local kind = M.renderer_kind_for_bufnr(bufnr)
+  local binding = source == nil and M._buffers[bufnr] or nil
+  local kind = binding and binding.kind or renderer_kind_for_source(bufnr, { source = source })
   if kind == nil then
     return false
   end
   local spec = M.config.renderers[kind]
-  return not path_excluded(spec, buffer_context(bufnr, kind))
+  if source == nil and binding ~= nil then
+    source = {
+      kind = binding.source_kind,
+      filetype = binding.filetype,
+      path = binding.path,
+    }
+  end
+  return not path_excluded(spec, buffer_context(bufnr, kind, source))
 end
 
-function M.attach_buf(bufnr)
+local function same_binding(a, b)
+  if a == nil or b == nil then
+    return false
+  end
+  for _, key in ipairs({
+    "kind",
+    "source_kind",
+    "scanner",
+    "backend",
+    "wrapper",
+    "filetype",
+    "path",
+    "cwd",
+    "service_binary",
+    "root",
+    "header",
+    "preamble_file",
+    "mitex_package",
+    "mitex_preamble",
+    "mitex_preamble_file",
+  }) do
+    if a[key] ~= b[key] then
+      return false
+    end
+  end
+  return vim.deep_equal(a.inputs, b.inputs) and vim.deep_equal(a.code_block, b.code_block)
+end
+
+---@param bufnr integer?
+---@param opts MathConcealImageAttachOptions?
+---@return boolean
+function M.attach_buf(bufnr, opts)
   bufnr = normalize_bufnr(bufnr)
-  local kind = M.renderer_kind_for_bufnr(bufnr)
+  opts = opts or {}
+  if not valid_loaded_buffer(bufnr) then
+    return false
+  end
+
+  local keep_resume = resume_on_read[bufnr] == true
+  local kind = renderer_kind_for_source(bufnr, opts)
   if kind == nil then
-    M.disable_buf(bufnr)
+    M.disable_buf(bufnr, { keep_resume = keep_resume })
     return false
   end
 
   local spec = M.config.renderers[kind]
-  local ctx = buffer_context(bufnr, kind)
+  local ctx = buffer_context(bufnr, kind, opts.source)
   if path_excluded(spec, ctx) then
-    M.disable_buf(bufnr)
+    M.disable_buf(bufnr, { keep_resume = keep_resume })
     return false
   end
 
   local binding = make_binding(kind, spec, ctx)
+  local current = M._buffers[bufnr]
+  if current ~= nil and opts.replace ~= true and same_binding(current, binding) then
+    close_hidden_service_timer(bufnr)
+    resume_on_read[bufnr] = nil
+    window_options.attach(bufnr, "image")
+    return true
+  end
+  if current ~= nil then
+    M.disable_buf(bufnr, { keep_resume = keep_resume })
+  end
+
+  close_hidden_service_timer(bufnr)
   M._buffers[bufnr] = binding
-  tracker.attach(bufnr, {
+  resume_on_read[bufnr] = nil
+  window_options.attach(bufnr, "image")
+  local attached = tracker.attach(bufnr, {
     kind = binding.scanner or binding.source_kind or kind,
     debug = tracker_debug_enabled(),
     on_repair = projection.on_tracker_repair,
   })
+  if not attached then
+    M._buffers[bufnr] = nil
+    window_options.detach(bufnr, "image")
+    projection.detach(bufnr)
+    return false
+  end
   return true
 end
 
@@ -368,15 +591,21 @@ function M.get_binding(bufnr)
   return M._buffers[normalize_bufnr(bufnr)]
 end
 
-function M.enable_buf(bufnr)
-  return M.attach_buf(bufnr)
+function M.enable_buf(bufnr, opts)
+  return M.attach_buf(bufnr, opts)
 end
 
-function M.disable_buf(bufnr)
+function M.disable_buf(bufnr, opts)
   bufnr = normalize_bufnr(bufnr)
+  opts = opts or {}
   cursor_sync_pending[bufnr] = nil
   cursor_sync_generation[bufnr] = (cursor_sync_generation[bufnr] or 0) + 1
+  if opts.keep_resume ~= true then
+    resume_on_read[bufnr] = nil
+  end
+  close_hidden_service_timer(bufnr)
   M._buffers[bufnr] = nil
+  window_options.detach(bufnr, "image")
   projection.detach(bufnr)
   tracker.detach(bufnr)
 end
@@ -392,9 +621,11 @@ end
 
 function M.rerender_buf(bufnr)
   bufnr = normalize_bufnr(bufnr)
-  if M._buffers[bufnr] == nil then
+  local binding = M._buffers[bufnr]
+  if binding == nil then
     return M.attach_buf(bufnr)
   end
+  require("math-conceal.image.context").invalidate_mitex_preamble(bufnr)
   projection.force_render(bufnr)
   return true
 end
@@ -434,7 +665,7 @@ local function schedule_cursor_sync(bufnr)
   cursor_sync_pending[bufnr] = true
   local generation = (cursor_sync_generation[bufnr] or 0) + 1
   cursor_sync_generation[bufnr] = generation
-  vim.defer_fn(function()
+  vim.schedule(function()
     if cursor_sync_generation[bufnr] ~= generation then
       return
     end
@@ -442,7 +673,7 @@ local function schedule_cursor_sync(bufnr)
     if valid_loaded_buffer(bufnr) then
       sync_cursor_now(bufnr)
     end
-  end, 16)
+  end)
 end
 
 local function setup_autocmds()
@@ -454,7 +685,7 @@ local function setup_autocmds()
       pattern = fts,
       desc = "attach math-conceal image renderer",
       callback = function(ev)
-        if M.config.enabled_by_default then
+        if M.config.enabled_by_default or resume_on_read[ev.buf] == true then
           M.attach_buf(ev.buf)
         end
       end,
@@ -465,16 +696,35 @@ local function setup_autocmds()
     group = augroup_id,
     desc = "reattach math-conceal image renderer after reload",
     callback = function(ev)
-      if valid_loaded_buffer(ev.buf) and (M._buffers[ev.buf] ~= nil or M.config.enabled_by_default) then
+      if
+        valid_loaded_buffer(ev.buf)
+        and (M._buffers[ev.buf] ~= nil or M.config.enabled_by_default or resume_on_read[ev.buf] == true)
+      then
         M.attach_buf(ev.buf)
       end
     end,
   })
 
-  vim.api.nvim_create_autocmd("BufWipeout", {
+  vim.api.nvim_create_autocmd("BufUnload", {
+    group = augroup_id,
+    desc = "detach math-conceal image renderer while preserving manual reload intent",
+    callback = function(ev)
+      if M._buffers[ev.buf] == nil and resume_on_read[ev.buf] ~= true then
+        return
+      end
+      local should_resume = M.config.enabled_by_default ~= true
+      M.disable_buf(ev.buf, { keep_resume = should_resume })
+      if should_resume then
+        resume_on_read[ev.buf] = true
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
     group = augroup_id,
     desc = "clear math-conceal image renderer",
     callback = function(ev)
+      resume_on_read[ev.buf] = nil
       M.disable_buf(ev.buf)
     end,
   })
@@ -516,9 +766,59 @@ local function setup_autocmds()
     group = augroup_id,
     desc = "refresh math-conceal image display strategy for new windows",
     callback = function(ev)
+      close_hidden_service_timer(ev.buf)
       if M._buffers[ev.buf] ~= nil then
         projection.on_layout_change(ev.buf)
       end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("TabLeave", {
+    group = augroup_id,
+    desc = "release inactive math-conceal image placements",
+    callback = function()
+      projection.close_tab(vim.api.nvim_get_current_tabpage())
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("TabEnter", {
+    group = augroup_id,
+    desc = "restore active math-conceal image placements",
+    callback = function()
+      for _, bufnr in ipairs(attached_bufnrs()) do
+        if buffer_visible(bufnr) then
+          close_hidden_service_timer(bufnr)
+        end
+        projection.on_layout_change(bufnr)
+        M._schedule_hidden_service_stop(bufnr)
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = augroup_id,
+    desc = "release closed math-conceal image window placement",
+    callback = function(ev)
+      local winid = tonumber(ev.match)
+      if winid ~= nil then
+        projection.close_window(winid)
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "BufHidden", "BufWinLeave" }, {
+    group = augroup_id,
+    desc = "stop idle math-conceal services for hidden buffers",
+    callback = function(ev)
+      local bufnr = ev.buf
+      vim.schedule(function()
+        if valid_loaded_buffer(bufnr) then
+          if M._buffers[bufnr] ~= nil then
+            projection.on_layout_change(bufnr)
+          end
+          M._schedule_hidden_service_stop(bufnr)
+        end
+      end)
     end,
   })
 
@@ -571,14 +871,18 @@ local function setup_autocmds()
 end
 
 function M.setup(cfg)
+  require("math-conceal.image.capability").assert_supported()
   detach_all()
   M.config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), cfg or {})
   if not vim.list_contains({ "colorscheme", "simple", "none" }, M.config.styling_type) then
     error("math-conceal image styling_type must be one of colorscheme, simple, none")
   end
+  close_all_hidden_service_timers()
   M._buffers = {}
   cursor_sync_pending = {}
   cursor_sync_generation = {}
+  resume_on_read = {}
+  hidden_service_timers = {}
   setup_prelude()
   state.refresh_cell_px_size(M.config)
   build_filetype_index()

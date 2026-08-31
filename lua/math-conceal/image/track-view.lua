@@ -19,155 +19,140 @@ local function line_count(bufnr)
   return vim.api.nvim_buf_line_count(bufnr)
 end
 
-local function source_line(bufnr, row)
-  local ok, line = pcall(tracker.source_line, bufnr, row)
-  if ok and type(line) == "string" then
-    return line
-  end
-  return vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
-end
-
-local function window_text_width(winid)
-  local info = vim.fn.getwininfo(winid)[1] or {}
-  local textoff = tonumber(info.textoff) or 0
-  return math.max(1, vim.api.nvim_win_get_width(winid) - textoff)
-end
-
-local function source_row_display_width(bufnr, winid, row)
-  local line = source_line(bufnr, row)
-  local ok, width = pcall(vim.api.nvim_win_call, winid, function()
-    return vim.fn.strdisplaywidth(line)
-  end)
-  if not ok or type(width) ~= "number" then
-    return math.max(0, vim.fn.strdisplaywidth(line))
-  end
-  return math.max(0, width)
-end
-
 local function byte_col_for_vcol(winid, row, start_vcol)
   if start_vcol <= 0 then
     return 0
   end
-  local ok, col = pcall(vim.fn.virtcol2col, winid, row + 1, start_vcol + 1)
-  if not ok or type(col) ~= "number" or col < 1 then
-    return 0
+  local col = vim.fn.virtcol2col(winid, row + 1, start_vcol + 1)
+  if type(col) ~= "number" or col < 1 then
+    error("math-conceal could not map a measured virtual column to source", 3)
   end
-  return math.max(0, col - 1)
-end
-
-local function fallback_row_layout(bufnr, winid, row)
-  local text_width = window_text_width(winid)
-  local width = source_row_display_width(bufnr, winid, row)
-  local screen_height = 1
-  if vim.wo[winid].wrap and width > 0 then
-    screen_height = math.max(1, math.ceil(width / text_width))
-  end
-
-  local segments = {}
-  local start_vcol = 0
-  for _ = 1, screen_height do
-    local end_vcol = math.min(width, start_vcol + text_width)
-    if end_vcol <= start_vcol and width > start_vcol then
-      end_vcol = start_vcol + text_width
-    end
-    segments[#segments + 1] = {
-      start_vcol = start_vcol,
-      end_vcol = end_vcol,
-      byte_col = byte_col_for_vcol(winid, row, start_vcol),
-    }
-    start_vcol = end_vcol
-  end
-
-  return {
-    row = row,
-    screen_height = screen_height,
-    end_vcol = width,
-    fill = 0,
-    segments = segments,
-  }
+  return col - 1
 end
 
 local function text_height(winid, opts)
   if type(vim.api.nvim_win_text_height) ~= "function" then
-    return nil
+    error("math-conceal image placement requires nvim_win_text_height", 3)
   end
-  local ok, result = pcall(vim.api.nvim_win_text_height, winid, opts)
-  if not ok or type(result) ~= "table" then
-    return nil
+  local result = vim.api.nvim_win_text_height(winid, opts)
+  if type(result) ~= "table" then
+    error("nvim_win_text_height returned an invalid result", 3)
   end
   return result
 end
 
-local function next_wrap_boundary(winid, row, start_vcol, final_vcol, fallback_width)
+local function integer_field(result, field, minimum)
+  local value = result[field]
+  if type(value) ~= "number" or value ~= math.floor(value) or value < minimum then
+    error(string.format("nvim_win_text_height returned an invalid %s", field), 3)
+  end
+  return value
+end
+
+local function remaining_wrap_height(winid, row, start_vcol, cache)
+  local cached = cache[start_vcol]
+  if cached ~= nil then
+    return cached
+  end
   local result = text_height(winid, {
     start_row = row,
     end_row = row,
     start_vcol = start_vcol,
-    max_height = 1,
   })
-  local boundary = result and tonumber(result.end_vcol) or nil
-  if boundary == nil or boundary <= start_vcol then
-    boundary = math.min(final_vcol, start_vcol + fallback_width)
+  if integer_field(result, "end_row", 0) ~= row then
+    error("nvim_win_text_height measured outside the requested source row", 3)
   end
-  if boundary <= start_vcol and final_vcol > start_vcol then
-    boundary = start_vcol + fallback_width
+  if integer_field(result, "fill", 0) ~= 0 then
+    error("math-conceal image placement cannot map fill rows to source columns", 3)
   end
-  return math.max(start_vcol, boundary)
+  local height = integer_field(result, "all", 0)
+  cache[start_vcol] = height
+  return height
 end
 
-local function oracle_row_layout(bufnr, winid, row)
+local function next_wrap_boundary(winid, row, start_vcol, remaining_height, final_vcol, cache)
+  if remaining_height <= 1 or start_vcol >= final_vcol then
+    error("nvim_win_text_height returned a non-progressing wrap boundary", 3)
+  end
+
+  local low = start_vcol + 1
+  local high = final_vcol
+  -- start_vcol is rounded down to its native screen row, so the first
+  -- remaining-height decrease is the next wrapped screen-row start.
+  while low < high do
+    local middle = math.floor((low + high) / 2)
+    if remaining_wrap_height(winid, row, middle, cache) < remaining_height then
+      high = middle
+    else
+      low = middle + 1
+    end
+  end
+
+  local boundary = low
+  local before = remaining_wrap_height(winid, row, boundary - 1, cache)
+  local after = remaining_wrap_height(winid, row, boundary, cache)
+  if before ~= remaining_height or after ~= remaining_height - 1 then
+    error("nvim_win_text_height returned an inexact wrap boundary", 3)
+  end
+  return boundary
+end
+
+local function oracle_row_layout(winid, row)
   local result = text_height(winid, {
     start_row = row,
     end_row = row,
     start_vcol = 0,
   })
-  if result == nil then
-    return fallback_row_layout(bufnr, winid, row)
+  local screen_height = integer_field(result, "all", 1)
+  local fill = integer_field(result, "fill", 0)
+  local final_vcol = integer_field(result, "end_vcol", 0)
+  if integer_field(result, "end_row", 0) ~= row then
+    error("nvim_win_text_height measured outside the requested source row", 3)
+  end
+  if fill ~= 0 then
+    error("math-conceal image placement cannot map fill rows to source columns", 3)
   end
 
-  local screen_height = math.max(1, math.floor(tonumber(result.all) or 1))
-  local final_vcol = math.max(0, math.floor(tonumber(result.end_vcol) or 0))
-  local fallback_width = window_text_width(winid)
   local segments = {}
 
   if not vim.wo[winid].wrap then
+    if screen_height ~= 1 then
+      error("nvim_win_text_height returned multiple source rows with wrap disabled", 3)
+    end
     segments[#segments + 1] = {
       start_vcol = 0,
       end_vcol = final_vcol,
       byte_col = 0,
     }
   else
+    local starts = { 0 }
+    local cache = { [0] = screen_height }
     local start_vcol = 0
-    for _ = 1, screen_height do
-      local end_vcol = next_wrap_boundary(winid, row, start_vcol, final_vcol, fallback_width)
-      segments[#segments + 1] = {
-        start_vcol = start_vcol,
-        end_vcol = end_vcol,
-        byte_col = byte_col_for_vcol(winid, row, start_vcol),
-      }
-      if end_vcol <= start_vcol or end_vcol >= final_vcol then
-        break
-      end
-      start_vcol = end_vcol
+    local remaining_height = screen_height
+    while remaining_height > 1 do
+      start_vcol = next_wrap_boundary(winid, row, start_vcol, remaining_height, final_vcol, cache)
+      starts[#starts + 1] = start_vcol
+      remaining_height = remaining_height - 1
     end
-  end
 
-  while #segments < screen_height do
-    local previous = segments[#segments]
-    local start_vcol = previous and previous.end_vcol or 0
-    local end_vcol = math.max(start_vcol, final_vcol)
-    segments[#segments + 1] = {
-      start_vcol = start_vcol,
-      end_vcol = end_vcol,
-      byte_col = byte_col_for_vcol(winid, row, start_vcol),
-    }
+    for index, segment_start in ipairs(starts) do
+      local segment_end = starts[index + 1] or final_vcol
+      segments[#segments + 1] = {
+        start_vcol = segment_start,
+        end_vcol = segment_end,
+        byte_col = byte_col_for_vcol(winid, row, segment_start),
+      }
+    end
+    if #segments ~= screen_height or segments[#segments].end_vcol ~= final_vcol then
+      error("nvim_win_text_height wrap boundaries do not reach the measured line end", 3)
+    end
   end
 
   return {
     row = row,
     screen_height = screen_height,
     end_vcol = final_vcol,
-    fill = math.max(0, math.floor(tonumber(result.fill) or 0)),
+    fill = fill,
     segments = segments,
   }
 end
@@ -260,7 +245,7 @@ function M.measure_source_layout(view_or_ref, winid, opts)
   end
 
   for row = view.row, view.end_row do
-    local measured = oracle_row_layout(bufnr, winid, row)
+    local measured = oracle_row_layout(winid, row)
     rows[#rows + 1] = measured
     total_screen_height = total_screen_height + measured.screen_height
   end

@@ -9,6 +9,12 @@
 
 - Use Conventional Commits for project commits, for example `fix(tracker): separate repair facts from render triggers`.
 
+## Window Placement Ownership
+
+- Treat a Window Placement Surface as owned by `(winid, bufnr)`, not by `winid` alone.
+- Delayed or scheduled cleanup derived from a buffer lifecycle must pass the expected buffer owner and must not close a replacement surface installed by another buffer in the reused window. Only true window destruction may use an unqualified window close.
+- Preserve a focused regression where buffer B replaces buffer A in one window before A's delayed cleanup runs; B's surface and terminal placements must survive.
+
 ## Tracker Core Semantics
 
 - Use the term `tracker core` for the formula identity and geometry layer; do not call it renderer core.

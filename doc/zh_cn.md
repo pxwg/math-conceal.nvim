@@ -97,12 +97,103 @@ return {
       "phy",
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+    opt = {
+      conceallevel = 2,
+      concealcursor = "n",
+    },
     image = {
       enabled = true, -- 启用图形化公式 conceal
     },
   },
 }
 ```
+
+顶层 `opt` 表控制插件只注入到已 attach buffer 所在 window 的 Neovim
+window-local conceal 选项。默认 `concealcursor = "n"`，Normal 模式保持
+公式 conceal，Insert 模式光标行显示源码；如果想保留旧的光标行始终
+conceal 行为，可以设为 `"nci"`。当 window 不再显示已 attach buffer 时，
+插件会恢复原 window 选项，避免污染其他 window。
+
+## Buffer Attach API
+
+`attach()` 是 ASCII/Unicode 符号 conceal 与图形化 image conceal 的统一
+buffer 入口。普通 filetype buffer 会自动 attach；虚拟 buffer 或 preview
+buffer 的适配器可以显式传入逻辑 source，不需要修改 buffer 自身的
+`filetype` 或名字：
+
+```lua
+local conceal = require("math-conceal")
+local attachment = conceal.attach(bufnr, {
+  source = {
+    kind = "markdown", -- "latex"、"markdown" 或 "typst"
+    filetype = "markdown",
+    path = "/absolute/path/to/note.md",
+  },
+  surfaces = {
+    unicode = true,
+    image = true,
+  },
+  mode = "presentation",
+})
+
+attachment:detach()
+```
+
+匿名 preview buffer 应传入真实 `path`，以便 image renderer 正确解析
+project root、import、preamble 和 path filter。`image = true` 仍受顶层
+`image.enabled` 控制；Typst 与 Markdown 支持 image conceal，原生 LaTeX
+本次只支持 ASCII/Unicode conceal。
+
+每次 attach 都会返回带 owner 的 handle。同一个逻辑 source 可以有多个
+owner；释放一个 handle 不会移除其他 owner。使用相同显式 `owner` 再次
+attach 会替换该 owner 的请求，并使旧 handle 失效。自定义适配器还可以
+使用 `resolve_source()`、`get_attachment()`、`refresh()` 和 `detach()`。
+
+source descriptor 会显式选择 Tree-sitter root parser。math-conceal 获取并
+使用 parser，但不调用 `vim.treesitter.start()` 或
+`vim.treesitter.stop()`；Tree-sitter highlighting 生命周期仍由编辑器或
+preview host 管理。
+
+### Snacks picker preview
+
+当 Snacks 可用时，math-conceal 默认适配
+`Snacks.picker.preview.file`。Typst、Markdown 和 LaTeX 文件 preview
+都会启用 Unicode conceal；当全局 `image.enabled = true` 时，Typst 和
+Markdown 还会启用 image conceal。
+
+Snacks scratch preview 使用 `presentation` mode。若 Snacks 直接复用一个
+已经加载的真实 buffer，适配器会保留该 buffer 的 mode，并新增独立的
+attachment owner；关闭 picker 不会移除普通 filetype owner。
+
+```lua
+require("math-conceal").setup({
+  integrations = {
+    snacks = {
+      enabled = true, -- 默认值
+      unicode = true,
+      image = true,
+      mode = "presentation",
+    },
+  },
+})
+```
+
+使用 `integrations.snacks = false` 可以关闭默认适配。自定义同步
+previewer 可以复用公开的 wrapper：
+
+```lua
+local snacks_conceal = require("math-conceal.integrations.snacks")
+
+opts.preview = snacks_conceal.wrap(my_previewer, {
+  source = function(ctx, bufnr, detected)
+    return detected -- 可修改 kind、filetype 或 path
+  end,
+})
+```
+
+异步 previewer 应在内容写入完成后调用
+`snacks_conceal.sync(ctx, opts)`，并在自定义 cleanup 中调用
+`snacks_conceal.detach(ctx)`。
 
 ## 数学公式 Conceal
 
@@ -141,9 +232,37 @@ require("math-conceal").setup({
 cargo build --release --manifest-path service/Cargo.toml
 ```
 
-渲染器选项位于 `image.renderers.<name>`，包括 `filetypes`、`service_binary`、`live_debounce`、`root`、`inputs`、`preamble_file`、`header`、`render_paths`、Typst 的 `code_render.allow`，以及 Markdown 的 `mitex_package`。
+渲染器选项位于 `image.renderers.<name>`，包括 `filetypes`、`service_binary`、`live_debounce`、`root`、`inputs`、`preamble_file`、`header`、`render_paths`、Typst 的 `code_render.allow` 和 `code_render.exclude`，以及 Markdown 的 `mitex_package`、`mitex_preamble` 和 `mitex_preamble_file`。
 
-Typst code 渲染默认只允许一组内置的可预测 primitive；可以用 `code_render.allow` 增加项目级用户白名单：
+Markdown MiTeX 渲染可以在每个行内和块公式前载入可复用的 LaTeX 宏。文件中的定义先于内联定义载入：
+
+```lua
+require("math-conceal").setup({
+  image = {
+    enabled = true,
+    renderers = {
+      markdown = {
+        mitex_preamble = [[
+          \newcommand{\RR}{\mathbb{R}}
+        ]],
+        mitex_preamble_file = function(ctx)
+          return vim.fs.dirname(ctx.path) .. "/mitex-preamble.tex"
+        end,
+      },
+    },
+  },
+})
+```
+
+这两个选项是 MiTeX macro prelude，而不是完整的 LaTeX 文档 preamble：可以使用 MiTeX 支持的 `\newcommand`、`\newenvironment` 等定义，但不能通过 `\usepackage` 加载 LaTeX package。例如，可以这样近似实现 MiTeX 兼容的 `\slashed`：
+
+```tex
+\newcommand{\slashed}[1]{\not{#1}}
+```
+
+修改外部 preamble 文件后，可以调用 `require("math-conceal.image").rerender_buf()` 刷新当前 Markdown buffer。
+
+Typst code 渲染默认只允许一组内置的可预测 primitive。可以用 `code_render.allow` 增加项目级用户白名单，也可以用 `code_render.exclude` 从最终白名单中排除名称；`exclude` 优先于内置和显式允许的名称，并且只匹配被跟踪 code expression 的 head，不会递归检查嵌套调用：
 
 ```lua
 require("math-conceal").setup({
@@ -153,6 +272,7 @@ require("math-conceal").setup({
       typst = {
         code_render = {
           allow = { "theorem", "lemma", "remark" },
+          exclude = { "image" },
         },
       },
     },

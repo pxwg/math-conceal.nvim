@@ -71,7 +71,7 @@ function M.send_image(path, image_id)
     return false
   end
 
-  queue("q=2,f=100,t=t,i=" .. image_id .. ";" .. vim.base64.encode(path))
+  queue("q=2,f=100,t=f,i=" .. image_id .. ";" .. vim.base64.encode(path))
   flush_if_unbatched()
   return true
 end
@@ -109,6 +109,7 @@ function M.upload(path, image_id, cols, rows)
   return M.place_image(image_id, nil, cols, rows)
 end
 
+-- Delete one placement while retaining image data shared by other placements.
 function M.delete_placement(image_id, placement_id)
   if image_id == nil or placement_id == nil then
     return
@@ -118,11 +119,12 @@ function M.delete_placement(image_id, placement_id)
   flush_if_unbatched()
 end
 
+-- Retire the image globally and ask the terminal to free its backing data.
 function M.delete_image(image_id)
   if image_id == nil then
     return
   end
-  queue("q=2,a=d,d=i,i=" .. image_id)
+  queue("q=2,a=d,d=I,i=" .. image_id)
   state.release_image_id(image_id)
   flush_if_unbatched()
 end

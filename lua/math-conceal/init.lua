@@ -1,8 +1,4 @@
-local queries = require("math-conceal.query")
-local render = require("math-conceal.render")
 local M = {
-  files = {},
-  queries = {},
   -- Default options
   --- @type MathConcealOptions
   opts = {
@@ -15,15 +11,26 @@ local M = {
       "phy",
     },
     ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst" },
+    opt = {
+      conceallevel = 2,
+      concealcursor = "n",
+    },
     depth = 90,
     ns_id = 0,
     buffer = {
       mode = "edit",
     },
+    integrations = {
+      snacks = {
+        enabled = true,
+      },
+    },
     image = {
       enabled = false,
       enabled_by_default = true,
       live_preview_enabled = true,
+      preview_idle_timeout_ms = 1000,
+      hidden_service_idle_ms = 2000,
       tracker = {
         debug = false,
       },
@@ -33,6 +40,7 @@ local M = {
           live_debounce = 0,
           code_render = {
             allow = {},
+            exclude = {},
           },
         },
         markdown = {
@@ -113,12 +121,30 @@ local M = {
 --- @class MathConcealOptions
 --- @field conceal string[]?: Enable or disable math symbol concealment. You can add your own custom conceal types here. Default is {"greek", "script", "math", "font", "delim"}.
 --- @field ft string[]: A list of filetypes to enable conceal
+--- @field opt MathConcealWindowOptions?: Window-local Neovim conceal options applied to attached buffers.
 --- @field depth integer
 --- @field augroup_id integer?
 --- @field ns_id integer
 --- @field buffer MathConcealBufferOptions?
 --- @field highlights table<string, table<string, string>>
+--- @field integrations MathConcealIntegrationsOptions?
 --- @field image MathConcealImageOptions?
+
+--- @class MathConcealIntegrationsOptions
+--- @field snacks MathConcealSnacksIntegrationOptions|false?
+
+--- @class MathConcealSnacksIntegrationOptions
+--- @field enabled boolean?
+--- @field unicode boolean?
+--- @field image boolean?
+--- @field mode "edit"|"preview"|"presentation"|false?
+--- @field surfaces MathConcealAttachSurfaces?
+--- @field source string|table|fun(ctx: table, bufnr: integer, source: table): table?
+--- @field filetype string|fun(ctx: table, bufnr: integer, path: string): string?
+
+--- @class MathConcealWindowOptions
+--- @field conceallevel integer?: Window-local conceallevel for attached buffers. Default 2.
+--- @field concealcursor string?: Window-local concealcursor for attached buffers. Default "n".
 
 --- @class MathConcealBufferOptions
 --- @field mode "edit"|"preview"|"presentation"?: Conceal cursor behavior. `edit` expands the item under the cursor; `preview` keeps ASCII/Unicode items concealed; `presentation` keeps plugin-managed ASCII/Unicode conceal collapsed, except while Visual selection reveals source for precise selection.
@@ -127,6 +153,8 @@ local M = {
 --- @field enabled boolean?: Enable image renderer attachment. Default false.
 --- @field enabled_by_default boolean?: Attach matching buffers automatically. Default true.
 --- @field live_preview_enabled boolean?: Enable cursor-following live preview. Default true.
+--- @field preview_idle_timeout_ms integer?: Stop the idle live preview service after this many milliseconds. Default 1000.
+--- @field hidden_service_idle_ms integer?: Stop services for hidden buffers after this many idle milliseconds. Default 2000.
 --- @field tracker MathConcealImageTrackerOptions?: Tracker configuration for the image path.
 --- @field renderers table<string, MathConcealImageRendererOptions>?: Renderer-specific attachment configuration.
 --- Other fields are stored by `math-conceal.image` for the future renderer.
@@ -147,269 +175,37 @@ local M = {
 --- @field header string?: Renderer-scoped Typst header.
 --- @field preamble_file string|fun(ctx: table): string?: Renderer-scoped Typst preamble file.
 --- @field mitex_package string?: Typst package spec for Markdown MiTeX rendering.
---- @field code_render table?: Typst code rendering policy. `allow` adds global user names to the built-in safe allowlist.
+--- @field mitex_preamble string?: LaTeX macro prelude prepended to each Markdown MiTeX formula.
+--- @field mitex_preamble_file string|fun(ctx: table): string?: File containing a LaTeX macro prelude for Markdown MiTeX formulas.
+--- @field code_render table?: Typst code rendering policy. `allow` adds names; `exclude` removes names from the effective allowlist and takes precedence.
 --- @field render_paths table?: Path filters for renderer attachment.
 
-local function module_source_path()
-  local source = debug.getinfo(1, "S").source
-  if source:sub(1, 1) == "@" then
-    return source:sub(2)
-  end
-end
+--- @class MathConcealSource
+--- @field kind "latex"|"markdown"|"typst"
+--- @field filetype string
+--- @field path string
+--- @field cwd string
+--- @field root_lang "latex"|"markdown"|"typst"
+--- @field conceal_lang "latex"|"typst"
+--- @field renderer string?
 
-local function plugin_root()
-  local init_path = module_source_path()
-  if init_path then
-    return vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(init_path)))
-  end
-end
+--- @class MathConcealAttachSurfaces
+--- @field unicode boolean?
+--- @field image boolean?
 
-local function service_executable_name()
-  return vim.fn.has("win32") == 1 and "typst-concealer-service.exe" or "typst-concealer-service"
-end
+--- @class MathConcealAttachOptions
+--- @field source string|table?
+--- @field surfaces MathConcealAttachSurfaces?
+--- @field mode "edit"|"preview"|"presentation"?
+--- @field owner any?
 
-local function path_join(parts)
-  return table.concat(parts, "/")
-end
-
-local function path_exists(path)
-  return path ~= nil and path ~= "" and vim.uv.fs_stat(path) ~= nil
-end
-
-local function rocks_tree_root()
-  local init_path = module_source_path()
-  if not init_path then
-    return nil
-  end
-  init_path = init_path:gsub("\\", "/")
-  return init_path:match("^(.*)/share/lua/[^/]+/math%-conceal/init%.lua$")
-end
-
-local function configured_rocks_roots()
-  local roots = {}
-  local rocks_nvim = vim.g.rocks_nvim
-  if type(rocks_nvim) == "table" and type(rocks_nvim.rocks_path) == "string" then
-    table.insert(roots, rocks_nvim.rocks_path)
-  end
-  table.insert(roots, path_join({ vim.fn.stdpath("data"), "rocks" }))
-  return roots
-end
-
-local function bundled_service_binary()
-  local exe = service_executable_name()
-  local candidates = {}
-
-  local root = plugin_root()
-  if root then
-    table.insert(candidates, path_join({ root, "service", "target", "release", exe }))
-  end
-
-  local rocks_root = rocks_tree_root()
-  if rocks_root then
-    table.insert(candidates, path_join({ rocks_root, "bin", exe }))
-  end
-
-  for _, candidate_root in ipairs(configured_rocks_roots()) do
-    table.insert(candidates, path_join({ candidate_root, "bin", exe }))
-  end
-
-  local path_service = vim.fn.exepath(exe)
-  if path_service ~= "" then
-    table.insert(candidates, path_service)
-  end
-
-  for _, candidate in ipairs(candidates) do
-    if path_exists(candidate) then
-      return candidate
-    end
-  end
-end
-
-local function image_enabled()
-  return M.opts.image ~= nil and M.opts.image.enabled == true
-end
-
-local function image_filetype_enabled(filetype)
-  local image = M.opts.image or {}
-  for _, renderer in pairs(image.renderers or {}) do
-    for _, ft in ipairs(renderer.filetypes or {}) do
-      if ft == filetype then
-        return true
-      end
-    end
-  end
-  return false
-end
-
-local function setup_image()
-  if not image_enabled() or M._image_setup_ran then
-    return
-  end
-
-  local image_cfg = vim.deepcopy(M.opts.image or {})
-  image_cfg.enabled = nil
-
-  local service_binary = bundled_service_binary() or "typst-concealer-service"
-  for _, renderer in pairs(image_cfg.renderers or {}) do
-    if renderer.service_binary == nil then
-      renderer.service_binary = service_binary
-    end
-  end
-
-  require("math-conceal.image").setup(image_cfg)
-  M._image_setup_ran = true
-end
-
-local function set_image(filetype)
-  if not image_enabled() or not image_filetype_enabled(filetype) then
-    return
-  end
-
-  setup_image()
-  local image = require("math-conceal.image")
-  local bufnr = vim.api.nvim_get_current_buf()
-  if image.config.enabled_by_default and image.is_supported_bufnr(bufnr) and image.is_render_allowed(bufnr) then
-    image.enable_buf(bufnr)
-  end
-end
-
----set up
+---Configure the plugin. Merges user options into the plugin defaults. The runtime
+---logic lives in `math-conceal.nvim` and is loaded on demand from there; this
+---module only owns configuration, so a bare `require("math-conceal")` plus
+---`setup()` never loads the heavy `query`/`render`/`window-options` modules.
 ---@param opts MathConcealOptions?
 function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", M.opts, opts or {})
-  render.set_default_buffer_config(M.opts.buffer)
-  setup_image()
-end
-
----Configure ASCII/Unicode conceal behavior for one buffer.
----Examples:
----  require("math-conceal").setup_buffer({ mode = "preview" })
----  require("math-conceal").setup_buffer({ mode = "presentation" })
----  require("math-conceal").setup_buffer(bufnr, { mode = "edit" })
----@param bufnr integer|MathConcealBufferOptions?
----@param opts MathConcealBufferOptions?
----@return MathConcealBufferOptions
-function M.setup_buffer(bufnr, opts)
-  return render.setup_buffer(bufnr, opts)
-end
-
----Return the effective ASCII/Unicode conceal config for one buffer.
----@param bufnr integer?
----@return MathConcealBufferOptions
-function M.get_buffer_config(bufnr)
-  return render.get_buffer_config(bufnr)
-end
-
----Return true when one buffer is in presentation mode.
----@param bufnr integer?
----@return boolean
-function M.is_presentation_mode(bufnr)
-  return render.is_presentation_mode(bufnr)
-end
-
----check if `filetype` is in `M.opts.ft`.
----if true, call `set_hl`
----@param filetype string?
-function M.set(filetype)
-  filetype = filetype or vim.bo.filetype
-  for _, ft in ipairs(M.opts.ft) do
-    if ft == filetype then
-      M.set_hl(filetype)
-    end
-  end
-  set_image(filetype)
-end
-
-local function restart_treesitter(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
-  if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
-    return
-  end
-
-  pcall(vim.treesitter.stop, bufnr)
-  pcall(vim.treesitter.start, bufnr)
-end
-
----do some prepare work, then call `set_highlights`
----@param filetype string
-function M.set_hl(filetype)
-  vim.opt_local.conceallevel = 2
-  vim.opt_local.concealcursor = "nci"
-
-  -- set typst math conceal for typst
-  -- and set latex math conceal for all other filetypes.
-  ---@type "typst" | "latex"
-  local lang = filetype == "typst" and filetype or "latex"
-  --- first run
-  if #M.queries == 0 then
-    for name, val in pairs(M.opts.highlights) do
-      vim.api.nvim_set_hl(M.opts.ns_id, name, val)
-    end
-    queries.load_queries()
-    render.setup(M.opts, lang)
-  end
-
-  --- after editing preamble and save, reset highlights
-  if filetype == "tex" then
-    M.opts.augroup_id = M.opts.augroup_id or vim.api.nvim_create_augroup("math-conceal", {})
-    vim.api.nvim_create_autocmd("BufWritePost", {
-      group = M.opts.augroup_id,
-      buffer = 0,
-      callback = function(args)
-        M.set_highlights("latex", M.queries.latex, "tex")
-        restart_treesitter(args.buf)
-        render.attach(args.buf, "latex")
-      end,
-    })
-  end
-
-  ---always reset highlights for tex due to preamble
-  local should_set_hl = filetype == "tex"
-  -- if haven't set highlights, must set highlights
-  if M.queries[lang] == nil then
-    M.files[lang] = queries.get_conceal_queries(lang, M.opts.conceal)
-    M.queries[lang] = queries.read_query_files(M.files[lang])
-    should_set_hl = true
-  end
-  if should_set_hl then
-    M.set_highlights(lang, M.queries[lang], filetype)
-  end
-
-  if filetype == "markdown" then
-    for _, markdown_lang in ipairs({ "markdown", "markdown_inline" }) do
-      local key = "runtime:" .. markdown_lang
-      if M.queries[key] == nil then
-        M.files[key] = vim.treesitter.query.get_files(markdown_lang, "highlights")
-        M.queries[key] = queries.read_query_files(M.files[key])
-      end
-      M.set_highlights(markdown_lang, M.queries[key], filetype)
-    end
-  end
-
-  restart_treesitter(vim.api.nvim_get_current_buf())
-
-  -- Always try to attach render to current buffer
-  render.attach(vim.api.nvim_get_current_buf(), lang)
-end
-
----set highlights for lang.
----if filetype == 'tex', update queries for preamble
----@param lang string
----@param code string?
----@param filetype string?
-function M.set_highlights(lang, code, filetype)
-  filetype = filetype or vim.bo.filetype
-  code = code or ""
-  local extra_code = ""
-
-  if filetype == "tex" then
-    local conceal_map = queries.get_preamble_conceal_map()
-    extra_code = queries.update_latex_queries(conceal_map)
-    code = code .. "\n" .. extra_code
-    render.update_extra_query(lang, extra_code)
-  end
-
-  vim.treesitter.query.set(lang, "highlights", queries.strip_conceal_directives(code))
 end
 
 return M

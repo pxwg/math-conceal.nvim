@@ -4,7 +4,7 @@ mod protocol;
 mod world;
 
 use std::collections::{HashMap, VecDeque};
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, BufWriter, Stdout, Write};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 
@@ -37,14 +37,28 @@ struct FormulaTask {
     cache_key: String,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let stdin = io::stdin();
-    let mut stdout = io::BufWriter::new(io::stdout());
-    let mut compilers: HashMap<String, CachedCompiler> = HashMap::new();
-    let mut latex_renderer = LatexRenderer::new();
-    let mut use_clock: u64 = 0;
+type SharedStdout = Arc<Mutex<BufWriter<Stdout>>>;
 
-    for line in stdin.lock().lines() {
+// Full renders and live previews remain independently backpressured while
+// sharing one process and its immutable Typst world resources.
+enum LaneMessage {
+    Compile(protocol::CompileRequest),
+    RenderFormulas(RenderFormulasRequest),
+    RenderCodeFlow(RenderCodeFlowRequest),
+    Reset,
+    Shutdown,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let stdout = Arc::new(Mutex::new(BufWriter::new(io::stdout())));
+    let (full_tx, full_rx) = mpsc::channel();
+    let (preview_tx, preview_rx) = mpsc::channel();
+
+    let full_stdout = Arc::clone(&stdout);
+    let full_worker = thread::spawn(move || run_lane(full_rx, full_stdout));
+    let preview_worker = thread::spawn(move || run_lane(preview_rx, stdout));
+
+    for line in io::stdin().lock().lines() {
         let line = line?;
         if line.trim().is_empty() {
             continue;
@@ -58,8 +72,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
 
-        match msg {
-            IncomingMessage::Compile(req) => {
+        let sent = match msg {
+            IncomingMessage::Compile(req) => full_tx.send(LaneMessage::Compile(req)),
+            IncomingMessage::RenderFormulas(req) if req.lane.as_deref() == Some("preview") => {
+                preview_tx.send(LaneMessage::RenderFormulas(req))
+            }
+            IncomingMessage::RenderFormulas(req) => full_tx.send(LaneMessage::RenderFormulas(req)),
+            IncomingMessage::RenderCodeFlow(req) => full_tx.send(LaneMessage::RenderCodeFlow(req)),
+            IncomingMessage::ResetLane(req) if req.lane == "preview" => {
+                preview_tx.send(LaneMessage::Reset)
+            }
+            IncomingMessage::ResetLane(_) => full_tx.send(LaneMessage::Reset),
+            IncomingMessage::Shutdown => {
+                let _ = full_tx.send(LaneMessage::Shutdown);
+                let _ = preview_tx.send(LaneMessage::Shutdown);
+                break;
+            }
+        };
+        if sent.is_err() {
+            break;
+        }
+    }
+
+    drop(full_tx);
+    drop(preview_tx);
+    let _ = full_worker.join();
+    let _ = preview_worker.join();
+    Ok(())
+}
+
+fn run_lane(rx: mpsc::Receiver<LaneMessage>, stdout: SharedStdout) {
+    let mut compilers: HashMap<String, CachedCompiler> = HashMap::new();
+    let mut latex_renderer = LatexRenderer::new();
+    let mut use_clock: u64 = 0;
+
+    for msg in rx {
+        let result = match msg {
+            LaneMessage::Compile(req) => {
                 let cache_key = req
                     .cache_key
                     .clone()
@@ -75,35 +124,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 compiler.last_used = use_clock;
                 let resp = compiler.compiler.compile(req);
                 evict_stale_compilers(&mut compilers, &cache_key);
-                serde_json::to_writer(&mut stdout, &OutgoingMessage::CompileResult(resp))?;
-                stdout.write_all(b"\n")?;
-                stdout.flush()?;
+                write_message(&stdout, &OutgoingMessage::CompileResult(resp))
             }
-            IncomingMessage::RenderFormulas(req) => {
-                if req.backend.as_deref() == Some("latex") {
-                    render_latex_formulas(&mut stdout, req, &mut latex_renderer)?;
-                } else if formula_worker_count(&req) <= 1 {
-                    render_formulas_sequential(&mut stdout, req, &mut compilers, &mut use_clock)?;
-                } else {
-                    render_formulas_parallel(&mut stdout, req, &mut compilers, &mut use_clock)?;
-                }
+            LaneMessage::RenderFormulas(req) if req.backend.as_deref() == Some("latex") => {
+                render_latex_formulas(&stdout, req, &mut latex_renderer)
             }
-            IncomingMessage::RenderCodeFlow(req) => {
-                if code_flow_worker_count(&req) <= 1 {
-                    render_code_flow_sequential(&mut stdout, req, &mut compilers, &mut use_clock)?;
-                } else {
-                    render_code_flow_parallel(&mut stdout, req, &mut compilers, &mut use_clock)?;
-                }
+            LaneMessage::RenderFormulas(req) if formula_worker_count(&req) <= 1 => {
+                render_formulas_sequential(&stdout, req, &mut compilers, &mut use_clock)
             }
-            IncomingMessage::Shutdown => break,
+            LaneMessage::RenderFormulas(req) => {
+                render_formulas_parallel(&stdout, req, &mut compilers, &mut use_clock)
+            }
+            LaneMessage::RenderCodeFlow(req) if code_flow_worker_count(&req) <= 1 => {
+                render_code_flow_sequential(&stdout, req, &mut compilers, &mut use_clock)
+            }
+            LaneMessage::RenderCodeFlow(req) => {
+                render_code_flow_parallel(&stdout, req, &mut compilers, &mut use_clock)
+            }
+            LaneMessage::Reset => {
+                compilers.clear();
+                latex_renderer = LatexRenderer::new();
+                use_clock = 0;
+                Ok(())
+            }
+            LaneMessage::Shutdown => break,
+        };
+
+        if let Err(err) = result {
+            eprintln!("failed to process render request: {err}");
         }
     }
+}
 
+fn write_message(
+    stdout: &SharedStdout,
+    message: &OutgoingMessage,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut stdout = stdout.lock().map_err(|_| "stdout lock poisoned")?;
+    serde_json::to_writer(&mut *stdout, message)?;
+    stdout.write_all(b"\n")?;
+    stdout.flush()?;
     Ok(())
 }
 
 fn render_code_flow_sequential(
-    stdout: &mut impl Write,
+    stdout: &SharedStdout,
     req: RenderCodeFlowRequest,
     compilers: &mut HashMap<String, CachedCompiler>,
     use_clock: &mut u64,
@@ -131,7 +196,7 @@ fn render_code_flow_sequential(
 }
 
 fn render_code_flow_parallel(
-    stdout: &mut impl Write,
+    stdout: &SharedStdout,
     req: RenderCodeFlowRequest,
     compilers: &mut HashMap<String, CachedCompiler>,
     use_clock: &mut u64,
@@ -196,7 +261,7 @@ fn render_code_flow_parallel(
 }
 
 fn render_latex_formulas(
-    stdout: &mut impl Write,
+    stdout: &SharedStdout,
     req: RenderFormulasRequest,
     renderer: &mut LatexRenderer,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -208,7 +273,7 @@ fn render_latex_formulas(
 }
 
 fn render_formulas_sequential(
-    stdout: &mut impl Write,
+    stdout: &SharedStdout,
     req: RenderFormulasRequest,
     compilers: &mut HashMap<String, CachedCompiler>,
     use_clock: &mut u64,
@@ -238,7 +303,7 @@ fn render_formulas_sequential(
 }
 
 fn render_formulas_parallel(
-    stdout: &mut impl Write,
+    stdout: &SharedStdout,
     req: RenderFormulasRequest,
     compilers: &mut HashMap<String, CachedCompiler>,
     _use_clock: &mut u64,
@@ -389,23 +454,17 @@ fn code_flow_worker_count(req: &RenderCodeFlowRequest) -> usize {
 }
 
 fn write_formula_response(
-    stdout: &mut impl Write,
+    stdout: &SharedStdout,
     resp: FormulaRenderResponse,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    serde_json::to_writer(stdout.by_ref(), &OutgoingMessage::FormulaRendered(resp))?;
-    stdout.write_all(b"\n")?;
-    stdout.flush()?;
-    Ok(())
+    write_message(stdout, &OutgoingMessage::FormulaRendered(resp))
 }
 
 fn write_code_flow_response(
-    stdout: &mut impl Write,
+    stdout: &SharedStdout,
     resp: CodeFlowRenderResponse,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    serde_json::to_writer(stdout.by_ref(), &OutgoingMessage::CodeFlowRendered(resp))?;
-    stdout.write_all(b"\n")?;
-    stdout.flush()?;
-    Ok(())
+    write_message(stdout, &OutgoingMessage::CodeFlowRendered(resp))
 }
 
 fn evict_stale_compilers(compilers: &mut HashMap<String, CachedCompiler>, active_key: &str) {
@@ -439,6 +498,7 @@ mod tests {
     #[test]
     fn render_formulas_rejects_code_nodes() {
         let req = RenderFormulasRequest {
+            lane: None,
             backend: None,
             request_id: "formula:test".to_string(),
             cache_key: None,

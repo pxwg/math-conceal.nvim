@@ -12,6 +12,8 @@ pub enum IncomingMessage {
     RenderFormulas(RenderFormulasRequest),
     #[serde(rename = "render_code_flow")]
     RenderCodeFlow(RenderCodeFlowRequest),
+    #[serde(rename = "reset_lane")]
+    ResetLane(ResetLaneRequest),
     #[serde(rename = "shutdown")]
     Shutdown,
 }
@@ -29,8 +31,15 @@ pub struct CompileRequest {
     pub ppi: u32,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ResetLaneRequest {
+    pub lane: String,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct RenderFormulasRequest {
+    #[serde(default)]
+    pub lane: Option<String>,
     #[serde(default)]
     pub backend: Option<String>,
     pub request_id: String,
@@ -252,6 +261,41 @@ pub enum FlowRole {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decodes_preview_lane_reset() {
+        let req: IncomingMessage =
+            serde_json::from_str(r#"{"type":"reset_lane","lane":"preview"}"#).unwrap();
+        match req {
+            IncomingMessage::ResetLane(req) => assert_eq!(req.lane, "preview"),
+            _ => panic!("expected reset_lane request"),
+        }
+    }
+
+    #[test]
+    fn decodes_preview_formula_lane() {
+        let req: IncomingMessage = serde_json::from_str(
+            r##"{
+              "type":"render_formulas",
+              "lane":"preview",
+              "request_id":"preview:1",
+              "context_id":"ctx",
+              "context_rev":1,
+              "root":"/tmp",
+              "output_dir":"/tmp/out",
+              "ppi":144,
+              "nodes":[]
+            }"##,
+        )
+        .unwrap();
+
+        match req {
+            IncomingMessage::RenderFormulas(req) => {
+                assert_eq!(req.lane.as_deref(), Some("preview"));
+            }
+            _ => panic!("expected render_formulas request"),
+        }
+    }
 
     #[test]
     fn decodes_latex_formula_request() {

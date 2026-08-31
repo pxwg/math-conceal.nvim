@@ -2,6 +2,7 @@
 ---only expand conceal when the cursor is under the math node
 local M = {}
 local utils = require("math-conceal.utils")
+local window_options = require("math-conceal.window-options")
 
 local latex = utils.init_queries_table("latex")
 local typst = utils.init_queries_table("typst")
@@ -13,6 +14,7 @@ local queries = {
 
 local query_obj_cache = {}
 local buffer_cache = {}
+local parser_callbacks = setmetatable({}, { __mode = "k" })
 -- Viewport caching: store computed node lists per window
 local win_states = {}
 local range_cache_limit = 64
@@ -25,13 +27,8 @@ local active_configs = {}
 local default_buffer_config = {
   mode = "edit",
 }
-local plugin_window_options = {
-  conceallevel = 2,
-  concealcursor = "nci",
-}
 local buffer_configs = {}
-local buffer_window_option_autocmds = {}
-local buffer_window_options = {}
+local buffer_cleanup_autocmds = {}
 
 local markdown_expand_nodes = {
   code_span = true,
@@ -109,6 +106,27 @@ local function redraw_buf(buf, range)
   vim.api.nvim__redraw(redraw)
 end
 
+local function ensure_buffer_cleanup_autocmds(buf)
+  if buffer_cleanup_autocmds[buf] == true or not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+
+  buffer_cleanup_autocmds[buf] = true
+  vim.api.nvim_create_autocmd({ "BufUnload", "BufDelete", "BufWipeout" }, {
+    group = augroup,
+    buffer = buf,
+    callback = function()
+      window_options.detach(buf, "render")
+      buffer_cache[buf] = nil
+      buffer_configs[buf] = nil
+      buffer_cleanup_autocmds[buf] = nil
+      if vim.api.nvim_buf_is_valid(buf) then
+        vim.api.nvim_buf_clear_namespace(buf, line_ns_id, 0, -1)
+      end
+    end,
+  })
+end
+
 -- Clean up window cache on window close
 vim.api.nvim_create_autocmd("WinClosed", {
   group = augroup,
@@ -116,9 +134,6 @@ vim.api.nvim_create_autocmd("WinClosed", {
     local win_id = tonumber(args.match)
     if win_id then
       win_states[win_id] = nil
-      for _, by_win in pairs(buffer_window_options) do
-        by_win[win_id] = nil
-      end
     end
   end,
 })
@@ -237,16 +252,20 @@ local function get_query_trees(cache, spec)
   return trees
 end
 
-local function get_root_parser_lang(buf, parser_lang)
-  if parser_lang == "latex" and vim.bo[buf].filetype == "markdown" then
+local function get_root_parser_lang(buf, config)
+  if config.root_lang ~= nil then
+    return config.root_lang
+  end
+  if config.parser_lang == "latex" and vim.bo[buf].filetype == "markdown" then
     return "markdown"
   end
 
-  return parser_lang
+  return config.parser_lang
 end
 
 local function get_buffer_specs(buf, config)
-  if config.parser_lang == "latex" and vim.bo[buf].filetype == "markdown" then
+  local root_lang = get_root_parser_lang(buf, config)
+  if config.parser_lang == "latex" and root_lang == "markdown" then
     local specs = {}
 
     local markdown_query = get_runtime_highlights_query("markdown")
@@ -340,10 +359,6 @@ local function mode_changed_involves_visual(match)
   return is_visual_mode(old_mode) or is_visual_mode(new_mode)
 end
 
-local function should_apply_buffer_window_options(buf)
-  return buffer_configs[buf] ~= nil or buffer_cache[buf] ~= nil
-end
-
 local function keep_conceal_under_cursor(buf)
   local mode = get_buffer_config(buf).mode
   if mode == "presentation" and is_visual_mode() then
@@ -359,109 +374,6 @@ local function valid_buf_window(buf, win)
 
   local ok, win_buf = pcall(vim.api.nvim_win_get_buf, win)
   return ok and win_buf == buf
-end
-
-local function window_has_plugin_options(win)
-  return vim.wo[win].conceallevel == plugin_window_options.conceallevel
-    and vim.wo[win].concealcursor == plugin_window_options.concealcursor
-end
-
-local function remember_window_options(buf, win)
-  buffer_window_options[buf] = buffer_window_options[buf] or {}
-  if buffer_window_options[buf][win] ~= nil then
-    return
-  end
-
-  local inherited
-  if window_has_plugin_options(win) then
-    for _, saved in pairs(buffer_window_options[buf]) do
-      inherited = saved
-      break
-    end
-  end
-
-  buffer_window_options[buf][win] = {
-    conceallevel = inherited and inherited.conceallevel or vim.wo[win].conceallevel,
-    concealcursor = inherited and inherited.concealcursor or vim.wo[win].concealcursor,
-  }
-end
-
-local function apply_window_options(buf, win)
-  if not valid_buf_window(buf, win) then
-    return
-  end
-
-  remember_window_options(buf, win)
-  vim.wo[win].conceallevel = plugin_window_options.conceallevel
-  vim.wo[win].concealcursor = plugin_window_options.concealcursor
-end
-
-local function restore_window_options(buf, win)
-  local by_win = buffer_window_options[buf]
-  local saved = by_win and by_win[win] or nil
-  if saved == nil then
-    return
-  end
-
-  if vim.api.nvim_win_is_valid(win) and window_has_plugin_options(win) then
-    vim.wo[win].conceallevel = saved.conceallevel
-    vim.wo[win].concealcursor = saved.concealcursor
-  end
-
-  by_win[win] = nil
-  if next(by_win) == nil then
-    buffer_window_options[buf] = nil
-  end
-end
-
-local function clear_buffer_window_options(buf)
-  buffer_window_options[buf] = nil
-end
-
-local function ensure_buffer_window_option_autocmds(buf)
-  if buffer_window_option_autocmds[buf] == true or not vim.api.nvim_buf_is_valid(buf) then
-    return
-  end
-
-  buffer_window_option_autocmds[buf] = true
-  vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter", "WinEnter" }, {
-    group = augroup,
-    buffer = buf,
-    callback = function(args)
-      local win = vim.api.nvim_get_current_win()
-      apply_window_options(args.buf, win)
-    end,
-  })
-
-  vim.api.nvim_create_autocmd("BufWinLeave", {
-    group = augroup,
-    buffer = buf,
-    callback = function(args)
-      restore_window_options(args.buf, vim.api.nvim_get_current_win())
-    end,
-  })
-
-  vim.api.nvim_create_autocmd({ "BufUnload", "BufDelete" }, {
-    group = augroup,
-    buffer = buf,
-    callback = function(args)
-      clear_buffer_window_options(args.buf)
-      buffer_window_option_autocmds[args.buf] = nil
-      buffer_cache[args.buf] = nil
-      buffer_configs[args.buf] = nil
-    end,
-  })
-end
-
-local function apply_buffer_window_options(buf, config)
-  if not should_apply_buffer_window_options(buf) then
-    return
-  end
-
-  ensure_buffer_window_option_autocmds(buf)
-  for _, win in ipairs(buf_wins(buf)) do
-    apply_window_options(buf, win)
-  end
 end
 
 local function collect_marks(buf_id, cache, toprow, botrow)
@@ -761,15 +673,15 @@ end
 ---@param buf number
 ---@param config table
 local function attach_to_buffer(buf, config)
-  local root_lang = get_root_parser_lang(buf, config.parser_lang)
+  local root_lang = get_root_parser_lang(buf, config)
   local specs = get_buffer_specs(buf, config)
   if #specs == 0 then
-    return
+    return false
   end
 
   local parser = vim.treesitter.get_parser(buf, root_lang)
   if not parser then
-    return
+    return false
   end
 
   if buffer_cache[buf] then
@@ -779,7 +691,7 @@ local function attach_to_buffer(buf, config)
     buffer_cache[buf].version = buffer_cache[buf].version + 1
     buffer_cache[buf].range_cache = {}
     buffer_cache[buf].range_cache_order = {}
-    return
+    return true
   end
 
   buffer_cache[buf] = {
@@ -791,43 +703,36 @@ local function attach_to_buffer(buf, config)
     range_cache_order = {},
   }
 
-  parser:register_cbs({
-    on_changedtree = function(changes)
-      vim.schedule(function()
-        if not vim.api.nvim_buf_is_valid(buf) then
-          return
-        end
-
-        if not changes or vim.tbl_isempty(changes) then
-          redraw_buf(buf)
-          return
-        end
-
-        for _, change in ipairs(changes) do
-          local start_row = change[1]
-          local end_row = change[4]
-
-          if end_row == 2 ^ 32 - 1 then
-            redraw_buf(buf)
-          else
-            redraw_buf(buf, { start_row, end_row + 1 })
+  if parser_callbacks[parser] ~= true then
+    parser_callbacks[parser] = true
+    parser:register_cbs({
+      on_changedtree = function(changes)
+        vim.schedule(function()
+          if not vim.api.nvim_buf_is_valid(buf) or buffer_cache[buf] == nil then
+            return
           end
-        end
-      end)
-    end,
-  })
 
-  vim.api.nvim_create_autocmd("BufDelete", {
-    group = augroup,
-    buffer = buf,
-    callback = function()
-      buffer_cache[buf] = nil
-      buffer_configs[buf] = nil
-      if vim.api.nvim_buf_is_valid(buf) then
-        vim.api.nvim_buf_clear_namespace(buf, line_ns_id, 0, -1)
-      end
-    end,
-  })
+          if not changes or vim.tbl_isempty(changes) then
+            redraw_buf(buf)
+            return
+          end
+
+          for _, change in ipairs(changes) do
+            local start_row = change[1]
+            local end_row = change[4]
+
+            if end_row == 2 ^ 32 - 1 then
+              redraw_buf(buf)
+            else
+              redraw_buf(buf, { start_row, end_row + 1 })
+            end
+          end
+        end)
+      end,
+    })
+  end
+
+  ensure_buffer_cleanup_autocmds(buf)
 
   vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     group = augroup,
@@ -846,6 +751,8 @@ local function attach_to_buffer(buf, config)
       end
     end,
   })
+
+  return true
 end
 
 ---Get conceal query string for a given language and list of names
@@ -882,24 +789,68 @@ local function get_conceal_query(language, names)
   return table.concat(output, "\n")
 end
 
----Attach to a specific buffer
+---Attach to a specific buffer.
 ---@param buf number
----@param lang string
+---@param lang string|{lang:string?, conceal_lang:string?, root_lang:string?, extra_query_string:string?}
+---@return boolean
 function M.attach(buf, lang)
   if buf == 0 then
     buf = vim.api.nvim_get_current_buf()
   end
-  local config = active_configs[lang]
-  if not config then
-    return
+
+  local attach_opts = type(lang) == "table" and lang or {}
+  local conceal_lang = type(lang) == "string" and lang or attach_opts.conceal_lang or attach_opts.lang
+  local active = active_configs[conceal_lang]
+  if not active then
+    return false
   end
 
-  attach_to_buffer(buf, config)
-  apply_buffer_window_options(buf, get_buffer_config(buf))
+  local config = vim.tbl_extend("force", {}, active, {
+    root_lang = attach_opts.root_lang,
+  })
+  if attach_opts.extra_query_string ~= nil and attach_opts.extra_query_string ~= "" then
+    config.query_string = config.query_string .. "\n" .. strip_extends(attach_opts.extra_query_string)
+  end
 
+  if not attach_to_buffer(buf, config) then
+    return false
+  end
+
+  window_options.attach(buf, "render")
   for _, win in ipairs(buf_wins(buf)) do
     redraw_win(win)
   end
+  return true
+end
+
+---Detach ASCII/Unicode conceal rendering from one buffer.
+---@param buf number?
+function M.detach(buf)
+  if buf == 0 or buf == nil then
+    buf = vim.api.nvim_get_current_buf()
+  end
+
+  buffer_cache[buf] = nil
+  window_options.detach(buf, "render")
+  buffer_cleanup_autocmds[buf] = nil
+  pcall(vim.api.nvim_clear_autocmds, { group = augroup, buffer = buf })
+  if vim.api.nvim_buf_is_valid(buf) then
+    pcall(vim.api.nvim_buf_clear_namespace, buf, line_ns_id, 0, -1)
+  end
+  for win_id, state in pairs(win_states) do
+    if state.buf == buf then
+      win_states[win_id] = nil
+    end
+  end
+end
+
+---@param buf number?
+---@return boolean
+function M.is_attached(buf)
+  if buf == 0 or buf == nil then
+    buf = vim.api.nvim_get_current_buf()
+  end
+  return buffer_cache[buf] ~= nil
 end
 
 ---Setup math conceal rendering for Typst/Latex files
@@ -907,15 +858,14 @@ end
 ---@param lang "latex" | "typst"
 function M.setup(opts, lang)
   opts = opts or {}
+  window_options.setup(opts.opt)
   M.set_default_buffer_config(opts.buffer)
   local conceal = opts.conceal or {}
-  local file_lang = utils.lang_to_ft(lang)
   local parser_lang = utils.lang_to_lt(lang)
 
   local query_string = get_conceal_query(parser_lang, conceal)
   query_string = strip_extends(query_string)
   active_configs[lang] = {
-    file_lang = file_lang,
     parser_lang = parser_lang,
     base_query_string = query_string,
     extra_query_string = "",
@@ -923,10 +873,6 @@ function M.setup(opts, lang)
   }
 
   setup_decoration_provider()
-
-  if vim.bo.filetype == file_lang then
-    M.attach(vim.api.nvim_get_current_buf(), lang)
-  end
 end
 
 ---Set the default ASCII/Unicode conceal config used by buffers without overrides.
@@ -958,12 +904,14 @@ function M.setup_buffer(buf, opts)
   local config = normalize_buffer_config(opts, get_buffer_config(buf))
   local previous = buffer_configs[buf]
   if previous ~= nil and vim.deep_equal(previous, config) then
-    apply_buffer_window_options(buf, config)
+    ensure_buffer_cleanup_autocmds(buf)
+    window_options.attach(buf, "render")
     return vim.deepcopy(config)
   end
 
   buffer_configs[buf] = config
-  apply_buffer_window_options(buf, config)
+  ensure_buffer_cleanup_autocmds(buf)
+  window_options.attach(buf, "render")
   for _, win in ipairs(buf_wins(buf)) do
     redraw_win(win)
   end

@@ -581,6 +581,7 @@ impl Compiler {
         };
 
         let render_req = RenderFormulasRequest {
+            lane: None,
             backend: None,
             request_id: req.request_id.clone(),
             cache_key: req.cache_key.clone(),
@@ -1426,6 +1427,7 @@ mod tests {
         .unwrap();
 
         let req = RenderFormulasRequest {
+            lane: None,
             backend: None,
             request_id: "formula:test".to_string(),
             cache_key: None,
@@ -1480,6 +1482,7 @@ mod tests {
         fs::create_dir_all(&output_dir).unwrap();
 
         let req = RenderFormulasRequest {
+            lane: None,
             backend: None,
             request_id: "formula:test".to_string(),
             cache_key: None,
@@ -1541,6 +1544,7 @@ mod tests {
         fs::create_dir_all(&output_dir).unwrap();
 
         let req = RenderFormulasRequest {
+            lane: None,
             backend: None,
             request_id: "formula:test".to_string(),
             cache_key: None,
