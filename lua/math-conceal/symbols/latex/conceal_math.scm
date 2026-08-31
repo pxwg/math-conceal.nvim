@@ -3,7 +3,7 @@
 (generic_command
   command: (command_name) @cmd_escape
   (#set-escape! @cmd_escape "latex")
-	(#set! priority 125))
+  (#set! priority 125))
 
 (generic_command
   command: (command_name) @tex_math_command
@@ -69,7 +69,7 @@
           word: [
             (superscript)
             (subscript)
-          ] .) .)
+          ] .))
       ((generic_command
         command: (command_name) .)
         .
@@ -77,7 +77,7 @@
           word: [
             (superscript)
             (subscript)
-          ] .) .)
+          ] .))
       (generic_command
         command: (command_name)
         .
@@ -90,7 +90,7 @@
           word: [
             (superscript)
             (subscript)
-          ] .) .)
+          ] .))
       (text
         .
         word: (word)
@@ -121,7 +121,7 @@
           word: [
             (superscript)
             (subscript)
-          ] .) .)
+          ] .))
       ((generic_command
         command: (command_name) .)
         .
@@ -129,7 +129,7 @@
           word: [
             (superscript)
             (subscript)
-          ] .) .)
+          ] .))
       (generic_command
         command: (command_name)
         .
@@ -142,7 +142,7 @@
           word: [
             (superscript)
             (subscript)
-          ] .) .)
+          ] .))
       (text
         .
         word: (word)
