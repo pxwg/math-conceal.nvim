@@ -17,31 +17,18 @@ permissions:
   contents: read
 
 jobs:
-  build-service-binary-rock:
-    name: Build service binary rock (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    env:
-      LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
+  prepare-service-rockspec:
+    name: Prepare service release rockspec
+    runs-on: ubuntu-latest
+    outputs:
+      git_ref: ${{ steps.rockspec.outputs.git_ref }}
+      path: ${{ steps.rockspec.outputs.path }}
+      version: ${{ steps.rockspec.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Lua 5.1
-        uses: leafo/gh-actions-lua@v11
         with:
-          luaVersion: "5.1"
-
-      - name: Install LuaRocks
-        uses: leafo/gh-actions-luarocks@v5
+          ref: ${{ github.event.inputs.git_ref || github.ref }}
 
       - name: Render release rockspec
         id: rockspec
@@ -85,26 +72,156 @@ jobs:
           text = text.replace("$repo_name", "math-conceal.nvim")
           Path(rockspec).write_text(text)
           PY
+          echo "git_ref=$git_ref" >> "$GITHUB_OUTPUT"
           echo "path=$rockspec" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release rockspec artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: math-conceal-service-${{ steps.rockspec.outputs.version }}-rockspec
+          path: ${{ steps.rockspec.outputs.path }}
+          if-no-files-found: error
+
+  build-service-binary-rock:
+    name: Build service binary rock (${{ matrix.os }})
+    needs: prepare-service-rockspec
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-service-rockspec.outputs.git_ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Lua 5.1
+        uses: leafo/gh-actions-lua@v11
+        with:
+          luaVersion: "5.1"
+
+      - name: Install LuaRocks
+        uses: leafo/gh-actions-luarocks@v5
+
+      - name: Download release rockspec
+        uses: actions/download-artifact@v4
+        with:
+          name: math-conceal-service-${{ needs.prepare-service-rockspec.outputs.version }}-rockspec
+          path: build/release-rockspec
 
       - name: Build binary rock
         shell: bash
         run: |
           set -euo pipefail
-          luarocks --lua-version 5.1 make --pack-binary-rock "${{ steps.rockspec.outputs.path }}"
-          ls -lh math-conceal-service-${{ steps.rockspec.outputs.version }}-1.*.rock
+          rockspec="build/release-rockspec/${{ needs.prepare-service-rockspec.outputs.path }}"
+          luarocks --lua-version 5.1 make --pack-binary-rock "$rockspec"
+          ls -lh math-conceal-service-${{ needs.prepare-service-rockspec.outputs.version }}-1.*.rock
 
       - name: Upload binary rock artifact
         uses: actions/upload-artifact@v4
         with:
-          name: math-conceal-service-${{ steps.rockspec.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
-          path: math-conceal-service-${{ steps.rockspec.outputs.version }}-1.*.rock
+          name: math-conceal-service-${{ needs.prepare-service-rockspec.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+          path: math-conceal-service-${{ needs.prepare-service-rockspec.outputs.version }}-1.*.rock
           if-no-files-found: error
 
-      - name: Publish binary rock to LuaRocks
+  publish-service-rocks:
+    name: Publish service source and binary rocks
+    needs:
+      - prepare-service-rockspec
+      - build-service-binary-rock
+    runs-on: ubuntu-latest
+    env:
+      LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
+
+    steps:
+      - name: Install Lua 5.1
+        if: env.LUAROCKS_API_KEY != ''
+        uses: leafo/gh-actions-lua@v11
+        with:
+          luaVersion: "5.1"
+
+      - name: Install LuaRocks
+        if: env.LUAROCKS_API_KEY != ''
+        uses: leafo/gh-actions-luarocks@v5
+
+      - name: Download release rocks
+        if: env.LUAROCKS_API_KEY != ''
+        uses: actions/download-artifact@v4
+        with:
+          pattern: math-conceal-service-${{ needs.prepare-service-rockspec.outputs.version }}-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish source and binary rocks to LuaRocks
         if: env.LUAROCKS_API_KEY != ''
         shell: bash
+        env:
+          SERVICE_ROCKSPEC: ${{ needs.prepare-service-rockspec.outputs.path }}
+          SERVICE_VERSION: ${{ needs.prepare-service-rockspec.outputs.version }}-1
         run: |
           set -euo pipefail
-          luarocks upload --force --api-key="$LUAROCKS_API_KEY" "${{ steps.rockspec.outputs.path }}" math-conceal-service-${{ steps.rockspec.outputs.version }}-1.*.rock
+
+          rockspec="dist/$SERVICE_ROCKSPEC"
+          test -f "$rockspec"
+
+          # `luarocks upload` accepts a rockspec and an optional source rock only.
+          # Publish those once here, after every platform binary has built.
+          luarocks upload --force --api-key="$LUAROCKS_API_KEY" "$rockspec"
+
+          version_response="$({
+            curl --fail-with-body --silent --show-error --get \
+              --header "Authorization: Bearer $LUAROCKS_API_KEY" \
+              --data-urlencode "package=math-conceal-service" \
+              --data-urlencode "version=$SERVICE_VERSION" \
+              "https://luarocks.org/api/1/bearer/check_rockspec"
+          })"
+          version_id="$(python3 -c '
+          import json
+          import sys
+
+          response = json.load(sys.stdin)
+          version = response.get("version")
+          if not version or not version.get("id"):
+              raise SystemExit(f"LuaRocks did not return a version id: {response}")
+          print(version["id"])
+          ' <<< "$version_response")"
+
+          mapfile -t binary_rocks < <(
+            find dist -maxdepth 1 -type f \
+              -name "math-conceal-service-${SERVICE_VERSION}.*.rock" \
+              ! -name '*.src.rock' \
+              -print | sort
+          )
+          if [ "${#binary_rocks[@]}" -eq 0 ]; then
+            echo "No binary rocks found in dist" >&2
+            exit 1
+          fi
+
+          for rock in "${binary_rocks[@]}"; do
+            upload_response="$({
+              curl --fail-with-body --silent --show-error \
+                --request POST \
+                --header "Authorization: Bearer $LUAROCKS_API_KEY" \
+                --form "rock_file=@$rock" \
+                "https://luarocks.org/api/1/bearer/upload_rock/$version_id"
+            })"
+            UPLOAD_RESPONSE="$upload_response" python3 - "$rock" <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          response = json.loads(os.environ["UPLOAD_RESPONSE"])
+          rock = response.get("rock")
+          if not rock or not rock.get("arch"):
+              raise SystemExit(f"LuaRocks did not confirm the binary upload: {response}")
+          print(f"Uploaded {Path(sys.argv[1]).name} as {rock['arch']} (revision {rock['revision']})")
+          PY
+          done
