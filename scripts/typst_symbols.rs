@@ -36,6 +36,7 @@ fn is_filterable_char(c: char) -> bool {
 }
 
 /// Returns true if the string consists ONLY of filterable characters
+/// Empty string is considered filterable for removal in main symbols
 fn is_only_filterable(s: &str) -> bool {
     if s.is_empty() {
         return true;
@@ -127,7 +128,8 @@ fn main() {
                 for (key, val) in map.iter_mut() {
                     if let Value::String(s) = val {
                         // If the string consists ONLY of filterable characters, remove the key
-                        if is_only_filterable(s) {
+                        // EXCEPT when it's an empty string - empty strings are valid values
+                        if !s.is_empty() && is_only_filterable(s) {
                             to_remove.push(key.clone());
                         }
                     } else {
@@ -186,10 +188,8 @@ fn main() {
                         for (k, v) in custom_map {
                             if let Some(s) = v.as_str() {
                                 // Custom symbols should be added as-is
-                                // But if they consist ONLY of filterable chars, skip them
-                                if !is_only_filterable(s) {
-                                    output_map.insert(k.clone(), json!(s));
-                                }
+                                // Including empty strings and filterable-only strings
+                                output_map.insert(k.clone(), json!(s));
                             } else {
                                 output_map.insert(k.clone(), v.clone());
                             }

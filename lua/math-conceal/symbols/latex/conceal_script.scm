@@ -94,7 +94,7 @@
     "}" @close_paren)
   (#has-ancestor? @sup_symbol displayed_equation inline_formula math_environment)
   (#not-has-ancestor? @sup_symbol text_mode)
-  (#not-match? @_frac_name "^\\\\[dtc]?frac$")
+  (#not-any-of? @_frac_name "\\frac" "\\tfrac" "\\dfrac" "\\cfrac")
   (#match? @sup_letter "^[a-z0-9]$")
   (#match? @sub_letter "^[aehijklmnoprstuvx1234567890]$")
   (#set! @open_paren conceal "")
@@ -124,7 +124,7 @@
               subscript: (letter) @sub_letter)
             (superscript
               superscript: (letter) @sup_letter)
-          ] .) .)
+          ] .))
       (text
         .
         word: (word) @first_letter .)
@@ -159,7 +159,7 @@
     "}" @close_paren)
   (#has-ancestor? @sub_symbol displayed_equation inline_formula math_environment)
   (#not-has-ancestor? @sub_symbol text_mode)
-  (#not-match? @_frac_name "^\\\\[dtc]?frac$")
+  (#not-any-of? @_frac_name "\\frac" "\\tfrac" "\\dfrac" "\\cfrac")
   (#match? @sup_letter "^[a-z0-9]$")
   (#match? @sub_letter "^[aehijklmnoprstuvx1234567890]$")
   (#set! @open_paren conceal "")
@@ -189,7 +189,7 @@
               subscript: (letter) @sub_letter)
             (superscript
               superscript: (letter) @sup_letter)
-          ] .) .)
+          ] .))
       (text
         .
         word: (word) @first_letter .)
