@@ -147,6 +147,10 @@ local function get_parsed_query(lang, query_string)
   if query_obj_cache[cache_key] then
     return query_obj_cache[cache_key]
   end
+  -- `query.parse` does not register the language on its own; without this a
+  -- markdown buffer attaching before its first latex injection parse would
+  -- fail to build the math conceal spec entirely.
+  pcall(vim.treesitter.language.add, lang)
   local success, query = pcall(vim.treesitter.query.parse, lang, query_string)
   if success and query then
     query_obj_cache[cache_key] = query
