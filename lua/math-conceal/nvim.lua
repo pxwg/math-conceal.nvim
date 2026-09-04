@@ -19,7 +19,6 @@ local attachments = {}
 local attachment_serial = 0
 local unicode_base_setup = false
 local render_languages_setup = {}
-local markdown_highlights_setup = false
 local image_setup_ran = false
 local attachment_augroup = vim.api.nvim_create_augroup("math-conceal.attachments", { clear = true })
 
@@ -288,16 +287,6 @@ local function ensure_unicode_language(source)
   if render_languages_setup[lang] ~= true then
     render.setup(root.opts, lang)
     render_languages_setup[lang] = true
-  end
-
-  if source.root_lang == "markdown" and not markdown_highlights_setup then
-    markdown_highlights_setup = true
-    for _, markdown_lang in ipairs({ "markdown", "markdown_inline" }) do
-      local key = "runtime:" .. markdown_lang
-      cache_files[key] = vim.treesitter.query.get_files(markdown_lang, "highlights")
-      cache_queries[key] = queries.read_query_files(cache_files[key])
-      M.set_highlights(markdown_lang, cache_queries[key], source.filetype)
-    end
   end
 end
 
