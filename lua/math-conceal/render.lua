@@ -165,34 +165,6 @@ local function strip_extends(query_string)
   return query_string:gsub("; extends [^\n]+", "")
 end
 
-local function read_query_files(filenames)
-  local output = {}
-
-  for _, file_path in ipairs(filenames) do
-    if not file_path:find("math%-conceal") then
-      local file = io.open(file_path, "r")
-      if file then
-        local content = file:read("*a")
-        file:close()
-        if content and content ~= "" then
-          table.insert(output, content)
-        end
-      end
-    end
-  end
-
-  return table.concat(output, "\n")
-end
-
-local function get_runtime_highlights_query(language)
-  local files = vim.treesitter.query.get_files(language, "highlights")
-  if not files or #files == 0 then
-    return ""
-  end
-
-  return read_query_files(files)
-end
-
 local function make_spec(target_lang, query_string)
   query_string = strip_extends(query_string or "")
   if query_string == "" then
@@ -267,31 +239,15 @@ local function get_root_parser_lang(buf, config)
   return config.parser_lang
 end
 
-local function get_buffer_specs(buf, config)
-  local root_lang = get_root_parser_lang(buf, config)
-  if config.parser_lang == "latex" and root_lang == "markdown" then
-    local specs = {}
-
-    local markdown_query = get_runtime_highlights_query("markdown")
-    local markdown_spec = make_spec("markdown", markdown_query)
-    if markdown_spec then
-      table.insert(specs, markdown_spec)
-    end
-
-    local markdown_inline_query = get_runtime_highlights_query("markdown_inline")
-    local markdown_inline_spec = make_spec("markdown_inline", markdown_inline_query)
-    if markdown_inline_spec then
-      table.insert(specs, markdown_inline_spec)
-    end
-
-    local latex_spec = make_spec("latex", config.query_string)
-    if latex_spec then
-      table.insert(specs, latex_spec)
-    end
-
-    return specs
-  end
-
+---Conceal specs for one buffer: only math-conceal-owned queries (latex/typst).
+---Native markdown highlights queries are deliberately not consumed here; the
+---Treesitter highlighter keeps owning native markdown concealment (links,
+---code spans, fences), while math-conceal owns math regions (latex
+---injections) via its own query files. This avoids double conceal ownership
+---and any global override of the runtime markdown queries.
+---@param config table
+---@return table[] specs
+local function get_buffer_specs(config)
   local spec = make_spec(config.parser_lang, config.query_string)
   if not spec then
     return {}
@@ -678,7 +634,7 @@ end
 ---@param config table
 local function attach_to_buffer(buf, config)
   local root_lang = get_root_parser_lang(buf, config)
-  local specs = get_buffer_specs(buf, config)
+  local specs = get_buffer_specs(config)
   if #specs == 0 then
     return false
   end
