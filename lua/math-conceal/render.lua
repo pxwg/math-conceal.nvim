@@ -17,7 +17,9 @@ local buffer_cache = {}
 local parser_callbacks = setmetatable({}, { __mode = "k" })
 -- Viewport caching: store computed node lists per window
 local win_states = {}
+local win_cursors = {}
 local range_cache_limit = 64
+local viewport_margin = 30
 
 local ns_id = vim.api.nvim_create_namespace("math-conceal-render")
 local line_ns_id = vim.api.nvim_create_namespace("math-conceal-render-lines")
@@ -134,6 +136,7 @@ vim.api.nvim_create_autocmd("WinClosed", {
     local win_id = tonumber(args.match)
     if win_id then
       win_states[win_id] = nil
+      win_cursors[win_id] = nil
     end
   end,
 })
@@ -378,15 +381,14 @@ end
 
 local function collect_marks(buf_id, cache, toprow, botrow)
   local marks = {}
+  local group = 0
   for _, spec in ipairs(cache.specs) do
     local trees = get_query_trees(cache, spec)
     for _, tree in ipairs(trees) do
+      group = group + 1
       local root = tree:root()
-      -- Query only visible range + small buffer (30 lines) for smooth scrolling
-      local query_top = math.max(0, toprow - 30)
-      local query_bot = botrow + 30
-
-      for id, node, metadata in spec.query:iter_captures(root, buf_id, query_top, query_bot) do
+      -- The default match limit can truncate dense queries differently across ranges.
+      for id, node, metadata in spec.query:iter_captures(root, buf_id, toprow, botrow + 1, { match_limit = 4096 }) do
         local capture_data = metadata[id]
         local conceal_char = capture_data and capture_data.conceal or metadata.conceal
         local conceal_lines = capture_data and capture_data.conceal_lines or metadata.conceal_lines
@@ -410,12 +412,13 @@ local function collect_marks(buf_id, cache, toprow, botrow)
               r1, -- [10]
               #line, -- [11]
               "line", -- [12]
+              group, -- [13] query/tree order
             })
           end
         elseif conceal_char then
           local r1, c1, r2, c2 = node:range()
           local er1, ec1, er2, ec2 = get_expand_range(spec, node)
-          -- Only cache marks within actual viewport
+          -- Keep complete marks, including nodes crossing the requested range.
           if r1 <= botrow and r2 >= toprow then
             local priority = (capture_data and capture_data.priority) or metadata.priority or 100
             local hl_group = (capture_data and capture_data.highlight)
@@ -436,6 +439,7 @@ local function collect_marks(buf_id, cache, toprow, botrow)
               ec1, -- [9]
               er2, -- [10]
               ec2, -- [11]
+              [13] = group, -- query/tree order
             })
           end
         end
@@ -454,6 +458,7 @@ local function marks_cover_range(state, buf_id, cache, tick, version, toprow, bo
     and state.top <= toprow
     and state.bot >= botrow
     and type(state.marks) == "table"
+    and cache.parser:is_valid()
 end
 
 local function range_cache_key(tick, version, toprow, botrow)
@@ -475,25 +480,75 @@ local function cache_range_marks(cache, key, marks)
   end
 end
 
+local function extend_cached_marks(buf_id, cache, state, top, bot)
+  local groups = {}
+  local group_count = 0
+  local function append(marks, first, last)
+    for _, mark in ipairs(marks) do
+      if mark[1] >= first and mark[1] <= last and mark[1] <= bot and mark[3] >= top then
+        local group = mark[13]
+        groups[group] = groups[group] or {}
+        table.insert(groups[group], mark)
+        group_count = math.max(group_count, group)
+      end
+    end
+  end
+
+  -- Assign captures by their start row, preserving order at refill boundaries.
+  if top < state.top then
+    append(collect_marks(buf_id, cache, top, state.top - 1), 0, state.top - 1)
+  end
+  append(state.marks, top < state.top and state.top or 0, state.bot)
+  if bot > state.bot then
+    append(collect_marks(buf_id, cache, state.bot + 1, bot), state.bot + 1, bot)
+  end
+
+  local marks = {}
+  for group = 1, group_count do
+    vim.list_extend(marks, groups[group] or {})
+  end
+  return marks
+end
+
 local function collect_cached_marks(buf_id, cache, toprow, botrow, opts)
   local tick = vim.b[buf_id].changedtick
   local version = cache.version
   local win_id = opts and opts.winid
 
   if type(win_id) == "number" and vim.api.nvim_win_is_valid(win_id) and vim.api.nvim_win_get_buf(win_id) == buf_id then
+    local last_row = vim.api.nvim_buf_line_count(buf_id) - 1
+    toprow = math.max(0, math.min(toprow, last_row))
+    botrow = math.min(botrow, last_row)
     local state = win_states[win_id]
-    if marks_cover_range(state, buf_id, cache, tick, version, toprow, botrow) then
-      return state.marks
+    if not marks_cover_range(state, buf_id, cache, tick, version, toprow, botrow) then
+      local top = math.max(0, toprow - viewport_margin)
+      local bot = math.min(last_row, botrow + viewport_margin)
+      local overlap_top = state and math.max(top, state.top) or top
+      local overlap_bot = state and math.min(bot, state.bot) or bot
+      local marks
+      if
+        overlap_top <= overlap_bot and marks_cover_range(state, buf_id, cache, tick, version, overlap_top, overlap_bot)
+      then
+        marks = extend_cached_marks(buf_id, cache, state, top, bot)
+      end
+      if not marks or cache.version ~= version then
+        marks = collect_marks(buf_id, cache, top, bot)
+      end
+      state = { buf = buf_id, cache = cache, tick = tick, version = cache.version, top = top, bot = bot, marks = marks }
+      win_states[win_id] = state
     end
+    return state.marks
   end
 
   local key = range_cache_key(tick, version, toprow, botrow)
   cache.range_cache = cache.range_cache or {}
-  if cache.range_cache[key] ~= nil then
+  if cache.range_cache[key] ~= nil and cache.parser:is_valid() then
     return cache.range_cache[key]
   end
 
   local marks = collect_marks(buf_id, cache, toprow, botrow)
+  -- Parsing may have advanced the query generation through on_changedtree.
+  key = range_cache_key(tick, cache.version, toprow, botrow)
   cache_range_marks(cache, key, marks)
   return marks
 end
@@ -551,7 +606,7 @@ local function marks_by_row(raw_marks, toprow, botrow)
   return by_row
 end
 
-local function sync_line_conceal_marks(buf_id, state, curr_row, curr_col)
+local function sync_line_conceal_marks(buf_id, state, curr_row, curr_col, toprow, botrow)
   vim.api.nvim_buf_clear_namespace(buf_id, line_ns_id, 0, -1)
 
   local seen = {}
@@ -560,7 +615,9 @@ local function sync_line_conceal_marks(buf_id, state, curr_row, curr_col)
 
   for _, m in ipairs(state.marks) do
     if
-      m[12] == "line" and (keep_conceal or not position_inside_range(curr_row, curr_col, m[8], m[9], m[10], m[11]))
+      m[12] == "line"
+      and mark_overlaps_range(m, toprow, botrow)
+      and (keep_conceal or not position_inside_range(curr_row, curr_col, m[8], m[9], m[10], m[11]))
     then
       local key = table.concat({ m[1], m[2], m[3], m[4] }, ":")
       if not seen[key] then
@@ -586,45 +643,23 @@ local function setup_decoration_provider()
         return false
       end
 
-      -- Get current buffer version (changedtick)
-      local buf_tick = vim.b[buf_id].changedtick
-
-      -- Get or initialize window state
+      collect_cached_marks(buf_id, cache, toprow, botrow, { winid = win_id })
       local state = win_states[win_id]
-      if not state then
-        state = { tick = -1, top = -1, bot = -1, marks = {} }
-        win_states[win_id] = state
-      end
-
-      -- Core optimization: cache hit check
-      -- Reuse marks if buffer unchanged AND viewport unchanged
-      local is_cache_valid = (state.buf == buf_id)
-        and (state.cache == cache)
-        and (state.tick == buf_tick)
-        and (state.top == toprow)
-        and (state.bot == botrow)
-        and (state.version == cache.version)
-
-      if not is_cache_valid then
-        state.buf = buf_id
-        state.cache = cache
-        state.tick = buf_tick
-        state.top = toprow
-        state.bot = botrow
-        state.version = cache.version
-        state.marks = collect_marks(buf_id, cache, toprow, botrow)
-      end
 
       -- Render phase: ultra-fast iteration over cached Lua table
       local cursor = vim.api.nvim_win_get_cursor(win_id)
       local curr_row = cursor[1] - 1
       local curr_col = cursor[2]
       local set_extmark = vim.api.nvim_buf_set_extmark
-      sync_line_conceal_marks(buf_id, state, curr_row, curr_col)
+      sync_line_conceal_marks(buf_id, state, curr_row, curr_col, toprow, botrow)
       local keep_conceal = keep_conceal_under_cursor(buf_id)
+      -- on_win can precede CursorMoved; leave the previous reveal ranges intact.
+      if not win_cursors[win_id] or win_cursors[win_id].buf ~= buf_id then
+        win_cursors[win_id] = { buf = buf_id, row = curr_row, col = curr_col, keep = keep_conceal }
+      end
 
       for _, m in ipairs(state.marks) do
-        if m[12] == "line" then
+        if m[12] == "line" or not mark_overlaps_range(m, toprow, botrow) then
           goto continue
         end
 
@@ -669,6 +704,65 @@ local function redraw_current_window_for_buf(buf)
   redraw_win(win, { top, bot })
 end
 
+local function redraw_cursor_changes(buf)
+  local win = vim.api.nvim_get_current_win()
+  if not valid_buf_window(buf, win) then
+    return
+  end
+
+  local cursor = vim.api.nvim_win_get_cursor(win)
+  local current = { buf = buf, row = cursor[1] - 1, col = cursor[2], keep = keep_conceal_under_cursor(buf) }
+  local previous = win_cursors[win]
+  win_cursors[win] = current
+  local state = win_states[win]
+  local cache = buffer_cache[buf]
+  if
+    not previous
+    or previous.buf ~= buf
+    or not state
+    or state.buf ~= buf
+    or state.cache ~= cache
+    or state.tick ~= vim.b[buf].changedtick
+    or state.version ~= cache.version
+    or not cache.parser:is_valid()
+  then
+    -- Edits or reattachment can invalidate the previous source positions.
+    redraw_current_window_for_buf(buf)
+    return
+  end
+
+  local ranges = {}
+  for _, mark in ipairs(state.marks) do
+    local before = not previous.keep
+      and position_inside_range(previous.row, previous.col, mark[8], mark[9], mark[10], mark[11])
+    local after = not current.keep
+      and position_inside_range(current.row, current.col, mark[8], mark[9], mark[10], mark[11])
+    if before ~= after then
+      -- Redraw whole source lines (end-exclusive), including wrapped portions.
+      local last = math.max(mark[1] + 1, mark[3] + (mark[4] > 0 and 1 or 0))
+      ranges[#ranges + 1] = { mark[1], last }
+    end
+  end
+
+  table.sort(ranges, function(a, b)
+    return a[1] < b[1]
+  end)
+  local pending
+  for _, range in ipairs(ranges) do
+    if pending and range[1] <= pending[2] then
+      pending[2] = math.max(pending[2], range[2])
+    else
+      if pending then
+        redraw_win(win, pending)
+      end
+      pending = range
+    end
+  end
+  if pending then
+    redraw_win(win, pending)
+  end
+end
+
 ---Attach conceal logic to buffer
 ---@param buf number
 ---@param config table
@@ -684,29 +778,17 @@ local function attach_to_buffer(buf, config)
     return false
   end
 
-  if buffer_cache[buf] then
-    buffer_cache[buf].parser = parser
-    buffer_cache[buf].root_lang = root_lang
-    buffer_cache[buf].specs = specs
-    buffer_cache[buf].version = buffer_cache[buf].version + 1
-    buffer_cache[buf].range_cache = {}
-    buffer_cache[buf].range_cache_order = {}
-    return true
-  end
-
-  buffer_cache[buf] = {
-    parser = parser,
-    root_lang = root_lang,
-    specs = specs,
-    version = 1,
-    range_cache = {},
-    range_cache_order = {},
-  }
-
   if parser_callbacks[parser] ~= true then
     parser_callbacks[parser] = true
     parser:register_cbs({
       on_changedtree = function(changes)
+        local cache = buffer_cache[buf]
+        if not cache or cache.parser ~= parser then
+          return
+        end
+        cache.version = cache.version + 1
+        cache.range_cache = {}
+        cache.range_cache_order = {}
         vim.schedule(function()
           if not vim.api.nvim_buf_is_valid(buf) or buffer_cache[buf] == nil then
             return
@@ -729,8 +811,27 @@ local function attach_to_buffer(buf, config)
           end
         end)
       end,
-    })
+    }, true)
   end
+
+  if buffer_cache[buf] then
+    buffer_cache[buf].parser = parser
+    buffer_cache[buf].root_lang = root_lang
+    buffer_cache[buf].specs = specs
+    buffer_cache[buf].version = buffer_cache[buf].version + 1
+    buffer_cache[buf].range_cache = {}
+    buffer_cache[buf].range_cache_order = {}
+    return true
+  end
+
+  buffer_cache[buf] = {
+    parser = parser,
+    root_lang = root_lang,
+    specs = specs,
+    version = 1,
+    range_cache = {},
+    range_cache_order = {},
+  }
 
   ensure_buffer_cleanup_autocmds(buf)
 
@@ -738,7 +839,7 @@ local function attach_to_buffer(buf, config)
     group = augroup,
     buffer = buf,
     callback = function()
-      redraw_current_window_for_buf(buf)
+      redraw_cursor_changes(buf)
     end,
   })
 
@@ -747,7 +848,7 @@ local function attach_to_buffer(buf, config)
     buffer = buf,
     callback = function(args)
       if mode_changed_involves_visual(args.match) then
-        redraw_current_window_for_buf(buf)
+        redraw_cursor_changes(buf)
       end
     end,
   })
@@ -842,6 +943,11 @@ function M.detach(buf)
       win_states[win_id] = nil
     end
   end
+  for win_id, cursor in pairs(win_cursors) do
+    if cursor.buf == buf then
+      win_cursors[win_id] = nil
+    end
+  end
 end
 
 ---@param buf number?
@@ -879,7 +985,16 @@ end
 ---@param opts table?
 ---@return table config
 function M.set_default_buffer_config(opts)
+  local previous = default_buffer_config
   default_buffer_config = normalize_buffer_config(opts, default_buffer_config)
+  if previous.mode ~= default_buffer_config.mode then
+    for win, cursor in pairs(win_cursors) do
+      if not buffer_configs[cursor.buf] and valid_buf_window(cursor.buf, win) then
+        win_cursors[win] = nil
+        redraw_win(win)
+      end
+    end
+  end
   return vim.deepcopy(default_buffer_config)
 end
 
@@ -913,6 +1028,7 @@ function M.setup_buffer(buf, opts)
   ensure_buffer_cleanup_autocmds(buf)
   window_options.attach(buf, "render")
   for _, win in ipairs(buf_wins(buf)) do
+    win_cursors[win] = nil
     redraw_win(win)
   end
 
