@@ -1,6 +1,7 @@
 local M = {}
 
 local session_base_dir = nil
+local owned_session_dirs = {}
 
 local function stable_hash(text)
   return vim.fn.sha256(text or ""):sub(1, 12)
@@ -62,10 +63,25 @@ end
 
 function M.cleanup_all()
   remove_tree(base_dir())
+  for dir in pairs(owned_session_dirs) do
+    remove_tree(dir)
+  end
+  owned_session_dirs = {}
 end
 
-function M.for_buffer(bufnr)
-  local root = base_dir() .. "/" .. buffer_slug(bufnr)
+-- Optional project-local workspace keeps Typst's root stable for /asset paths.
+-- Only the generated per-process child is owned/removed by this module.
+function M.for_buffer(bufnr, directory)
+  if type(directory) == "function" then
+    directory = directory(bufnr)
+  end
+  local base = base_dir()
+  if directory ~= nil then
+    assert(type(directory) == "string" and directory ~= "", "workspace_dir must be a directory")
+    base = vim.fs.normalize(vim.fn.fnamemodify(directory, ":p")) .. "/" .. tostring(vim.fn.getpid())
+    owned_session_dirs[base] = true
+  end
+  local root = base .. "/" .. buffer_slug(bufnr)
   local full = root .. "/full"
   local outputs = full .. "/outputs"
   vim.fn.mkdir(outputs, "p")
