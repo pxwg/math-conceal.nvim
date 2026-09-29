@@ -743,6 +743,7 @@ end
 function M.close_window(winid)
   placement.close_window(winid)
   for _, bs in pairs(state.buffers) do
+    local owned = bs.placement_windows ~= nil and bs.placement_windows[winid] ~= nil
     if bs.placement_windows ~= nil then
       bs.placement_windows[winid] = nil
     end
@@ -752,7 +753,9 @@ function M.close_window(winid)
     if bs.window_realization_keys ~= nil then
       bs.window_realization_keys[winid] = nil
     end
-    bs.placement_window_key = nil
+    if owned then
+      bs.placement_window_key = nil
+    end
   end
 end
 
