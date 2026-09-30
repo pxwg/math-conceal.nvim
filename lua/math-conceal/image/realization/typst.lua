@@ -30,7 +30,7 @@ local function math_style(display_kind, config)
   end
   local padding = math.max(0, tonumber(config.block_padding_cols) or 0)
   return {
-    horizontal_align = "center",
+    horizontal_align = config.block_align or "center",
     fit = { left_padding_cols = padding, right_padding_cols = padding },
   }
 end

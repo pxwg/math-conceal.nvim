@@ -24,7 +24,7 @@ function M.describe(track, ctx, layout, config, projection_key)
     source_rows = track.source_rows or math.max(1, track.end_row - track.row + 1),
     display_kind = display_kind,
     placement_style = display_kind == "block" and {
-      horizontal_align = "center",
+      horizontal_align = config.block_align or "center",
       fit = { left_padding_cols = block_padding, right_padding_cols = block_padding },
     } or {},
     node = {

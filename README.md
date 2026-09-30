@@ -224,6 +224,10 @@ require("math-conceal").setup({
 })
 ```
 
+Display math is centered by default. Set `image.block_align = "source"` to
+align Typst and Markdown display math with its source column instead.
+Inline math and Typst code placement are unchanged.
+
 For rocks.nvim installs, install the optional service rock:
 
 ```vim
