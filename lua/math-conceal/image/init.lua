@@ -62,6 +62,7 @@ local M = {}
 ---@field live_preview_enabled boolean
 ---@field preview_idle_timeout_ms integer
 ---@field hidden_service_idle_ms integer
+---@field block_align "center"|"source"
 ---@field block_padding_cols integer
 
 local defaults = {
@@ -79,6 +80,7 @@ local defaults = {
   live_preview_enabled = true,
   preview_idle_timeout_ms = 1000,
   hidden_service_idle_ms = 2000,
+  block_align = "center",
   block_padding_cols = 0,
   renderers = {
     typst = {

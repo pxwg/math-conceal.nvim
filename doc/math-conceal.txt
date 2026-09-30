@@ -417,6 +417,12 @@ Restrict rendering by path:
         Boolean. Enables graphical equation conceal automatically for supported
         buffers. Default: true inside the renderer.
 
+                                                   *math-conceal-image.block_align*
+`image.block_align`~
+        One of `center` (default) or `source`. Aligns Typst and Markdown display
+        math with the center of the text area or its source column.
+        Inline math and Typst code placement are unchanged.
+
                                                    *math-conceal-image.styling_type*
 `image.styling_type`~
         One of `colorscheme`, `simple`, or `none`.

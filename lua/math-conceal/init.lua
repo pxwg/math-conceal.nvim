@@ -28,6 +28,7 @@ local M = {
     image = {
       enabled = false,
       enabled_by_default = true,
+      block_align = "center",
       live_preview_enabled = true,
       preview_idle_timeout_ms = 1000,
       hidden_service_idle_ms = 2000,
@@ -152,6 +153,7 @@ local M = {
 --- @class MathConcealImageOptions
 --- @field enabled boolean?: Enable image renderer attachment. Default false.
 --- @field enabled_by_default boolean?: Attach matching buffers automatically. Default true.
+--- @field block_align "center"|"source"?: Horizontal alignment of display math. Default "center".
 --- @field live_preview_enabled boolean?: Enable cursor-following live preview. Default true.
 --- @field preview_idle_timeout_ms integer?: Stop the idle live preview service after this many milliseconds. Default 1000.
 --- @field hidden_service_idle_ms integer?: Stop services for hidden buffers after this many idle milliseconds. Default 2000.
