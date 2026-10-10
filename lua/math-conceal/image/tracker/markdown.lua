@@ -17,32 +17,9 @@ local delimiter_specs = {
     multiline = false,
     tree_sitter = true,
   },
-  {
-    id = "bracket_block",
-    open = "\\[",
-    close = "\\]",
-    display_kind = "block",
-    multiline = true,
-  },
-  {
-    id = "paren_inline",
-    open = "\\(",
-    close = "\\)",
-    display_kind = "inline",
-    multiline = false,
-  },
 }
 
-local scanner_delimiter_specs = {}
-for _, spec in ipairs(delimiter_specs) do
-  if spec.tree_sitter ~= true then
-    scanner_delimiter_specs[#scanner_delimiter_specs + 1] = spec
-  end
-end
-
 local markdown_inline_math_query = nil
-local markdown_shield_query = nil
-local markdown_inline_shield_query = nil
 
 local function lt(a_row, a_col, b_row, b_col)
   return a_row < b_row or (a_row == b_row and a_col < b_col)
@@ -63,55 +40,6 @@ end
 
 local function source_hash(source)
   return vim.fn.sha256(source or "")
-end
-
-local function is_escaped(line, idx)
-  local slash_count = 0
-  local pos = idx - 1
-  while pos >= 1 and line:sub(pos, pos) == "\\" do
-    slash_count = slash_count + 1
-    pos = pos - 1
-  end
-  return slash_count % 2 == 1
-end
-
-local function position_in_range(range, row, col)
-  if row < range[1] or row > range[3] then
-    return false
-  end
-  if row == range[1] and col < range[2] then
-    return false
-  end
-  if row == range[3] and col >= range[4] then
-    return false
-  end
-  return true
-end
-
-local function position_is_shielded(shields, row, col)
-  for _, range in ipairs(shields or {}) do
-    if row < range[1] then
-      return false
-    end
-    if position_in_range(range, row, col) then
-      return true
-    end
-  end
-  return false
-end
-
-local function find_unescaped(line, needle, init, row, shields)
-  local pos = init or 1
-  while true do
-    local found = line:find(needle, pos, true)
-    if found == nil then
-      return nil
-    end
-    if not is_escaped(line, found) and not position_is_shielded(shields, row, found - 1) then
-      return found
-    end
-    pos = found + #needle
-  end
 end
 
 local function original_text(lines, range)
@@ -271,33 +199,6 @@ local function get_markdown_inline_math_query()
   return markdown_inline_math_query
 end
 
-local function get_markdown_shield_query()
-  if markdown_shield_query == nil then
-    markdown_shield_query = parse_query(
-      "markdown",
-      [[
-[
-  (fenced_code_block)
-  (indented_code_block)
-] @shield
-]]
-    )
-  end
-  return markdown_shield_query
-end
-
-local function get_markdown_inline_shield_query()
-  if markdown_inline_shield_query == nil then
-    markdown_inline_shield_query = parse_query(
-      "markdown_inline",
-      [[
-(code_span) @shield
-]]
-    )
-  end
-  return markdown_inline_shield_query
-end
-
 local function iter_parser_trees(parser)
   local ok, trees = pcall(function()
     parser:parse(true)
@@ -307,39 +208,6 @@ local function iter_parser_trees(parser)
     return {}
   end
   return trees
-end
-
-local function collect_shield_ranges(bufnr, markdown_parser)
-  local shields = {}
-  local markdown_query = get_markdown_shield_query()
-  if markdown_query ~= nil then
-    for _, tree in ipairs(iter_parser_trees(markdown_parser)) do
-      for _, node in markdown_query:iter_captures(tree:root(), bufnr, 0, -1) do
-        shields[#shields + 1] = { node:range() }
-      end
-    end
-  end
-
-  local inline_query = get_markdown_inline_shield_query()
-  if inline_query ~= nil then
-    local inline_parsers = {}
-    collect_target_parsers(markdown_parser, "markdown", "markdown_inline", inline_parsers)
-    for _, parser in ipairs(inline_parsers) do
-      for _, tree in ipairs(iter_parser_trees(parser)) do
-        for _, node in inline_query:iter_captures(tree:root(), bufnr, 0, -1) do
-          shields[#shields + 1] = { node:range() }
-        end
-      end
-    end
-  end
-
-  table.sort(shields, function(a, b)
-    if a[1] ~= b[1] then
-      return a[1] < b[1]
-    end
-    return a[2] < b[2]
-  end)
-  return shields
 end
 
 local function collect_treesitter_math(bufnr, lines, markdown_parser)
@@ -377,87 +245,6 @@ local function collect_treesitter_math(bufnr, lines, markdown_parser)
   return entries
 end
 
-local function find_next_open(line, row, pos, specs, shields)
-  local best_pos = nil
-  local best_spec = nil
-
-  for _, spec in ipairs(specs) do
-    local found = find_unescaped(line, spec.open, pos, row, shields)
-    if
-      found ~= nil
-      and (
-        best_pos == nil
-        or found < best_pos
-        or (found == best_pos and best_spec ~= nil and #spec.open > #best_spec.open)
-      )
-    then
-      best_pos = found
-      best_spec = spec
-    end
-  end
-
-  return best_spec, best_pos
-end
-
-local function find_close(lines, start_row, start_pos, spec, shields)
-  local line = lines[start_row + 1] or ""
-  local search_pos = start_pos + #spec.open
-  local close_pos = find_unescaped(line, spec.close, search_pos, start_row, shields)
-  if close_pos ~= nil and (spec.display_kind == "block" or close_pos > search_pos) then
-    return start_row, close_pos + #spec.close - 1
-  end
-
-  if not spec.multiline then
-    return nil, nil
-  end
-
-  local scan = start_row + 1
-  while scan < #lines do
-    close_pos = find_unescaped(lines[scan + 1] or "", spec.close, 1, scan, shields)
-    if close_pos ~= nil then
-      return scan, close_pos + #spec.close - 1
-    end
-    scan = scan + 1
-  end
-
-  return nil, nil
-end
-
-local function collect_delimited_math(entries, lines, specs, shields)
-  local row = 0
-
-  while row < #lines do
-    local line = lines[row + 1] or ""
-    local pos = 1
-    local advanced_to_block_end = false
-
-    while pos <= #line do
-      local spec, start_pos = find_next_open(line, row, pos, specs, shields)
-      if spec == nil or start_pos == nil then
-        break
-      end
-
-      local end_row, end_col = find_close(lines, row, start_pos, spec, shields)
-      if end_row ~= nil and end_col ~= nil then
-        local range = { row, start_pos - 1, end_row, end_col }
-        push_entry(entries, lines, range, spec)
-        if end_row > row then
-          row = end_row + 1
-          advanced_to_block_end = true
-          break
-        end
-        pos = end_col + 1
-      else
-        pos = start_pos + #spec.open
-      end
-    end
-
-    if not advanced_to_block_end then
-      row = row + 1
-    end
-  end
-end
-
 local function node_from_entry(entry)
   local range = entry.range
   local spec = entry.spec
@@ -492,7 +279,7 @@ local function node_from_entry(entry)
   }
 end
 
-local function collect_entries(bufnr)
+local function collect_entries(bufnr, backslash_math)
   local markdown_parser = get_markdown_parser(bufnr)
   if markdown_parser == nil then
     return {}
@@ -500,14 +287,20 @@ local function collect_entries(bufnr)
 
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local entries = collect_treesitter_math(bufnr, lines, markdown_parser)
-  local shields = collect_shield_ranges(bufnr, markdown_parser)
-  collect_delimited_math(entries, lines, scanner_delimiter_specs, shields)
+  if backslash_math then
+    require("math-conceal.image.tracker.markdown_backslash").collect(bufnr, lines, markdown_parser, entries, {
+      parse_query = parse_query,
+      iter_parser_trees = iter_parser_trees,
+      collect_target_parsers = collect_target_parsers,
+      push_entry = push_entry,
+    })
+  end
   return top_level_entries(entries)
 end
 
-local function scan_entries(bufnr, window)
+local function scan_entries(bufnr, window, backslash_math)
   local nodes = {}
-  for _, entry in ipairs(collect_entries(bufnr)) do
+  for _, entry in ipairs(collect_entries(bufnr, backslash_math)) do
     if window == nil or range_table_intersects(entry.range, window) then
       nodes[#nodes + 1] = node_from_entry(entry)
     end
@@ -517,9 +310,9 @@ end
 
 ---@param bufnr integer
 ---@return table
-function M.scan_all(bufnr)
+function M.scan_all(bufnr, backslash_math)
   return {
-    nodes = scan_entries(bufnr),
+    nodes = scan_entries(bufnr, nil, backslash_math == true),
     context_units = {},
     context_signature = vim.fn.sha256(""),
   }
@@ -536,10 +329,24 @@ end
 ---@param bufnr integer
 ---@param window {row: integer, col: integer, end_row: integer, end_col: integer}
 ---@return table
-function M.scan(bufnr, window)
+function M.scan(bufnr, window, _, backslash_math)
   return {
-    nodes = scan_entries(bufnr, window),
+    nodes = scan_entries(bufnr, window, backslash_math == true),
     context_units = {},
+  }
+end
+
+-- Each renderer binding gets its own option; buffers cannot affect one another.
+function M.new(opts)
+  local enabled = opts ~= nil and opts.backslash_math == true
+  return {
+    scan_context = M.scan_context,
+    scan_all = function(bufnr)
+      return M.scan_all(bufnr, enabled)
+    end,
+    scan = function(bufnr, window, context)
+      return M.scan(bufnr, window, context, enabled)
+    end,
   }
 end
 

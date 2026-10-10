@@ -202,7 +202,10 @@ such as kitty and Ghostty.
 
 Graphical equation conceal supports Typst and Markdown math through
 [MiTeX](https://github.com/mitex-rs/mitex).
-Markdown math supports `$...$`, `$$...$$`, `\(...\)`, and `\[...\]` delimiters.
+Markdown math supports `$...$` and `$$...$$` through Tree-sitter by default.
+Set `image.renderers.markdown.backslash_math = true` to also recognize
+`\(...\)` and `\[...\]`. This optional handwritten scanner scans the full
+buffer and is disabled by default to avoid its additional scanning cost.
 The graphical path requires Neovim 0.11 or newer; ASCII/Unicode conceal does not.
 
 Enable it from the same setup table:

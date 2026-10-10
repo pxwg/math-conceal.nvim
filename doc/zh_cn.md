@@ -199,7 +199,9 @@ opts.preview = snacks_conceal.wrap(my_previewer, {
 
 本插件可以将数学公式渲染为终端图形。渲染器源自 [pxwg/typst-concealer](https://github.com/pxwg/typst-concealer)，该 fork 基于 [PartyWumpus/typst-concealer](https://github.com/PartyWumpus/typst-concealer)。该功能依赖 kitty graphics protocol，适用于 kitty、Ghostty 等兼容终端。
 
-图形化公式 conceal 支持 Typst，以及通过 [MiTeX](https://github.com/mitex-rs/mitex) 渲染数学公式的 Markdown。Markdown 数学公式支持 `$...$`、`$$...$$`、`\(...\)` 和 `\[...\]` 分隔符。
+图形化公式 conceal 支持 Typst，以及通过 [MiTeX](https://github.com/mitex-rs/mitex) 渲染数学公式的 Markdown。Markdown 数学公式默认通过 Tree-sitter 识别 `$...$` 和 `$$...$$`。
+设置 `image.renderers.markdown.backslash_math = true` 可额外启用 `\(...\)` 和 `\[...\]` 识别。
+该手写扫描器独立加载，会扫描整个缓冲区，默认关闭以避免额外扫描开销。
 
 统一配置入口如下：
 
