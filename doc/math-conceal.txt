@@ -287,7 +287,10 @@ conceal still uses `ft`; graphical equation rendering uses
 Default renderer bindings:
 
 - `typst`: Typst math and supported top-level Typst code blocks.
-- `markdown`: `$...$`, `$$...$$`, `\(...\)`, and `\[...\]`
+- `markdown`: `$...$` and `$$...$$` by default (Tree-sitter).
+  Set image.renderers.markdown.backslash_math = true to enable the optional
+  handwritten scanner for `\(...\)` and `\[...\]`. It scans the full buffer
+  and is disabled by default to avoid additional scanning cost.
   Markdown math rendered through MiTeX on the Typst service backend.
 
 ==============================================================================

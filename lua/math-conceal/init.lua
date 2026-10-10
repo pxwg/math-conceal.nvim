@@ -45,6 +45,7 @@ local M = {
           },
         },
         markdown = {
+          backslash_math = false,
           filetypes = { "markdown" },
           live_debounce = 0,
         },

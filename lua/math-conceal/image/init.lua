@@ -41,6 +41,7 @@ local M = {}
 ---@field inputs table<string, string>|string[]|MathConcealImageInputsResolver
 ---@field header string?
 ---@field preamble_file string|function?
+---@field backslash_math boolean? Enable the optional Markdown backslash delimiter scanner.
 ---@field mitex_package string?
 ---@field mitex_preamble string?
 ---@field mitex_preamble_file string|function?
@@ -110,6 +111,7 @@ local defaults = {
       },
     },
     markdown = {
+      backslash_math = false,
       filetypes = { "markdown" },
       service_binary = "typst-concealer-service",
       live_debounce = 0,
@@ -327,6 +329,7 @@ local function make_binding(kind, spec, ctx)
     inputs = resolve_inputs(spec, ctx),
     header = spec.header or "",
     preamble_file = spec.preamble_file,
+    backslash_math = spec.backslash_math == true,
     mitex_package = spec.mitex_package,
     mitex_preamble = spec.mitex_preamble,
     mitex_preamble_file = spec.mitex_preamble_file,
@@ -524,6 +527,7 @@ local function same_binding(a, b)
     "root",
     "header",
     "preamble_file",
+    "backslash_math",
     "mitex_package",
     "mitex_preamble",
     "mitex_preamble_file",
@@ -575,8 +579,13 @@ function M.attach_buf(bufnr, opts)
   M._buffers[bufnr] = binding
   resume_on_read[bufnr] = nil
   window_options.attach(bufnr, "image")
+  local scanner_kind = binding.scanner or binding.source_kind or kind
+  local scanner = scanner_kind == "markdown"
+      and require("math-conceal.image.tracker.markdown").new({ backslash_math = binding.backslash_math })
+    or nil
   local attached = tracker.attach(bufnr, {
-    kind = binding.scanner or binding.source_kind or kind,
+    kind = scanner_kind,
+    scanner = scanner,
     debug = tracker_debug_enabled(),
     on_repair = projection.on_tracker_repair,
   })
