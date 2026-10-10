@@ -4,8 +4,8 @@
 -- Regression coverage for the markdown query-override issue: attaching
 -- math-conceal to a markdown buffer must not globally replace the runtime
 -- `markdown`/`markdown_inline` highlights queries. Native markdown
--- concealment (inline links) belongs to the Treesitter highlighter;
--- math-conceal owns only the math regions (latex injections).
+-- conceal metadata remains intact in the original query; math-conceal
+-- consumes it while filtering conceal from highlighter execution.
 
 local function add_runtime_paths()
   local cwd = vim.fn.getcwd()
@@ -62,11 +62,13 @@ local function run()
   local attachment = conceal.attach(bufnr, { owner = "test" })
   assert_true("attachment is current", attachment:is_current())
   assert_true("unicode surface attached", attachment.unicode)
+  vim.treesitter.start(bufnr, "markdown")
 
   -- The effective markdown_inline query must still conceal inline-link
   -- punctuation and destination: native conceal is untouched.
-  local parser = vim.treesitter.get_parser(bufnr, "markdown_inline")
-  local tree = parser:parse()[1]
+  local parser = vim.treesitter.get_parser(bufnr, "markdown")
+  parser:parse(true)
+  local tree = parser:children().markdown_inline:trees()[1]
   local effective = vim.treesitter.query.get("markdown_inline", "highlights")
   local concealed = {}
   for id, node, metadata in effective:iter_captures(tree:root(), bufnr, 0, -1) do
@@ -87,10 +89,15 @@ local function run()
   assert_true("latex injection still concealed (\\alpha -> α)", (greek["α"] or 0) > 0)
   assert_true("latex injection still concealed (\\beta -> β)", (greek["β"] or 0) > 0)
 
-  -- No markdown capture may be concealed by math-conceal's render layer.
+  -- Native Markdown conceal must join the same fine-grained pipeline.
+  local link_marks = 0
   for _, mark in ipairs(marks) do
-    assert_true("no math-conceal mark on the link line (row 0)", mark.row ~= 0)
+    if mark.row == 0 then
+      link_marks = link_marks + 1
+    end
   end
+  assert_true("native link conceal is owned by math-conceal", link_marks > 0)
+  assert_true("global query object is unchanged", effective == native_query)
 
   attachment:detach()
   print("test-markdown-native-conceal: OK")

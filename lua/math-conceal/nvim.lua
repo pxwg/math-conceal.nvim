@@ -2,16 +2,14 @@
 -- `require("math-conceal").setup()` runs, so a bare `require("math-conceal")`
 -- (or loading this plugin without calling setup) never pays the cost of the
 -- heavy `query`/`render`/`window-options` modules.
-local root = require("math-conceal")
 local queries = require("math-conceal.query")
 local render = require("math-conceal.render")
+local root = require("math-conceal")
 local window_options = require("math-conceal.window-options")
 
 -- Runtime-only state, previously kept on the root `M` table. No external
 -- module reads these, so they are internalized here.
 local M = {}
-local cache_files = {}
-local cache_queries = {}
 local attachment_handle_mt = {}
 attachment_handle_mt.__index = attachment_handle_mt
 
@@ -279,11 +277,6 @@ end
 local function ensure_unicode_language(source)
   setup_unicode_base()
   local lang = source.conceal_lang
-  if cache_queries[lang] == nil then
-    cache_files[lang] = queries.get_conceal_queries(lang, root.opts.conceal)
-    cache_queries[lang] = queries.read_query_files(cache_files[lang])
-    M.set_highlights(lang, cache_queries[lang], "")
-  end
   if render_languages_setup[lang] ~= true then
     render.setup(root.opts, lang)
     render_languages_setup[lang] = true
@@ -669,7 +662,7 @@ function M.set_hl(filetype, bufnr)
   })
 end
 
----set highlights for lang.
+---Compatibility entry point: update plugin-owned queries, never global highlights.
 ---if filetype == 'tex', update queries for preamble
 ---@param lang string
 ---@param code string?
@@ -682,11 +675,11 @@ function M.set_highlights(lang, code, filetype)
   if filetype == "tex" then
     local conceal_map = queries.get_preamble_conceal_map()
     extra_code = queries.update_latex_queries(conceal_map)
-    code = code .. "\n" .. extra_code
     render.update_extra_query(lang, extra_code)
   end
 
-  vim.treesitter.query.set(lang, "highlights", queries.strip_conceal_directives(code))
+  -- Query ownership is buffer-scoped; never overwrite global highlights.
+  render.update_query(lang, code)
 end
 
 vim.api.nvim_create_autocmd({ "BufUnload", "BufDelete", "BufWipeout" }, {
