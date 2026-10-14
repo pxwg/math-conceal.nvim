@@ -6,14 +6,14 @@ use std::time::SystemTime;
 
 use time::OffsetDateTime;
 use typst::diag::{FileError, FileResult};
-use typst::foundations::{Bytes, Datetime, Dict, IntoValue, Str};
-use typst::syntax::{FileId, Source, Span, VirtualPath};
+use typst::foundations::{Bytes, Datetime, Dict, Duration, IntoValue, Str};
+use typst::syntax::{DiagSpan, FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
-use typst::{Library, LibraryExt, World};
-use typst_kit::download::{Downloader, ProgressSink};
-use typst_kit::fonts::{FontSlot, Fonts};
-use typst_kit::package::PackageStorage;
+use typst::{Library, LibraryExt, World, WorldExt};
+use typst_kit::downloader::SystemDownloader;
+use typst_kit::fonts::{self, FontStore};
+use typst_kit::packages::{FsPackages, SystemPackages, UniversePackages};
 
 type LibraryKey = Vec<(String, String)>;
 type SharedLibraries = Mutex<HashMap<LibraryKey, Arc<LazyHash<Library>>>>;
@@ -21,23 +21,29 @@ type SharedLibraries = Mutex<HashMap<LibraryKey, Arc<LazyHash<Library>>>>;
 // Expensive immutable Typst resources are process-wide so full and preview
 // lane compilers do not repeat font discovery or package/library state.
 struct SharedWorldResources {
-    book: LazyHash<FontBook>,
-    fonts: Vec<FontSlot>,
-    packages: PackageStorage,
+    fonts: FontStore,
+    packages: SystemPackages,
     libraries: SharedLibraries,
 }
 
 fn shared_world_resources() -> Arc<SharedWorldResources> {
     static SHARED: OnceLock<Arc<SharedWorldResources>> = OnceLock::new();
     Arc::clone(SHARED.get_or_init(|| {
-        let fonts = Fonts::searcher().search();
+        // Same discovery order as typst-kit 0.14's default searcher: system
+        // fonts first, then the embedded fallback fonts.
+        let mut fonts = FontStore::new();
+        fonts.extend(fonts::system());
+        fonts.extend(fonts::embedded());
         Arc::new(SharedWorldResources {
-            book: LazyHash::new(fonts.book),
-            fonts: fonts.fonts,
-            packages: PackageStorage::new(
-                std::env::var_os("TYPST_PACKAGE_CACHE_PATH").map(PathBuf::from),
-                std::env::var_os("TYPST_PACKAGE_PATH").map(PathBuf::from),
-                Downloader::new("typst-concealer-service"),
+            fonts,
+            packages: SystemPackages::from_parts(
+                std::env::var_os("TYPST_PACKAGE_PATH")
+                    .map(FsPackages::new)
+                    .or_else(FsPackages::system_data),
+                std::env::var_os("TYPST_PACKAGE_CACHE_PATH")
+                    .map(FsPackages::new)
+                    .or_else(FsPackages::system_cache),
+                UniversePackages::new(SystemDownloader::new("typst-concealer-service")),
             ),
             libraries: Mutex::new(HashMap::new()),
         })
@@ -78,7 +84,7 @@ pub struct ConcealerWorld {
 
 impl ConcealerWorld {
     pub fn new() -> Self {
-        let entry_id = FileId::new(None, VirtualPath::new("/main.typ"));
+        let entry_id = project_file_id("/main.typ");
         let shared = shared_world_resources();
         Self {
             entry_id,
@@ -106,12 +112,12 @@ impl ConcealerWorld {
         inputs: HashMap<String, String>,
         virtual_sources: Vec<(String, String)>,
     ) {
-        self.entry_id = FileId::new(None, VirtualPath::new(entry_path));
+        self.entry_id = project_file_id(entry_path);
         self.source = Source::new(self.entry_id, source_text);
 
         let mut next_virtuals = HashMap::new();
         for (path, text) in virtual_sources {
-            let id = FileId::new(None, VirtualPath::new(&path));
+            let id = project_file_id(&path);
             next_virtuals.insert(id, Source::new(id, text));
         }
         *self.virtual_sources.lock().unwrap() = next_virtuals;
@@ -135,7 +141,11 @@ impl ConcealerWorld {
         self.real_path(id).ok()
     }
 
-    pub fn position(&self, span: Span) -> (Option<PathBuf>, Option<usize>, Option<usize>) {
+    pub fn position(
+        &self,
+        span: impl Into<DiagSpan>,
+    ) -> (Option<PathBuf>, Option<usize>, Option<usize>) {
+        let span = span.into();
         let Some(id) = span.id() else {
             return (None, None, None);
         };
@@ -150,11 +160,7 @@ impl ConcealerWorld {
             return (file, None, None);
         };
 
-        let byte = source
-            .range(span)
-            .or_else(|| span.range())
-            .map(|range| range.start);
-        let Some(byte) = byte else {
+        let Some(byte) = self.range(span).map(|range| range.start) else {
             return (file, None, None);
         };
 
@@ -168,7 +174,7 @@ impl ConcealerWorld {
     pub fn cached_external_files_fresh(&self) -> bool {
         let ids: Vec<_> = self.file_mtimes.lock().unwrap().keys().cloned().collect();
         ids.into_iter()
-            .all(|id| id.package().is_some() || !self.is_stale(id))
+            .all(|id| is_package(id) || !self.is_stale(id))
     }
 
     /// Check if a cached file's mtime has changed since we last read it.
@@ -197,25 +203,22 @@ impl ConcealerWorld {
 
     fn real_path(&self, id: FileId) -> FileResult<PathBuf> {
         if id == self.entry_id {
-            return Err(FileError::NotFound(PathBuf::from("/main.typ")));
+            return Err(FileError::NotFound(PathBuf::from(
+                self.entry_id.vpath().get_with_slash(),
+            )));
         }
 
         if self.virtual_sources.lock().unwrap().contains_key(&id) {
-            return Ok(id.vpath().as_rooted_path().into());
+            return Ok(PathBuf::from(id.vpath().get_with_slash()));
         }
 
-        if let Some(spec) = id.package() {
-            let mut progress = ProgressSink;
-            let root = self.shared.packages.prepare_package(spec, &mut progress)?;
-            return id
-                .vpath()
-                .resolve(&root)
-                .ok_or_else(|| FileError::NotFound(id.vpath().as_rooted_path().into()));
+        match id.root() {
+            VirtualRoot::Project => Ok(id.vpath().realize(&self.root)?),
+            VirtualRoot::Package(spec) => {
+                let root = self.shared.packages.obtain(spec)?;
+                Ok(root.resolve(id.vpath())?)
+            }
         }
-
-        id.vpath()
-            .resolve(&self.root)
-            .ok_or_else(|| FileError::NotFound(id.vpath().as_rooted_path().into()))
     }
 }
 
@@ -225,7 +228,7 @@ impl World for ConcealerWorld {
     }
 
     fn book(&self) -> &LazyHash<FontBook> {
-        &self.shared.book
+        self.shared.fonts.book()
     }
 
     fn main(&self) -> FileId {
@@ -241,7 +244,7 @@ impl World for ConcealerWorld {
             return Ok(source);
         }
 
-        let is_package = id.package().is_some();
+        let is_package = is_package(id);
 
         if let Some(source) = self.sources.lock().unwrap().get(&id).cloned() {
             // Package files are immutable — skip mtime check
@@ -271,7 +274,7 @@ impl World for ConcealerWorld {
             return Ok(Bytes::new(source.text().as_bytes().to_vec()));
         }
 
-        let is_package = id.package().is_some();
+        let is_package = is_package(id);
 
         if let Some(bytes) = self.files.lock().unwrap().get(&id).cloned() {
             if is_package || !self.is_stale(id) {
@@ -288,13 +291,19 @@ impl World for ConcealerWorld {
     }
 
     fn font(&self, index: usize) -> Option<Font> {
-        self.shared.fonts.get(index)?.get()
+        self.shared.fonts.font(index)
     }
 
-    fn today(&self, offset: Option<i64>) -> Option<Datetime> {
-        let now = if let Some(hours) = offset {
-            let hours = i8::try_from(hours).ok()?;
-            let offset = time::UtcOffset::from_hms(hours, 0, 0).ok()?;
+    fn today(&self, offset: Option<Duration>) -> Option<Datetime> {
+        let now = if let Some(offset) = offset {
+            let seconds = offset.seconds().trunc();
+            if !seconds.is_finite()
+                || seconds < f64::from(i32::MIN)
+                || seconds > f64::from(i32::MAX)
+            {
+                return None;
+            }
+            let offset = time::UtcOffset::from_whole_seconds(seconds as i32).ok()?;
             OffsetDateTime::now_utc().to_offset(offset)
         } else {
             OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc())
@@ -302,6 +311,18 @@ impl World for ConcealerWorld {
 
         Datetime::from_ymd(now.year(), u8::from(now.month()), now.day())
     }
+}
+
+/// Service-generated project paths are absolute and sanitized, so they are
+/// always valid virtual paths.
+fn project_file_id(path: &str) -> FileId {
+    let vpath = VirtualPath::new(path)
+        .unwrap_or_else(|err| panic!("invalid service virtual path {path:?}: {err}"));
+    RootedPath::new(VirtualRoot::Project, vpath).intern()
+}
+
+fn is_package(id: FileId) -> bool {
+    matches!(id.root(), VirtualRoot::Package(_))
 }
 
 fn to_dict(inputs: HashMap<String, String>) -> Dict {

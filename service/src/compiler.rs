@@ -7,16 +7,18 @@ use std::time::Instant;
 use comemo::Track;
 use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::{ColorType, ImageEncoder};
+use typst::World;
 use typst::diag::{Severity, SourceDiagnostic};
 use typst::engine::{Engine, Route, Sink, Traced};
 use typst::foundations::{
     Content, Label, SequenceElem, Str, StyleChain, StyledElem, Styles, Target, TargetElem, Value,
 };
-use typst::introspection::{Introspector, Locator, MetadataElem};
-use typst::layout::PagedDocument;
+use typst::introspection::{EmptyIntrospector, Locator, MetadataElem, PagedPosition};
 use typst::routines::{Arenas, FragmentKind, RealizationKind};
 use typst::syntax::{LinkedNode, Side, Source, Span, ast};
-use typst::{Document, World};
+use typst::utils::{Protected, Scalar};
+use typst_layout::PagedDocument;
+use typst_render::RenderOptions;
 
 use crate::protocol::{
     CodeFlowNodeRequest, CodeFlowRenderResponse, CompileRequest, CompileResponse, CompileStatus,
@@ -129,14 +131,14 @@ impl Compiler {
         let ppi_changed = ppi != self.prev_ppi;
         let mut pages = Vec::new();
         let mut diagnostics = warnings;
-        let mut new_frame_hashes = Vec::with_capacity(document.pages.len());
-        let mut new_paths = Vec::with_capacity(document.pages.len());
-        let mut new_dims = Vec::with_capacity(document.pages.len());
+        let mut new_frame_hashes = Vec::with_capacity(document.pages().len());
+        let mut new_paths = Vec::with_capacity(document.pages().len());
+        let mut new_dims = Vec::with_capacity(document.pages().len());
 
         let t_render = Instant::now();
         let mut rendered_count = 0usize;
 
-        for (i, page) in document.pages.iter().enumerate() {
+        for (i, page) in document.pages().iter().enumerate() {
             // Hash the compiled page frame (cheap) to detect unchanged pages
             // before doing the expensive pixel rendering.
             let mut hasher = DefaultHasher::new();
@@ -167,7 +169,7 @@ impl Compiler {
 
             // Page changed — render to pixels and write PNG.
             rendered_count += 1;
-            let pixmap = typst_render::render(page, pixel_per_pt);
+            let pixmap = typst_render::render(page, &render_options(pixel_per_pt));
             let dims = (pixmap.width(), pixmap.height());
 
             // Use pixel hash for the filename so identical renders share a path.
@@ -325,8 +327,8 @@ impl Compiler {
 
         let traced = Traced::new(target_span);
         let module = typst_eval::eval(
-            &typst::ROUTINES,
             world,
+            self.world.library(),
             traced.track(),
             sink.track_mut(),
             Route::default().track(),
@@ -373,11 +375,10 @@ impl Compiler {
         let target = TargetElem::target.set(Target::Paged).wrap();
         let target_styles = base.chain(&target);
         let styles = target_styles.chain(active_styles);
-        let introspector = Introspector::default();
         let mut engine = Engine {
-            routines: &typst::ROUTINES,
+            library,
             world,
-            introspector: introspector.track(),
+            introspector: Protected::new(EmptyIntrospector.track()),
             traced: traced.track(),
             sink: sink.track_mut(),
             route: Route::default(),
@@ -386,8 +387,8 @@ impl Compiler {
         let mut locator = Locator::root().split();
         let mut kind = FragmentKind::Block;
 
-        (engine.routines.realize)(
-            RealizationKind::LayoutFragment { kind: &mut kind },
+        (library.routines.realize)(
+            RealizationKind::Fragment { kind: &mut kind },
             &mut engine,
             &mut locator,
             &arenas,
@@ -724,7 +725,7 @@ impl Compiler {
             }
         };
 
-        let Some(page) = document.pages.last() else {
+        let Some(page) = document.pages().last() else {
             return FormulaRenderResponse {
                 request_id: req.request_id.clone(),
                 context_id: req.context_id.clone(),
@@ -750,7 +751,7 @@ impl Compiler {
 
         let pixel_per_pt = ppi as f32 / 72.0;
         let t_render = Instant::now();
-        let pixmap = typst_render::render(page, pixel_per_pt);
+        let pixmap = typst_render::render(page, &render_options(pixel_per_pt));
         let render_us = t_render.elapsed().as_micros() as u64;
         let dims = (pixmap.width(), pixmap.height());
 
@@ -971,11 +972,20 @@ fn clamp_char_boundary(source: &str, offset: usize) -> usize {
     offset
 }
 
-fn labelled_position(document: &PagedDocument, label: &str) -> Option<typst::layout::Position> {
+fn labelled_position(document: &PagedDocument, label: &str) -> Option<PagedPosition> {
     let label = Label::construct(Str::from(label)).ok()?;
-    let content = document.introspector().query_label(label).ok()?;
-    let location = content.location()?;
-    Some(document.introspector().position(location))
+    let introspector = document.introspector();
+    let location = typst::introspection::Introspector::query_label(introspector.as_ref(), label)
+        .ok()?
+        .location()?;
+    introspector.position(location)
+}
+
+fn render_options(pixel_per_pt: f32) -> RenderOptions {
+    RenderOptions {
+        pixel_per_pt: Scalar::new(f64::from(pixel_per_pt)),
+        ..RenderOptions::default()
+    }
 }
 
 fn find_target_expr_span(source: &Source, node_start: usize, node_end: usize) -> Option<Span> {
