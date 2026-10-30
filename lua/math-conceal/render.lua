@@ -90,22 +90,32 @@ local function redraw_win(win_id, range)
   vim.api.nvim__redraw(redraw)
 end
 
-local function redraw_buf(buf, range)
-  if not vim.api.nvim_buf_is_valid(buf) then
+-- Keep access to Neovim's private highlighter registry at this boundary.
+local function source_highlighter(buf)
+  return vim.treesitter.highlighter.active[buf]
+end
+
+local function source_parser(buf, cache)
+  local highlighter = source_highlighter(buf)
+  if highlighter and highlighter.tree == cache.parser then
+    return highlighter.tree
+  end
+end
+
+local function source_is_valid(buf, cache, top, bot)
+  local parser = source_parser(buf, cache)
+  return parser ~= nil and parser:is_valid(false, { top, bot + 1 })
+end
+
+local function release_source(buf, cache)
+  if not cache then
     return
   end
-
-  local redraw = {
-    buf = buf,
-    valid = true,
-    flush = false,
-  }
-
-  if range then
-    redraw.range = range
+  local owned = cache.owned_highlighter
+  cache.owned_highlighter = nil
+  if owned and source_highlighter(buf) == owned then
+    vim.treesitter.stop(buf)
   end
-
-  vim.api.nvim__redraw(redraw)
 end
 
 local function ensure_buffer_cleanup_autocmds(buf)
@@ -118,6 +128,7 @@ local function ensure_buffer_cleanup_autocmds(buf)
     group = augroup,
     buffer = buf,
     callback = function()
+      release_source(buf, buffer_cache[buf])
       window_options.detach(buf, "render")
       buffer_cache[buf] = nil
       buffer_configs[buf] = nil
@@ -227,28 +238,22 @@ local function collect_target_parsers(parser, parser_lang, target_lang, parsers)
   end
 end
 
-local function get_query_trees(cache, spec)
-  local ok = pcall(function()
-    cache.parser:parse(true)
-  end)
-
-  if not ok then
+local function get_query_trees(buf, cache, spec)
+  local root_parser = source_parser(buf, cache)
+  if not root_parser then
     return {}
   end
-
   local parsers = {}
-  collect_target_parsers(cache.parser, cache.root_lang, spec.target_lang, parsers)
+  collect_target_parsers(root_parser, root_parser:lang(), spec.target_lang, parsers)
 
   local trees = {}
   for _, parser in ipairs(parsers) do
-    local parsed = pcall(function()
-      parser:parse(true)
-    end)
-
-    if parsed then
-      for _, tree in ipairs(parser:trees() or {}) do
-        table.insert(trees, tree)
-      end
+    -- Range-based parsing can leave holes in the tree indices.
+    local parsed = parser:trees() or {}
+    local indices = vim.tbl_keys(parsed)
+    table.sort(indices)
+    for _, index in ipairs(indices) do
+      table.insert(trees, parsed[index])
     end
   end
 
@@ -383,7 +388,7 @@ local function collect_marks(buf_id, cache, toprow, botrow)
   local marks = {}
   local group = 0
   for _, spec in ipairs(cache.specs) do
-    local trees = get_query_trees(cache, spec)
+    local trees = get_query_trees(buf_id, cache, spec)
     for _, tree in ipairs(trees) do
       group = group + 1
       local root = tree:root()
@@ -458,7 +463,7 @@ local function marks_cover_range(state, buf_id, cache, tick, version, toprow, bo
     and state.top <= toprow
     and state.bot >= botrow
     and type(state.marks) == "table"
-    and cache.parser:is_valid()
+    and source_is_valid(buf_id, cache, toprow, botrow)
 end
 
 local function range_cache_key(tick, version, toprow, botrow)
@@ -511,6 +516,9 @@ local function extend_cached_marks(buf_id, cache, state, top, bot)
 end
 
 local function collect_cached_marks(buf_id, cache, toprow, botrow, opts)
+  if not source_parser(buf_id, cache) then
+    return {}
+  end
   local tick = vim.b[buf_id].changedtick
   local version = cache.version
   local win_id = opts and opts.winid
@@ -523,6 +531,10 @@ local function collect_cached_marks(buf_id, cache, toprow, botrow, opts)
     if not marks_cover_range(state, buf_id, cache, tick, version, toprow, botrow) then
       local top = math.max(0, toprow - viewport_margin)
       local bot = math.min(last_row, botrow + viewport_margin)
+      -- Only prefetch padding already parsed by the native highlighter.
+      if not source_is_valid(buf_id, cache, top, bot) then
+        top, bot = toprow, botrow
+      end
       local overlap_top = state and math.max(top, state.top) or top
       local overlap_bot = state and math.min(bot, state.bot) or bot
       local marks
@@ -542,13 +554,11 @@ local function collect_cached_marks(buf_id, cache, toprow, botrow, opts)
 
   local key = range_cache_key(tick, version, toprow, botrow)
   cache.range_cache = cache.range_cache or {}
-  if cache.range_cache[key] ~= nil and cache.parser:is_valid() then
+  if cache.range_cache[key] ~= nil and source_is_valid(buf_id, cache, toprow, botrow) then
     return cache.range_cache[key]
   end
 
   local marks = collect_marks(buf_id, cache, toprow, botrow)
-  -- Parsing may have advanced the query generation through on_changedtree.
-  key = range_cache_key(tick, cache.version, toprow, botrow)
   cache_range_marks(cache, key, marks)
   return marks
 end
@@ -643,6 +653,10 @@ local function setup_decoration_provider()
         return false
       end
 
+      if not source_parser(buf_id, cache) then
+        vim.api.nvim_buf_clear_namespace(buf_id, line_ns_id, 0, -1)
+        return false
+      end
       collect_cached_marks(buf_id, cache, toprow, botrow, { winid = win_id })
       local state = win_states[win_id]
 
@@ -721,10 +735,11 @@ local function redraw_cursor_changes(buf)
     or previous.buf ~= buf
     or not state
     or state.buf ~= buf
+    or not cache
     or state.cache ~= cache
     or state.tick ~= vim.b[buf].changedtick
     or state.version ~= cache.version
-    or not cache.parser:is_valid()
+    or not source_is_valid(buf, cache, state.top, state.bot)
   then
     -- Edits or reattachment can invalidate the previous source positions.
     redraw_current_window_for_buf(buf)
@@ -773,49 +788,52 @@ local function attach_to_buffer(buf, config)
     return false
   end
 
-  local parser = vim.treesitter.get_parser(buf, root_lang)
+  local previous = buffer_cache[buf]
+  local highlighter = source_highlighter(buf)
+  if highlighter and highlighter.tree:lang() ~= root_lang then
+    -- A logical-source change may replace our own highlighter, never a borrowed one.
+    if not previous or previous.owned_highlighter ~= highlighter then
+      return false
+    end
+    release_source(buf, previous)
+    highlighter = nil
+  end
+
+  local parser = highlighter and highlighter.tree or vim.treesitter.get_parser(buf, root_lang)
   if not parser then
     return false
+  end
+
+  local owned_highlighter = previous and previous.owned_highlighter
+  if not highlighter then
+    -- Start once at attachment; Neovim owns visible-range parsing and completion redraws.
+    vim.treesitter.start(buf, root_lang)
+    highlighter = source_highlighter(buf)
+    owned_highlighter = highlighter
+  end
+  if owned_highlighter ~= highlighter then
+    owned_highlighter = nil
   end
 
   if parser_callbacks[parser] ~= true then
     parser_callbacks[parser] = true
     parser:register_cbs({
-      on_changedtree = function(changes)
+      on_changedtree = function()
         local cache = buffer_cache[buf]
         if not cache or cache.parser ~= parser then
           return
         end
+        -- The native highlighter requests redraws; we only invalidate consumption caches.
         cache.version = cache.version + 1
         cache.range_cache = {}
         cache.range_cache_order = {}
-        vim.schedule(function()
-          if not vim.api.nvim_buf_is_valid(buf) or buffer_cache[buf] == nil then
-            return
-          end
-
-          if not changes or vim.tbl_isempty(changes) then
-            redraw_buf(buf)
-            return
-          end
-
-          for _, change in ipairs(changes) do
-            local start_row = change[1]
-            local end_row = change[4]
-
-            if end_row == 2 ^ 32 - 1 then
-              redraw_buf(buf)
-            else
-              redraw_buf(buf, { start_row, end_row + 1 })
-            end
-          end
-        end)
       end,
     }, true)
   end
 
   if buffer_cache[buf] then
     buffer_cache[buf].parser = parser
+    buffer_cache[buf].owned_highlighter = owned_highlighter
     buffer_cache[buf].root_lang = root_lang
     buffer_cache[buf].specs = specs
     buffer_cache[buf].version = buffer_cache[buf].version + 1
@@ -826,6 +844,7 @@ local function attach_to_buffer(buf, config)
 
   buffer_cache[buf] = {
     parser = parser,
+    owned_highlighter = owned_highlighter,
     root_lang = root_lang,
     specs = specs,
     version = 1,
@@ -931,6 +950,7 @@ function M.detach(buf)
     buf = vim.api.nvim_get_current_buf()
   end
 
+  release_source(buf, buffer_cache[buf])
   buffer_cache[buf] = nil
   window_options.detach(buf, "render")
   buffer_cleanup_autocmds[buf] = nil
