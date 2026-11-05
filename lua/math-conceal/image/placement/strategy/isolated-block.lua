@@ -3,6 +3,31 @@ local track_view = require("math-conceal.image.track-view")
 
 local M = {}
 
+--- NOTE: Neovim 0.13 nightly introduced conceal-aware wrapping (#42370):
+--- each fully concealed source row now occupies one screen row. Isolated blocks
+--- can therefore assign one image row per source row without measuring wraps
+--- or mapping wrap boundaries to byte columns. Extra source rows are hidden with
+--- conceal_lines; missing image rows are supplied by virt_lines as before.
+--- Neovim 0.12 retains the original wrap-measurement path below.
+local conceal_reflows = vim.fn.has("nvim-0.13") == 1
+
+local function carrier_layout(surface, view)
+  if not conceal_reflows then
+    return track_view.measure_source_layout(view, surface.win, { require_valid = true })
+  end
+
+  -- Conceal-aware wrapping leaves one screen row per fully concealed source row.
+  local rows = {}
+  for row = view.row, view.end_row do
+    rows[#rows + 1] = {
+      row = row,
+      screen_height = 1,
+      segments = { { start_vcol = 0, end_vcol = 0, byte_col = 0 } },
+    }
+  end
+  return { rows = rows }
+end
+
 local function choose_carrier_count(raw_heights, image_rows)
   image_rows = math.max(1, math.floor(tonumber(image_rows) or 1))
   local carrier_count = 0
@@ -43,7 +68,7 @@ function M.measure(surface, record, view)
   if surface == nil or record == nil or record.grid == nil or view == nil then
     return nil
   end
-  local measured = track_view.measure_source_layout(view, surface.win, { require_valid = true })
+  local measured = carrier_layout(surface, view)
   if measured == nil then
     return nil
   end
@@ -112,7 +137,11 @@ local function conceal_carrier(surface, view, row, ids)
   if start_col == nil then
     return
   end
-  if end_col == math.huge then
+  if conceal_reflows then
+    -- Isolated rows contain only the formula and surrounding whitespace.
+    -- Hide that whitespace too so indentation cannot introduce extra wraps.
+    start_col, end_col = 0, surface_api.line_len(surface, row)
+  elseif end_col == math.huge then
     end_col = surface_api.line_len(surface, row)
   end
   ids[#ids + 1] = surface_api.add_extmark(surface, row, start_col, {
