@@ -1,4 +1,5 @@
 local projection = require("math-conceal.image.projection")
+local scanners = require("math-conceal.image.scanner")
 local state = require("math-conceal.image.state")
 local tracker = require("math-conceal.image.tracker")
 local window_options = require("math-conceal.window-options")
@@ -34,7 +35,7 @@ local M = {}
 ---@field service_binary string
 ---@field live_debounce integer
 ---@field source_kind string?
----@field scanner string?
+---@field scanner string|fun(ctx: table): table|nil Builtin scanner name or scanner factory.
 ---@field backend string?
 ---@field wrapper string?
 ---@field root? string|MathConcealImageRootResolver
@@ -180,7 +181,7 @@ local function buffer_context(bufnr, kind, source)
   return {
     bufnr = bufnr,
     kind = kind,
-    source_kind = source.kind or spec.source_kind or spec.scanner or kind,
+    source_kind = source.kind or scanners.source_kind(kind, spec),
     filetype = source.filetype or vim.bo[bufnr].filetype,
     path = normalize_path(source.path or vim.api.nvim_buf_get_name(bufnr)),
     cwd = normalize_path(source.cwd or vim.uv.cwd()),
@@ -311,12 +312,13 @@ local function path_excluded(spec, ctx)
 end
 
 local function make_binding(kind, spec, ctx)
-  local source_kind = ctx.source_kind or spec.source_kind or spec.scanner or kind
+  local source_kind = ctx.source_kind or scanners.source_kind(kind, spec)
   return {
     bufnr = ctx.bufnr,
     kind = kind,
     source_kind = source_kind,
-    scanner = spec.scanner or source_kind,
+    scanner = scanners.name(kind, spec),
+    scanner_factory = type(spec.scanner) == "function" and spec.scanner or nil,
     backend = spec.backend or "typst",
     wrapper = spec.wrapper or kind,
     filetype = ctx.filetype,
@@ -450,7 +452,7 @@ local function renderer_kind_for_source(bufnr, opts)
       return source.kind
     end
     for kind, spec in pairs(M.config.renderers or {}) do
-      if (spec.source_kind or spec.scanner or kind) == source.kind then
+      if scanners.source_kind(kind, spec) == source.kind then
         return kind
       end
     end
@@ -485,7 +487,7 @@ function M.source_kind_for_bufnr(bufnr)
   end
   local kind = M.renderer_kind_for_bufnr(bufnr)
   local spec = kind and M.config.renderers[kind] or nil
-  return spec and (spec.source_kind or spec.scanner or kind) or nil
+  return spec and scanners.source_kind(kind, spec) or nil
 end
 
 function M.is_supported_bufnr(bufnr)
@@ -518,6 +520,7 @@ local function same_binding(a, b)
     "kind",
     "source_kind",
     "scanner",
+    "scanner_factory",
     "backend",
     "wrapper",
     "filetype",
@@ -579,16 +582,17 @@ function M.attach_buf(bufnr, opts)
   M._buffers[bufnr] = binding
   resume_on_read[bufnr] = nil
   window_options.attach(bufnr, "image")
-  local scanner_kind = binding.scanner or binding.source_kind or kind
-  local scanner = scanner_kind == "markdown"
-      and require("math-conceal.image.tracker.markdown").new({ backslash_math = binding.backslash_math })
-    or nil
-  local attached = tracker.attach(bufnr, {
-    kind = scanner_kind,
-    scanner = scanner,
-    debug = tracker_debug_enabled(),
-    on_repair = projection.on_tracker_repair,
-  })
+  local scanner, scanner_err = scanners.resolve(binding, spec)
+  local attached = scanner ~= nil
+    and tracker.attach(bufnr, {
+      kind = binding.source_kind,
+      scanner = scanner,
+      debug = tracker_debug_enabled(),
+      on_repair = projection.on_tracker_repair,
+    })
+  if scanner == nil then
+    vim.notify_once("math-conceal image: " .. tostring(scanner_err), vim.log.levels.ERROR)
+  end
   if not attached then
     M._buffers[bufnr] = nil
     window_options.detach(bufnr, "image")
@@ -883,11 +887,15 @@ end
 
 function M.setup(cfg)
   require("math-conceal.image.capability").assert_supported()
-  detach_all()
-  M.config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), cfg or {})
-  if not vim.list_contains({ "colorscheme", "simple", "none" }, M.config.styling_type) then
+  local config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), cfg or {})
+  if not vim.list_contains({ "colorscheme", "simple", "none" }, config.styling_type) then
     error("math-conceal image styling_type must be one of colorscheme, simple, none")
   end
+  for kind, spec in pairs(config.renderers or {}) do
+    scanners.validate_spec(kind, spec)
+  end
+  detach_all()
+  M.config = config
   close_all_hidden_service_timers()
   M._buffers = {}
   cursor_sync_pending = {}

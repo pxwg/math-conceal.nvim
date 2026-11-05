@@ -170,7 +170,7 @@ local M = {
 --- @field service_binary string?: Renderer service executable path.
 --- @field live_debounce integer?: Text-change live preview debounce in milliseconds for this renderer.
 --- @field source_kind string?: Scanner source kind. Defaults to the renderer name.
---- @field scanner string?: Scanner module key. Defaults to source_kind.
+--- @field scanner string|fun(ctx: table): table|nil: Builtin scanner name, or a scanner factory. Defaults to source_kind.
 --- @field backend string?: Rust service backend. Markdown uses the Typst backend with a MiTeX wrapper.
 --- @field wrapper string?: Render input wrapper. Markdown uses "mitex".
 --- @field root string|fun(ctx: table): string?: Project root resolver for the renderer.

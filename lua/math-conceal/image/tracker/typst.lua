@@ -488,7 +488,7 @@ local function collect_nested_visible_units(container_entry, match_index, code_p
   return sort_units(units)
 end
 
-local function math_source_display_facts(bufnr, unit, source)
+local function math_source_display_facts(bufnr, unit, source, display)
   local source_rows = unit.end_row - unit.row + 1
   local source_facts = {
     source_kind = "typst",
@@ -496,8 +496,10 @@ local function math_source_display_facts(bufnr, unit, source)
     break_line = source_rows > 1,
   }
 
-  local is_display_math = source:match("^%$%s+") ~= nil and source:match("%s+%$$") ~= nil
-  if is_display_math then
+  if display == nil then
+    display = (source:match("^%$%s+") ~= nil and source:match("%s+%$$") ~= nil) and "block" or "inline"
+  end
+  if display == "block" then
     local start_line = vim.api.nvim_buf_get_lines(bufnr, unit.row, unit.row + 1, false)[1] or ""
     local end_line = vim.api.nvim_buf_get_lines(bufnr, unit.end_row, unit.end_row + 1, false)[1] or ""
     local prefix = start_line:sub(1, unit.col)
@@ -563,7 +565,7 @@ local function context_record(bufnr, unit)
   }
 end
 
-local function node_record(bufnr, unit, context_units, prefixes)
+local function node_record(bufnr, unit, context_units, prefixes, display)
   local source = range_source(bufnr, unit)
   local object_kind = unit.object_kind or unit.node_type or "math"
   local source_display_kind, render_whole_line, source_rows, source_facts
@@ -571,7 +573,8 @@ local function node_record(bufnr, unit, context_units, prefixes)
     source_display_kind, render_whole_line, source_rows, source_facts = code_source_display_facts(unit)
   else
     object_kind = "math"
-    source_display_kind, render_whole_line, source_rows, source_facts = math_source_display_facts(bufnr, unit, source)
+    source_display_kind, render_whole_line, source_rows, source_facts =
+      math_source_display_facts(bufnr, unit, source, display)
   end
   local prelude_count = 0
   for idx, context_unit in ipairs(context_units or {}) do
@@ -767,6 +770,128 @@ end
 ---@return table
 function M.scan_nested(bufnr, container, context_units)
   return build_nested_scan(bufnr, container, context_units)
+end
+
+local function is_index(value)
+  return type(value) == "number" and value >= 0 and value == math.floor(value)
+end
+
+local function range_error(range)
+  if type(range) ~= "table" then
+    return "range must be a table"
+  end
+  for _, key in ipairs({ "row", "col", "end_row", "end_col" }) do
+    if not is_index(range[key]) then
+      return ("range.%s must be a non-negative integer"):format(key)
+    end
+  end
+  if lt(range.end_row, range.end_col, range.row, range.col) then
+    return "range end precedes range start"
+  end
+  return nil
+end
+
+-- Internal: half-open intersection rule for scanner repair windows.
+function M._range_intersects(a, b)
+  return range_intersects(a, b)
+end
+
+local function field_error(value, key, expected)
+  local actual = value[key]
+  if expected == "index" then
+    return not is_index(actual) and ("%s must be a non-negative integer"):format(key) or nil
+  end
+  if type(actual) ~= expected then
+    return ("%s must be %s, got %s"):format(key, expected, type(actual))
+  end
+  return nil
+end
+
+local node_fields = {
+  { "kind", "string" },
+  { "source_kind", "string" },
+  { "object_kind", "string" },
+  { "node_type", "string" },
+  { "source", "string" },
+  { "source_hash", "string" },
+  { "source_rows", "index" },
+  { "source_display_kind", "string" },
+  { "source_facts", "table" },
+  { "render_whole_line", "boolean" },
+  { "prelude_count", "index" },
+  { "prelude_signature", "string" },
+}
+
+local source_fact_fields = {
+  { "source_kind", "string" },
+  { "object_kind", "string" },
+  { "display_kind", "string" },
+  { "inline", "boolean" },
+  { "isolated", "boolean" },
+  { "break_line", "boolean" },
+}
+
+---Internal: validate a node returned by a scanner factory.
+---@param node table
+---@return boolean ok
+---@return string? err
+function M._validate_node(node)
+  if type(node) ~= "table" then
+    return false, "must be a table"
+  end
+  local err = range_error(node)
+  if err ~= nil then
+    return false, err
+  end
+  for _, field in ipairs(node_fields) do
+    err = field_error(node, field[1], field[2])
+    if err ~= nil then
+      return false, err
+    end
+  end
+  for _, field in ipairs(source_fact_fields) do
+    err = field_error(node.source_facts, field[1], field[2])
+    if err ~= nil then
+      return false, "source_facts." .. err
+    end
+  end
+  if node.kind ~= "typst" or node.source_kind ~= "typst" or node.source_facts.source_kind ~= "typst" then
+    return false, "kind, source_kind and source_facts.source_kind must be typst"
+  end
+  if node.object_kind ~= "math" or node.node_type ~= "math" or node.source_facts.object_kind ~= "math" then
+    return false, "external Typst scanners support only math nodes"
+  end
+  if node.source_display_kind ~= "inline" and node.source_display_kind ~= "block" then
+    return false, "source_display_kind must be inline or block"
+  end
+  if node.source_facts.display_kind ~= node.source_display_kind then
+    return false, "source_facts.display_kind must match source_display_kind"
+  end
+  if node.source_hash ~= source_hash(node.source) then
+    return false, "source_hash does not match source"
+  end
+  return true
+end
+
+---Internal: validate a context unit returned by a scanner factory.
+---@param unit table
+---@return boolean ok
+---@return string? err
+function M._validate_context_unit(unit)
+  if type(unit) ~= "table" then
+    return false, "must be a table"
+  end
+  local err = range_error(unit)
+  if err ~= nil then
+    return false, err
+  end
+  for _, field in ipairs({ { "source", "string" }, { "signature", "string" } }) do
+    err = field_error(unit, field[1], field[2])
+    if err ~= nil then
+      return false, err
+    end
+  end
+  return true
 end
 
 return M

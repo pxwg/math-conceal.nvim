@@ -161,7 +161,7 @@ end
 local function renderer_for_source(kind, filetype)
   local fallback
   for renderer_kind, renderer in pairs((root.opts.image or {}).renderers or {}) do
-    local source_kind = renderer.source_kind or renderer.scanner or renderer_kind
+    local source_kind = require("math-conceal.image.scanner").source_kind(renderer_kind, renderer)
     if list_contains(renderer.filetypes, filetype) then
       return renderer_kind
     end
@@ -225,7 +225,7 @@ function M.resolve_source(bufnr, source)
   if kind == nil then
     for renderer_kind, renderer in pairs((root.opts.image or {}).renderers or {}) do
       if list_contains(renderer.filetypes, filetype) then
-        kind = renderer.source_kind or renderer.scanner or renderer_kind
+        kind = require("math-conceal.image.scanner").source_kind(renderer_kind, renderer)
         source.renderer = source.renderer or renderer_kind
         break
       end
