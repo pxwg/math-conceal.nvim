@@ -700,9 +700,17 @@ local function setup_autocmds()
       pattern = fts,
       desc = "attach math-conceal image renderer",
       callback = function(ev)
-        if M.config.enabled_by_default or resume_on_read[ev.buf] == true then
-          M.attach_buf(ev.buf)
-        end
+        -- Deferred like the root FileType hook so host plugins finish their
+        -- own FileType setup before the scanner parses the buffer.
+        local filetype = ev.match
+        vim.schedule(function()
+          if not valid_loaded_buffer(ev.buf) or vim.bo[ev.buf].filetype ~= filetype then
+            return
+          end
+          if M.config.enabled_by_default or resume_on_read[ev.buf] == true then
+            M.attach_buf(ev.buf)
+          end
+        end)
       end,
     })
   end

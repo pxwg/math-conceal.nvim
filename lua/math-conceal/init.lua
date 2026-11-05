@@ -202,6 +202,76 @@ local M = {
 --- @field mode "edit"|"preview"|"presentation"?
 --- @field owner any?
 
+local function hook_filetypes(opts)
+  local seen, filetypes = {}, {}
+  local function add(filetype)
+    if type(filetype) == "string" and filetype ~= "" and not seen[filetype] then
+      seen[filetype] = true
+      filetypes[#filetypes + 1] = filetype
+    end
+  end
+  for _, filetype in ipairs(opts.ft or {}) do
+    add(filetype)
+  end
+  local image = opts.image or {}
+  if image.enabled == true then
+    for _, renderer in pairs(image.renderers or {}) do
+      for _, filetype in ipairs(type(renderer) == "table" and renderer.filetypes or {}) do
+        add(filetype)
+      end
+    end
+  end
+  table.sort(filetypes)
+  return filetypes
+end
+
+-- Attach after the current event finishes: host plugins that configure
+-- themselves in the same FileType event (e.g. lazy-loaded orgmode registering
+-- its injection directives) must run before we parse the buffer.
+local function schedule_attach(bufnr, filetype)
+  vim.schedule(function()
+    if
+      not vim.api.nvim_buf_is_valid(bufnr)
+      or not vim.api.nvim_buf_is_loaded(bufnr)
+      or vim.bo[bufnr].filetype ~= filetype
+    then
+      return
+    end
+    require("math-conceal.nvim").set(filetype, bufnr)
+  end)
+end
+
+---Register the FileType hook that attaches configured filetypes. Runs at
+---startup from `plugin/math-conceal.lua` and again on every `setup()`; only
+---the callback loads the `math-conceal.nvim` runtime.
+function M._register_filetype_hook()
+  local group = vim.api.nvim_create_augroup("math-conceal.filetype", { clear = true })
+  local filetypes = hook_filetypes(M.opts)
+  if #filetypes == 0 then
+    return
+  end
+  vim.api.nvim_create_autocmd("FileType", {
+    group = group,
+    pattern = filetypes,
+    desc = "attach math-conceal to configured filetypes",
+    callback = function(ev)
+      schedule_attach(ev.buf, ev.match)
+    end,
+  })
+
+  -- Buffers whose FileType fired before this registration (late setup,
+  -- lazy-loading, session restore).
+  local wanted = {}
+  for _, filetype in ipairs(filetypes) do
+    wanted[filetype] = true
+  end
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(bufnr) and wanted[vim.bo[bufnr].filetype] then
+      schedule_attach(bufnr, vim.bo[bufnr].filetype)
+    end
+  end
+end
+
 ---Configure the plugin. Merges user options into the plugin defaults. The runtime
 ---logic lives in `math-conceal.nvim` and is loaded on demand from there; this
 ---module only owns configuration, so a bare `require("math-conceal")` plus
@@ -209,6 +279,7 @@ local M = {
 ---@param opts MathConcealOptions?
 function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", M.opts, opts or {})
+  M._register_filetype_hook()
 end
 
 return M
