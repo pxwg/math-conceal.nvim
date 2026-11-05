@@ -517,8 +517,9 @@ local function math_source_display_facts(bufnr, unit, source, display)
   return "inline", false, source_rows, source_facts
 end
 
-local function code_source_display_facts(unit)
-  local source_rows = unit.end_row - unit.row + 1
+local function code_source_display_facts(unit, geometry)
+  geometry = geometry or unit
+  local source_rows = geometry.end_row - geometry.row + 1
   return "unknown",
     false,
     source_rows,
@@ -565,20 +566,29 @@ local function context_record(bufnr, unit)
   }
 end
 
-local function node_record(bufnr, unit, context_units, prefixes, display)
+-- `unit` is the compiled source range. `geometry`, when given, is the wider
+-- track range (an injected region including its delimiter lines); the source
+-- start is then recorded relative to the track in source_facts.source_offset.
+local function node_record(bufnr, unit, context_units, prefixes, display, geometry)
+  geometry = geometry or unit
   local source = range_source(bufnr, unit)
   local object_kind = unit.object_kind or unit.node_type or "math"
   local source_display_kind, render_whole_line, source_rows, source_facts
   if object_kind == "code" then
-    source_display_kind, render_whole_line, source_rows, source_facts = code_source_display_facts(unit)
+    source_display_kind, render_whole_line, source_rows, source_facts = code_source_display_facts(unit, geometry)
   else
     object_kind = "math"
     source_display_kind, render_whole_line, source_rows, source_facts =
-      math_source_display_facts(bufnr, unit, source, display)
+      math_source_display_facts(bufnr, geometry, source, display)
+  end
+  if geometry.row ~= unit.row or geometry.col ~= unit.col then
+    local rows = unit.row - geometry.row
+    -- Same-row offsets are relative to the track column, later rows absolute.
+    source_facts.source_offset = { rows = rows, col = rows == 0 and unit.col - geometry.col or unit.col }
   end
   local prelude_count = 0
   for idx, context_unit in ipairs(context_units or {}) do
-    if le(context_unit.end_row, context_unit.end_col, unit.row, unit.col) then
+    if le(context_unit.end_row, context_unit.end_col, geometry.row, geometry.col) then
       prelude_count = idx
     else
       break
@@ -590,10 +600,10 @@ local function node_record(bufnr, unit, context_units, prefixes, display)
     source_kind = "typst",
     object_kind = object_kind,
     node_type = object_kind,
-    row = unit.row,
-    col = unit.col,
-    end_row = unit.end_row,
-    end_col = unit.end_col,
+    row = geometry.row,
+    col = geometry.col,
+    end_row = geometry.end_row,
+    end_col = geometry.end_col,
     source = source,
     source_hash = source_hash(source),
     source_rows = source_rows,
@@ -605,41 +615,217 @@ local function node_record(bufnr, unit, context_units, prefixes, display)
   }
 end
 
-local function build_scan(bufnr)
+local function query_or_error()
   local parsed_query, query_err = get_query()
   if parsed_query == nil then
     error("failed to parse Typst math tracker query: " .. tostring(query_err))
   end
+  return parsed_query
+end
 
-  local parser = vim.treesitter.get_parser(bufnr, "typst")
-  local tree = parser:parse()[1]
-  if tree == nil then
-    return {
-      nodes = {},
-      context_units = {},
-      context_signature = vim.fn.sha256(""),
-    }
+local function line_text(bufnr, row)
+  return vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
+end
+
+-- Root language of the buffer's syntax tree. Typst buffers (and buffers whose
+-- filetype has no other parser) use Typst; any other host scans its Typst
+-- injections.
+local function host_lang_for(filetype)
+  if filetype == nil or filetype == "" then
+    return "typst"
+  end
+  local lang = vim.treesitter.language.get_lang(filetype) or filetype
+  if lang == "typst" then
+    return "typst"
+  end
+  local ok, added = pcall(vim.treesitter.language.add, lang)
+  if not ok or not added then
+    return "typst"
+  end
+  return lang
+end
+
+-- A Typst injection region. A region occupying whole lines (a source block
+-- body) is a block: its track also covers the line before and after it, the
+-- host's delimiter lines, while only the body is compiled.
+local function injected_region(bufnr, ranges, tree)
+  local row, col, end_row, end_col
+  if type(ranges) == "table" and #ranges > 0 then
+    local first, last = ranges[1], ranges[#ranges]
+    row, col, end_row, end_col = first[1], first[2], last[4], last[5]
+  else
+    row, col, end_row, end_col = tree:root():range()
+  end
+  local body = { row = row, col = col, end_row = end_row, end_col = end_col }
+  local whole_lines = end_col == 0 and end_row > row and is_blank(line_text(bufnr, row):sub(1, col))
+  if whole_lines then
+    body.end_row = end_row - 1
+    body.end_col = #line_text(bufnr, body.end_row)
+  end
+  if not lt(body.row, body.col, body.end_row, body.end_col) then
+    return nil
+  end
+  local track = body
+  if whole_lines and row > 0 and end_row < vim.api.nvim_buf_line_count(bufnr) then
+    track = { row = row - 1, col = 0, end_row = end_row, end_col = #line_text(bufnr, end_row) }
+  end
+  return { body = body, track = track, block = whole_lines }
+end
+
+-- Typst syntax roots of a buffer: the root tree of a Typst buffer, or every
+-- Typst injection region of a host buffer in document order.
+local function typst_roots(bufnr, host_lang, parse_range)
+  if host_lang == "typst" then
+    local parser = vim.treesitter.get_parser(bufnr, "typst")
+    local tree = parser:parse()[1]
+    return tree and { { root = tree:root() } } or {}
   end
 
-  local root = tree:root()
-  local code_policy = configured_code_policy()
-  local units = collect_visible_units(root, build_match_index(bufnr, root, parsed_query), code_policy, {
-    collect_context = true,
-  })
-  local nodes = {}
-  local context_units = {}
+  local parser = vim.treesitter.get_parser(bufnr, host_lang, { error = false })
+  if parser == nil then
+    return {}
+  end
+  parser:parse(parse_range or true)
 
+  local roots = {}
+  local function visit(ltree)
+    for lang, child in pairs(ltree:children()) do
+      if lang == "typst" then
+        local regions = child:included_regions()
+        for idx, tree in pairs(child:trees()) do
+          local region = injected_region(bufnr, regions[idx], tree)
+          if region ~= nil then
+            roots[#roots + 1] = { root = tree:root(), region = region }
+          end
+        end
+      else
+        visit(child)
+      end
+    end
+  end
+  visit(parser)
+  table.sort(roots, function(a, b)
+    return lt(a.region.track.row, a.region.track.col, b.region.track.row, b.region.track.col)
+  end)
+  return roots
+end
+
+local function root_units(bufnr, entry, parsed_query, code_policy, start_row, end_row)
+  local match_index = build_match_index(bufnr, entry.root, parsed_query, start_row, end_row)
+  local units = collect_visible_units(entry.root, match_index, code_policy, { collect_context = true })
+  return units, match_index
+end
+
+local function is_display_math_source(source)
+  return source:match("^%$%s+") ~= nil and source:match("%s+%$$") ~= nil
+end
+
+local function strip_context_sources(bufnr, body_source, units)
+  local rest = body_source
   for _, unit in ipairs(units) do
-    if unit.object_kind == "math" then
-      local prefixes = prefix_signatures(context_units)
-      nodes[#nodes + 1] = node_record(bufnr, unit, context_units, prefixes)
-    elseif is_context_unit(bufnr, unit) then
-      local record = context_record(bufnr, unit)
-      record.index = #context_units + 1
-      context_units[#context_units + 1] = record
-    elseif unit.object_kind == "code" and is_renderable_code_unit(unit, code_policy) then
-      local prefixes = prefix_signatures(context_units)
-      nodes[#nodes + 1] = node_record(bufnr, unit, context_units, prefixes)
+    if is_context_unit(bufnr, unit) then
+      local text = range_source(bufnr, unit)
+      local start = rest:find(text, 1, true)
+      if start ~= nil then
+        rest = rest:sub(1, start - 1) .. rest:sub(start + #text)
+      end
+    end
+  end
+  return rest
+end
+
+-- The render node of an injected region, or nil for a region that only holds
+-- context. A region that is exactly one formula keeps the math semantics
+-- (display math in a block region renders as display math); any other region
+-- is Typst markup, a code node whose inline/block role flow layout decides.
+-- Returns the node and the container entry used for cursor-nested scans.
+local function region_node(bufnr, entry, units, context_units, prefixes)
+  local region = entry.region
+  local body_source = range_source(bufnr, region.body)
+  if is_blank(strip_context_sources(bufnr, body_source, units)) then
+    return nil
+  end
+
+  local only = #units == 1 and units[1] or nil
+  if only ~= nil and only.object_kind == "math" and vim.trim(body_source) == range_source(bufnr, only) then
+    if not region.block then
+      return node_record(bufnr, only, context_units, prefixes), only
+    end
+    if is_display_math_source(range_source(bufnr, only)) then
+      return node_record(bufnr, only, context_units, prefixes, "block", region.track), only
+    end
+  end
+
+  local unit = {
+    row = region.body.row,
+    col = region.body.col,
+    end_row = region.body.end_row,
+    end_col = region.body.end_col,
+    object_kind = "code",
+    node_type = "code",
+    code_kind = "region",
+  }
+  return node_record(bufnr, unit, context_units, prefixes, nil, region.track), { node = entry.root }
+end
+
+local function context_records(bufnr, units, window)
+  local records = {}
+  for _, unit in ipairs(units) do
+    if is_context_unit(bufnr, unit) and (window == nil or range_intersects(unit, window)) then
+      records[#records + 1] = context_record(bufnr, unit)
+    end
+  end
+  table.sort(records, function(a, b)
+    return lt(a.row, a.col, b.row, b.col)
+  end)
+  for idx, record in ipairs(records) do
+    record.index = idx
+  end
+  return records
+end
+
+local function is_render_unit(bufnr, unit, code_policy)
+  if unit.object_kind == "math" then
+    return true
+  end
+  return not is_context_unit(bufnr, unit) and unit.object_kind == "code" and is_renderable_code_unit(unit, code_policy)
+end
+
+local function empty_scan()
+  return { nodes = {}, context_units = {}, context_signature = vim.fn.sha256("") }
+end
+
+local function build_scan(bufnr, host_lang)
+  local parsed_query = query_or_error()
+  local roots = typst_roots(bufnr, host_lang)
+  if #roots == 0 then
+    return empty_scan()
+  end
+
+  local code_policy = configured_code_policy()
+  local scanned, all_units = {}, {}
+  for _, entry in ipairs(roots) do
+    local units = root_units(bufnr, entry, parsed_query, code_policy)
+    scanned[#scanned + 1] = { entry = entry, units = units }
+    vim.list_extend(all_units, units)
+  end
+
+  -- Context units are shared across regions in document order.
+  local context_units = context_records(bufnr, all_units)
+  local prefixes = prefix_signatures(context_units)
+  local nodes = {}
+  for _, item in ipairs(scanned) do
+    if item.entry.region ~= nil then
+      local node = region_node(bufnr, item.entry, item.units, context_units, prefixes)
+      if node ~= nil then
+        nodes[#nodes + 1] = node
+      end
+    else
+      for _, unit in ipairs(item.units) do
+        if is_render_unit(bufnr, unit, code_policy) then
+          nodes[#nodes + 1] = node_record(bufnr, unit, context_units, prefixes)
+        end
+      end
     end
   end
 
@@ -655,84 +841,85 @@ local function build_scan(bufnr)
   }
 end
 
-local function build_window_scan(bufnr, window, context_units)
-  local parsed_query, query_err = get_query()
-  if parsed_query == nil then
-    error("failed to parse Typst math tracker query: " .. tostring(query_err))
-  end
-
-  local parser = vim.treesitter.get_parser(bufnr, "typst")
-  local tree = parser:parse()[1]
-  if tree == nil then
-    return {
-      nodes = {},
-      context_units = {},
-    }
-  end
-
-  local root = tree:root()
+local function build_window_scan(bufnr, host_lang, window, context_units)
+  local parsed_query = query_or_error()
+  context_units = context_units or {}
+  local roots = typst_roots(bufnr, host_lang, { math.max(0, window.row - 1), window.end_row + 2 })
   local code_policy = configured_code_policy()
-  local units = collect_visible_units(
-    root,
-    build_match_index(bufnr, root, parsed_query, window.row, window.end_row + 1),
-    code_policy,
-    {
-      collect_context = true,
-    }
-  )
-  local prefixes = prefix_signatures(context_units or {})
-  local nodes = {}
-  local local_context_units = {}
+  local prefixes = prefix_signatures(context_units)
+  local nodes, local_units = {}, {}
 
-  for _, unit in ipairs(units) do
-    if unit.object_kind == "math" and range_intersects(unit, window) then
-      nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
-    elseif is_context_unit(bufnr, unit) and range_intersects(unit, window) then
-      local record = context_record(bufnr, unit)
-      record.index = #local_context_units + 1
-      local_context_units[#local_context_units + 1] = record
-    elseif
-      unit.object_kind == "code"
-      and range_intersects(unit, window)
-      and is_renderable_code_unit(unit, code_policy)
-    then
-      nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
+  for _, entry in ipairs(roots) do
+    if entry.region == nil then
+      local units = root_units(bufnr, entry, parsed_query, code_policy, window.row, window.end_row + 1)
+      for _, unit in ipairs(units) do
+        if range_intersects(unit, window) then
+          if is_render_unit(bufnr, unit, code_policy) then
+            nodes[#nodes + 1] = node_record(bufnr, unit, context_units, prefixes)
+          else
+            local_units[#local_units + 1] = unit
+          end
+        end
+      end
+    elseif range_intersects(entry.region.track, window) then
+      local units = root_units(bufnr, entry, parsed_query, code_policy)
+      local node = region_node(bufnr, entry, units, context_units, prefixes)
+      if node ~= nil and range_intersects(node, window) then
+        nodes[#nodes + 1] = node
+      end
+      vim.list_extend(local_units, units)
     end
   end
 
   return {
     nodes = nodes,
-    context_units = local_context_units,
+    context_units = context_records(bufnr, local_units, window),
   }
 end
 
-local function build_nested_scan(bufnr, container, context_units)
-  local parsed_query, query_err = get_query()
-  if parsed_query == nil then
-    error("failed to parse Typst math tracker query: " .. tostring(query_err))
+-- Container entry of a cursor-nested scan: an injected region rendered as a
+-- whole, or a math/code unit inside a Typst root.
+local function nested_container(bufnr, host_lang, container, parsed_query, code_policy, context_units)
+  local roots = typst_roots(bufnr, host_lang, { container.row, container.end_row + 1 })
+  local prefixes = prefix_signatures(context_units)
+  for _, entry in ipairs(roots) do
+    local region = entry.region
+    local covers = region == nil
+      or le(region.track.row, region.track.col, container.row, container.col)
+        and le(container.end_row, container.end_col, region.track.end_row, region.track.end_col)
+    if covers then
+      local units, match_index = root_units(bufnr, entry, parsed_query, code_policy)
+      if region ~= nil then
+        local node, container_entry = region_node(bufnr, entry, units, context_units, prefixes)
+        if node ~= nil and range_equal(node, container) then
+          return container_entry, match_index
+        end
+      end
+      local found = find_container_entry(match_index, container)
+      if found ~= nil then
+        return found, match_index
+      end
+    end
   end
+  return nil, nil
+end
 
-  local parser = vim.treesitter.get_parser(bufnr, "typst")
-  local tree = parser:parse()[1]
-  if tree == nil then
-    return {
-      nodes = {},
-      context_units = {},
-    }
-  end
-
-  local root = tree:root()
+local function build_nested_scan(bufnr, host_lang, container, context_units)
+  local parsed_query = query_or_error()
+  context_units = context_units or {}
   local code_policy = configured_code_policy()
-  local match_index = build_match_index(bufnr, root, parsed_query, container.row, container.end_row + 1)
-  local units = collect_nested_visible_units(find_container_entry(match_index, container), match_index, code_policy)
-  local prefixes = prefix_signatures(context_units or {})
-  local nodes = {}
+  local container_entry, match_index =
+    nested_container(bufnr, host_lang, container, parsed_query, code_policy, context_units)
+  if container_entry == nil then
+    return { nodes = {}, context_units = {} }
+  end
 
+  local units = collect_nested_visible_units(container_entry, match_index, code_policy)
+  local prefixes = prefix_signatures(context_units)
+  local nodes = {}
   for _, unit in ipairs(units) do
-    if unit.object_kind == "math" then
-      nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
-    elseif unit.object_kind == "code" and is_renderable_code_unit(unit, code_policy) then
-      nodes[#nodes + 1] = node_record(bufnr, unit, context_units or {}, prefixes)
+    if is_render_unit(bufnr, unit, code_policy) then
+      nodes[#nodes + 1] = node_record(bufnr, unit, context_units, prefixes)
     end
   end
 
@@ -742,35 +929,62 @@ local function build_nested_scan(bufnr, container, context_units)
   }
 end
 
----@param bufnr integer
----@return table
-function M.scan_all(bufnr)
-  return build_scan(bufnr)
+local function scanner(host_lang_of)
+  local S = {}
+
+  ---@param bufnr integer
+  ---@return table
+  function S.scan_all(bufnr)
+    return build_scan(bufnr, host_lang_of())
+  end
+
+  ---@param bufnr integer
+  ---@return table
+  function S.scan_context(bufnr)
+    local scan = build_scan(bufnr, host_lang_of())
+    return {
+      units = scan.context_units,
+      signature = scan.context_signature,
+    }
+  end
+
+  ---@param bufnr integer
+  ---@param window {row: integer, col: integer, end_row: integer, end_col: integer}
+  ---@return table
+  function S.scan(bufnr, window, context_units)
+    return build_window_scan(bufnr, host_lang_of(), window, context_units)
+  end
+
+  ---@param bufnr integer
+  ---@param container table
+  ---@return table
+  function S.scan_nested(bufnr, container, context_units)
+    return build_nested_scan(bufnr, host_lang_of(), container, context_units)
+  end
+
+  return S
 end
 
----@param bufnr integer
+---Typst scanner for a buffer of `opts.filetype`. A Typst filetype scans the
+---root tree; a host filetype with its own parser (Org, Markdown, ...) scans
+---every Typst injection region of the host tree.
+---@param opts {filetype: string?}?
 ---@return table
-function M.scan_context(bufnr)
-  local scan = build_scan(bufnr)
-  return {
-    units = scan.context_units,
-    signature = scan.context_signature,
-  }
+function M.new(opts)
+  local filetype = (opts or {}).filetype
+  return scanner(function()
+    return host_lang_for(filetype)
+  end)
 end
 
----@param bufnr integer
----@param window {row: integer, col: integer, end_row: integer, end_col: integer}
----@return table
-function M.scan(bufnr, window, context_units)
-  return build_window_scan(bufnr, window, context_units)
-end
-
----@param bufnr integer
----@param container table
----@return table
-function M.scan_nested(bufnr, container, context_units)
-  return build_nested_scan(bufnr, container, context_units)
-end
+-- Module-level scanner functions scan Typst buffers.
+local typst_scanner = scanner(function()
+  return "typst"
+end)
+M.scan_all = typst_scanner.scan_all
+M.scan_context = typst_scanner.scan_context
+M.scan = typst_scanner.scan
+M.scan_nested = typst_scanner.scan_nested
 
 local function is_index(value)
   return type(value) == "number" and value >= 0 and value == math.floor(value)

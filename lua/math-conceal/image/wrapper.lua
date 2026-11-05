@@ -326,6 +326,28 @@ local function render_input(track, ctx)
   return "#" .. call .. "(" .. typst_string_literal(with_mitex_preamble(ctx, content)) .. ")"
 end
 
+---Buffer range of a track's compiled source. It differs from the track range
+---when the scanner records source_facts.source_offset, e.g. for an injected
+---source block whose track also covers its delimiter lines.
+---@param track table
+---@return {row: integer, col: integer, end_row: integer, end_col: integer}
+function M.source_range(track)
+  local offset = (track.source_facts or {}).source_offset
+  if offset == nil then
+    return { row = track.row, col = track.col, end_row = track.end_row, end_col = track.end_col }
+  end
+  local rows = offset.rows or 0
+  local row = track.row + rows
+  local col = rows == 0 and track.col + (offset.col or 0) or (offset.col or 0)
+  local lines = vim.split(track.source or "", "\n", { plain = true })
+  return {
+    row = row,
+    col = col,
+    end_row = row + #lines - 1,
+    end_col = #lines == 1 and col + #lines[1] or #lines[#lines],
+  }
+end
+
 function M.build_slot_document(track, ctx, config, window_layout)
   local parts = {}
   local cur_line, cur_col = 1, 1
@@ -370,6 +392,7 @@ function M.build_slot_document(track, ctx, config, window_layout)
   local source = render_input(track, ctx)
   local gen_end, gen_end_col_next = advance_pos(source, gen_start, gen_start_col)
   append(source)
+  local source_range = M.source_range(track)
 
   if suffix ~= "" then
     append(suffix)
@@ -384,10 +407,10 @@ function M.build_slot_document(track, ctx, config, window_layout)
       gen_start_col = gen_start_col,
       gen_end_col = math.max(1, gen_end_col_next - 1),
       bufnr = track.bufnr,
-      src_start = track.row + 1,
-      src_end = track.end_row + 1,
-      src_start_col = track.col + 1,
-      src_end_col = track.end_col + 1,
+      src_start = source_range.row + 1,
+      src_end = source_range.end_row + 1,
+      src_start_col = source_range.col + 1,
+      src_end_col = source_range.end_col + 1,
       item_idx = track.track_id,
     }
 end

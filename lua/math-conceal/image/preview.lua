@@ -298,6 +298,10 @@ local function make_highlighted_preview_source(track, cursor_row, cursor_col, mo
     return source_text, source_text, nil
   end
 
+  -- Slice from the compiled source range, which may start after the track
+  -- start (an injected block whose track covers its delimiter lines).
+  track = vim.tbl_extend("force", track, wrapper.source_range(track))
+
   local span = get_math_symbol_span_at_cursor(track, cursor_row, cursor_col, mode, host_lang)
   if span == nil then
     return source_text, source_text, nil

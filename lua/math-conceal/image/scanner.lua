@@ -6,8 +6,8 @@
 local M = {}
 
 local builtins = {
-  typst = function()
-    return require("math-conceal.image.tracker.typst")
+  typst = function(ctx)
+    return require("math-conceal.image.tracker.typst").new({ filetype = ctx.filetype })
   end,
   markdown = function(ctx)
     return require("math-conceal.image.tracker.markdown").new({ backslash_math = ctx.backslash_math == true })
