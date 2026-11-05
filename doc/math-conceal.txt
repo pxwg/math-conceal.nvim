@@ -9,8 +9,9 @@ CONTENTS                                             *math-conceal-contents*
 4. Equation conceal                                  |math-conceal-image|
 5. Equation conceal examples                         |math-conceal-image-examples|
 6. Equation conceal options                          |math-conceal-image-options|
-7. Equation conceal API                              |math-conceal-image-api|
-8. Troubleshooting                                   |math-conceal-troubleshooting|
+7. Typst in host filetypes                           |math-conceal-image-scanners|
+8. Equation conceal API                              |math-conceal-image-api|
+9. Troubleshooting                                   |math-conceal-troubleshooting|
 
 ==============================================================================
 1. Introduction                                        *math-conceal-intro*
@@ -107,7 +108,18 @@ Options:
 
                                                              *math-conceal-ft*
 `ft`~
-        Filetypes where ASCII/Unicode conceal is attached.
+        Filetypes where ASCII/Unicode conceal is attached. A user `ft` is not
+        appended to the default list: pass the complete list when adding a
+        filetype.
+
+        math-conceal attaches these filetypes, together with every
+        `image.renderers.<name>.filetypes` entry when `image.enabled` is
+        true, from a FileType autocommand. The autocommand is registered at
+        startup and again on each `setup()`, which also attaches matching
+        buffers that are already loaded; lazy-loading the plugin after a
+        buffer was opened therefore still attaches it. Attachment runs on the
+        next event-loop tick, after the other FileType handlers of the same
+        event, such as a host plugin registering its Tree-sitter injections.
 
                                                      *math-conceal-highlights*
 `highlights`~
@@ -166,7 +178,8 @@ Options:
 BUFFER ATTACHMENT API
 
 `attach()` is the common buffer entry point for ASCII/Unicode and graphical
-conceal. Normal filetype buffers use it through the bundled ftplugins. Virtual
+conceal. Normal filetype buffers use it through the FileType autocommand
+described at |math-conceal-ft|. Virtual
 or preview-buffer integrations can supply a logical source independently of
 that buffer's concrete 'filetype' and name:
 >
@@ -193,6 +206,11 @@ that buffer's concrete 'filetype' and name:
 - `markdown`: Markdown root parser, injected LaTeX conceal, and the configured
   Markdown image renderer.
 - `typst`: Typst root parser and the configured Typst image renderer.
+
+When `source.filetype` is a host filetype declared by a renderer, the root
+parser comes from that filetype instead of the profile; see
+|math-conceal-host-filetypes|. An explicit `source.root_lang` takes
+precedence.
 
 `source.filetype` is the logical source filetype exposed to renderer resolvers.
 `source.path` is the real absolute source path used for project roots, imports,
@@ -405,6 +423,19 @@ Restrict rendering by path:
 `image.renderers.<name>.filetypes`~
         Concrete Neovim filetypes managed by one renderer binding.
 
+                                        *math-conceal-image.renderers.scanner*
+`image.renderers.<name>.scanner`~
+        Built-in scanner name, `typst` or `markdown`, or a scanner factory
+        `fun(ctx): scanner`. Default: the renderer's `source_kind`. The
+        `typst` scanner also renders Typst injected into host filetypes. See
+        |math-conceal-image-scanners|.
+
+                                    *math-conceal-image.renderers.source_kind*
+`image.renderers.<name>.source_kind`~
+        Source kind whose realization adapter compiles the tracked regions.
+        Default: the scanner name when it is a string, otherwise the renderer
+        name. Required when `scanner` is a factory.
+
                                   *math-conceal-image.renderers.service_binary*
 `image.renderers.<name>.service_binary`~
         Path to the Rust compiler service for one renderer binding. If omitted,
@@ -585,7 +616,132 @@ Restrict rendering by path:
         the current Markdown buffer.
 
 ==============================================================================
-7. Equation conceal API                              *math-conceal-image-api*
+7. Typst in host filetypes and custom scanners   *math-conceal-image-scanners*
+
+HOST FILETYPES                                   *math-conceal-host-filetypes*
+
+A renderer `filetypes` entry may name a host filetype whose root language is
+not Typst, such as Org. In a host buffer the built-in `typst` scanner renders
+the Typst injected by the host's Tree-sitter injections, so no custom scanner
+is needed:
+>
+  require("math-conceal").setup({
+    ft = {
+      "plaintex", "tex", "context", "bibtex", "markdown", "typst", "org",
+    },
+    image = {
+      enabled = true,
+      renderers = {
+        org_typst = {
+          filetypes = { "org" },
+          source_kind = "typst",
+        },
+      },
+    },
+  })
+<
+The buffer keeps the host parser as its root, from
+`vim.treesitter.language.get_lang(filetype)`. ASCII/Unicode conceal applies to
+the injected Typst trees when the filetype is in `ft`; set
+`image.enabled = false` to keep only ASCII/Unicode conceal. An explicit
+`source.root_lang` passed to |math-conceal-attachment-api| takes precedence.
+
+Each injection region is one render unit:
+
+- A region that is exactly one formula renders as that formula.
+- Any other region is Typst markup. Its inline or block role comes from
+  Typst's layout, like Typst code in a `.typ` buffer: prose stays at its
+  source column and display math inside it is centered.
+- A region spanning whole lines, such as an Org source block or a Markdown
+  fence body, is a block. Its track also covers the line before and after
+  the region, the host's delimiter lines: the cursor anywhere in the block
+  reveals its source, and the rendered block replaces the delimiters too.
+  Only the region itself is compiled.
+- A region holding only `#let`, `#set`, `#import`, or `#show` rules
+  renders nothing.
+
+Context rules are shared across regions in document order, as in one
+`.typ` document: a `#let` in one source block is visible in later blocks
+and inline math. With the cursor inside a region, its formulas and
+renderable Typst code render one by one, as inside Typst content blocks.
+
+Example: Typst in Org with nvim-orgmode~
+
+nvim-orgmode injects Typst into `#+begin_src typst` blocks and
+`src_typst{...}`. This query additionally treats inline `$...$` as Typst:
+>
+  ; queries/org/injections.scm
+  ; extends
+  ((inline_math_block) @injection.content
+    (#set! injection.language "typst")
+    (#set! injection.include-children))
+<
+`\[...\]` and `$$...$$` are LaTeX-only delimiters and keep orgmode's default
+handling. Without an org Tree-sitter parser there are no injection regions,
+and nothing is rendered.
+
+nvim-orgmode registers the directives its injection query uses during its
+`setup()`, and math-conceal scans an Org buffer right after the buffer's
+FileType event. If orgmode is lazy-loaded, load it on the `org` filetype so
+it is set up by then; with lazy.nvim, add `ft = { "org" }` to its spec. Loaded
+only later, for example on `VeryLazy`, it may miss the first scan of a file
+opened at startup, which then renders no Typst.
+
+If snacks.image is enabled for Org, disable its math rendering there; it
+renders the same math nodes as LaTeX.
+
+CUSTOM SCANNERS                          *math-conceal-image-scanner-contract*
+
+For sources that Tree-sitter injections cannot describe, `scanner` also
+accepts a factory function. The factory is called once per buffer binding
+with the attach context `{ bufnr, kind, source_kind, scanner, filetype, path,
+cwd, ... }` and returns a scanner table. Pass a function rather than the
+module table itself: setup deep-copies tables, which would detach a module
+from its `require()` cache.
+>
+  scanner = function(ctx)
+    return require("my.scanner")
+  end,
+<
+Factories require an explicit `source_kind`; `typst` is currently the only
+supported one. Setup raises an error for a table scanner, an unknown built-in
+scanner name, or a factory without a supported `source_kind`.
+
+A scanner table provides:
+>
+  scan_all(bufnr)               -> { nodes, context_units, context_signature }
+  scan_context(bufnr)           -> { units, signature }
+  scan(bufnr, window, context_units) -> { nodes, context_units }
+  scan_nested(bufnr, container, context_units)  -- optional
+<
+`scan` and `scan_context` are required. Without `scan_all`, math-conceal
+calls `scan` with a window covering the whole buffer. `window` is an
+end-exclusive byte range `{ row, col, end_row, end_col }`; `scan` must return
+only nodes that intersect it, where ranges that merely touch do not intersect.
+
+Factory scanners return Typst math nodes:
+>
+  {
+    kind = "typst", source_kind = "typst",
+    object_kind = "math", node_type = "math",
+    row = 0, col = 0, end_row = 0, end_col = 5,   -- end-exclusive
+    source = "$a+b$", source_hash = vim.fn.sha256("$a+b$"),
+    source_rows = 1, source_display_kind = "inline",   -- or "block"
+    render_whole_line = false,
+    source_facts = {
+      source_kind = "typst", object_kind = "math",
+      display_kind = "inline", inline = true,
+      isolated = false, break_line = false,
+    },
+    prelude_count = 0, prelude_signature = vim.fn.sha256(""),
+  }
+<
+Nodes are validated on every scan. A missing or mistyped field, or a node
+outside the scan window, is reported with its location, for example
+`scan_all nodes[1] kind must be string`, and that scan produces no tracks.
+
+==============================================================================
+8. Equation conceal API                              *math-conceal-image-api*
 
 The public renderer module is:
 >
@@ -627,7 +783,7 @@ controls remain available for image-only user commands and diagnostics:
 <
 
 ==============================================================================
-8. Troubleshooting                            *math-conceal-troubleshooting*
+9. Troubleshooting                            *math-conceal-troubleshooting*
 
 Run the built-in health checks first:
 >

@@ -28,6 +28,7 @@ https://github.com/user-attachments/assets/359fb62f-2031-4b5c-8d0b-0fe835fccd80
 - 支持细粒度隐藏模式：
     - 原生 neovim 隐藏模式：展开光标所在行的所有隐藏节点。
     - 细粒度隐藏模式：只展开光标下的隐藏节点。
+- 其他 filetype 中的 Typst：通过配置为嵌入 Org、Markdown 代码围栏等 Tree-sitter 宿主中的 Typst 提供渲染与隐藏。
 - 支持多种隐藏模式，包括希腊字母、脚本字母、数学符号、字体样式、分隔符和物理单位。
 - 多种高亮组用于不同的隐藏模式，允许您自定义每种模式的外观（所有高亮组可以在 [highlights](../highlights/highlights.md) 中找到）。
 
@@ -113,6 +114,10 @@ window-local conceal 选项。默认 `concealcursor = "n"`，Normal 模式保持
 公式 conceal，Insert 模式光标行显示源码；如果想保留旧的光标行始终
 conceal 行为，可以设为 `"nci"`。当 window 不再显示已 attach buffer 时，
 插件会恢复原 window 选项，避免污染其他 window。
+
+`ft` 和 `image.renderers.<name>.filetypes` 中的 filetype 由插件自己注册的
+FileType autocommand 负责 attach。`setup()` 还会 attach 已经打开的匹配
+buffer，因此可以用 `event = "VeryLazy"` 懒加载。
 
 ## Buffer Attach API
 
@@ -281,6 +286,30 @@ require("math-conceal").setup({
   },
 })
 ```
+
+### 其他 filetype 中的 Typst
+
+内置 Typst 渲染器也能渲染注入到其他 filetype 中的 Typst。配合 [nvim-orgmode](https://github.com/nvim-orgmode/orgmode)，`#+begin_src typst` 源码块和 `src_typst{...}` 会被注入为 Typst；再加一条注入查询，行内 `$...$` 也会按 Typst 处理。只需声明宿主 filetype：
+
+```lua
+require("math-conceal").setup({
+  -- `ft` 不会追加到默认列表，需要写出完整列表。
+  ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst", "org" },
+  image = {
+    enabled = true,
+    renderers = {
+      org_typst = {
+        filetypes = { "org" },
+        source_kind = "typst",
+      },
+    },
+  },
+})
+```
+
+每个源码块作为一个整体渲染：文字留在源码所在列，块级公式居中，与 Typst 排版一致。光标进入块内时，块中的公式逐个渲染。`#let`、`#set` 规则按文档顺序在块之间共享。ASCII/Unicode conceal 作用于注入的 Typst；设置 `image.enabled = false` 可以只保留 ASCII/Unicode conceal。注入查询与渲染规则见 `:h math-conceal-image-scanners`。
+
+如果 nvim-orgmode 是懒加载的，请让它在 `org` filetype 时加载（lazy.nvim 中写 `ft = { "org" }`）。若只在 `VeryLazy` 时加载，启动时打开的文件被 math-conceal 扫描时 orgmode 可能还没完成 setup，这个文件就不会渲染 Typst。
 
 ## 待办事项
 

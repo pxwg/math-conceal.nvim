@@ -25,6 +25,7 @@ https://github.com/user-attachments/assets/359fb62f-2031-4b5c-8d0b-0fe835fccd80
     - Original neovim conceal patterns: expand *all* concealed nodes on the line where the cursor is located.
   - Fine grained conceal patterns: only expand the concealed node under the cursor.
 - Image overlay conceal: Using [kitty graphic protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) to show the compiled equations instead of source code.
+- Typst in other filetypes: render and conceal Typst embedded in Org, Markdown fences, and other Tree-sitter hosts from configuration.
 - Support multiple conceal patterns, including greek letters, script letters, math symbols, font styles, delimiters, and physical units.
 - Multiple highlight groups for different conceal patterns, allowing you to customize the appearance of each pattern (all highlight groups can be found in [highlights](./highlights/highlights.md)).
 
@@ -115,6 +116,11 @@ math-conceal injects only into windows showing attached buffers. The default
 `concealcursor = "n"` keeps conceal active in Normal mode while revealing source
 on the cursor line during Insert mode; set it to `"nci"` to keep the previous
 always-concealed cursor-line behavior.
+
+Buffers of the filetypes in `ft` and in `image.renderers.<name>.filetypes` are
+attached by a FileType autocommand that math-conceal registers itself.
+`setup()` also attaches matching buffers that are already open, so lazy-loading
+with `event = "VeryLazy"` works.
 
 ## Buffer Attachment API
 
@@ -340,6 +346,40 @@ require("math-conceal").setup({
   },
 })
 ```
+
+### Typst in other filetypes
+
+The built-in Typst renderer also renders Typst injected into other filetypes.
+With [nvim-orgmode](https://github.com/nvim-orgmode/orgmode), Typst is injected
+into `#+begin_src typst` blocks and `src_typst{...}`; one extra injection query
+also treats inline `$...$` as Typst. Declaring the host filetype is enough:
+
+```lua
+require("math-conceal").setup({
+  -- `ft` is not appended to the default list: list every filetype.
+  ft = { "plaintex", "tex", "context", "bibtex", "markdown", "typst", "org" },
+  image = {
+    enabled = true,
+    renderers = {
+      org_typst = {
+        filetypes = { "org" },
+        source_kind = "typst",
+      },
+    },
+  },
+})
+```
+
+Each source block renders as one unit: prose stays at its source column and
+display math is centered, as Typst lays it out. With the cursor inside a block,
+its formulas render one by one. `#let` and `#set` rules are shared across
+blocks in document order. ASCII/Unicode conceal applies to the injected Typst;
+set `image.enabled = false` to keep only ASCII/Unicode conceal. See
+`:h math-conceal-image-scanners` for the injection query and the rendering rules.
+
+If nvim-orgmode is lazy-loaded, load it on the `org` filetype (lazy.nvim:
+`ft = { "org" }`). Loaded only on `VeryLazy`, it may not be set up yet when
+math-conceal scans a file opened at startup, and that file renders no Typst.
 
 ## To-do
 
