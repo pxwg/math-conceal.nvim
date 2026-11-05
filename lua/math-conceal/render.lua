@@ -1,6 +1,7 @@
 ---realization of fine grained math conceal rendering using neovim decoration provider API
 ---only expand conceal when the cursor is under the math node
 local M = {}
+local native_conceal = require("math-conceal.native-conceal")
 local utils = require("math-conceal.utils")
 local window_options = require("math-conceal.window-options")
 
@@ -130,6 +131,7 @@ local function ensure_buffer_cleanup_autocmds(buf)
     callback = function()
       release_source(buf, buffer_cache[buf])
       window_options.detach(buf, "render")
+      native_conceal.detach(buf)
       buffer_cache[buf] = nil
       buffer_configs[buf] = nil
       buffer_cleanup_autocmds[buf] = nil
@@ -161,6 +163,10 @@ local function get_parsed_query(lang, query_string)
   if query_obj_cache[cache_key] then
     return query_obj_cache[cache_key]
   end
+  -- `query.parse` does not register the language on its own; without this a
+  -- markdown buffer attaching before its first latex injection parse would
+  -- fail to build the math conceal spec entirely.
+  pcall(vim.treesitter.language.add, lang)
   local success, query = pcall(vim.treesitter.query.parse, lang, query_string)
   if success and query then
     query_obj_cache[cache_key] = query
@@ -173,34 +179,6 @@ end
 
 local function strip_extends(query_string)
   return query_string:gsub("; extends [^\n]+", "")
-end
-
-local function read_query_files(filenames)
-  local output = {}
-
-  for _, file_path in ipairs(filenames) do
-    if not file_path:find("math%-conceal") then
-      local file = io.open(file_path, "r")
-      if file then
-        local content = file:read("*a")
-        file:close()
-        if content and content ~= "" then
-          table.insert(output, content)
-        end
-      end
-    end
-  end
-
-  return table.concat(output, "\n")
-end
-
-local function get_runtime_highlights_query(language)
-  local files = vim.treesitter.query.get_files(language, "highlights")
-  if not files or #files == 0 then
-    return ""
-  end
-
-  return read_query_files(files)
 end
 
 local function make_spec(target_lang, query_string)
@@ -271,31 +249,8 @@ local function get_root_parser_lang(buf, config)
   return config.parser_lang
 end
 
-local function get_buffer_specs(buf, config)
-  local root_lang = get_root_parser_lang(buf, config)
-  if config.parser_lang == "latex" and root_lang == "markdown" then
-    local specs = {}
-
-    local markdown_query = get_runtime_highlights_query("markdown")
-    local markdown_spec = make_spec("markdown", markdown_query)
-    if markdown_spec then
-      table.insert(specs, markdown_spec)
-    end
-
-    local markdown_inline_query = get_runtime_highlights_query("markdown_inline")
-    local markdown_inline_spec = make_spec("markdown_inline", markdown_inline_query)
-    if markdown_inline_spec then
-      table.insert(specs, markdown_inline_spec)
-    end
-
-    local latex_spec = make_spec("latex", config.query_string)
-    if latex_spec then
-      table.insert(specs, latex_spec)
-    end
-
-    return specs
-  end
-
+---Plugin-owned math specs. Native highlighter specs are late-bound separately.
+local function get_buffer_specs(config)
   local spec = make_spec(config.parser_lang, config.query_string)
   if not spec then
     return {}
@@ -384,10 +339,21 @@ local function valid_buf_window(buf, win)
   return ok and win_buf == buf
 end
 
+local function before(ar, ac, br, bc)
+  return ar < br or (ar == br and ac < bc)
+end
+
 local function collect_marks(buf_id, cache, toprow, botrow)
   local marks = {}
   local group = 0
-  for _, spec in ipairs(cache.specs) do
+  local specs = vim.list_extend(vim.list_extend({}, cache.specs), cache.native_specs or {})
+  local custom_count
+  for _, spec in ipairs(specs) do
+    if not spec.native then
+      custom_count = nil
+    elseif custom_count == nil then
+      custom_count = #marks
+    end
     local trees = get_query_trees(buf_id, cache, spec)
     for _, tree in ipairs(trees) do
       group = group + 1
@@ -397,6 +363,21 @@ local function collect_marks(buf_id, cache, toprow, botrow)
         local capture_data = metadata[id]
         local conceal_char = capture_data and capture_data.conceal or metadata.conceal
         local conceal_lines = capture_data and capture_data.conceal_lines or metadata.conceal_lines
+        if spec.native then
+          -- Match the native highlighter\'s pattern-before-capture precedence.
+          conceal_char = metadata.conceal or (capture_data and capture_data.conceal)
+        end
+
+        if spec.native and (conceal_char ~= nil or conceal_lines ~= nil) then
+          local range = vim.treesitter.get_range(node, buf_id, capture_data)
+          local r1, c1, r2, c2 = range[1], range[2], range[4], range[5]
+          for i = 1, custom_count or 0 do
+            local mark = marks[i]
+            if before(r1, c1, mark[3], mark[4]) and before(mark[1], mark[2], r2, c2) then
+              goto next_capture
+            end
+          end
+        end
 
         if conceal_lines ~= nil then
           local r1, c1, r2, c2 = get_conceal_line_range(node)
@@ -421,7 +402,8 @@ local function collect_marks(buf_id, cache, toprow, botrow)
             })
           end
         elseif conceal_char then
-          local r1, c1, r2, c2 = node:range()
+          local range = vim.treesitter.get_range(node, buf_id, capture_data)
+          local r1, c1, r2, c2 = range[1], range[2], range[4], range[5]
           local er1, ec1, er2, ec2 = get_expand_range(spec, node)
           -- Keep complete marks, including nodes crossing the requested range.
           if r1 <= botrow and r2 >= toprow then
@@ -448,6 +430,7 @@ local function collect_marks(buf_id, cache, toprow, botrow)
             })
           end
         end
+        ::next_capture::
       end
     end
   end
@@ -518,6 +501,19 @@ end
 local function collect_cached_marks(buf_id, cache, toprow, botrow, opts)
   if not source_parser(buf_id, cache) then
     return {}
+  end
+  local specs, hl = native_conceal.specs(buf_id)
+  local changed = cache.highlighter ~= hl or #specs ~= #(cache.native_specs or {})
+  for i, spec in ipairs(specs) do
+    local old = (cache.native_specs or {})[i]
+    changed = changed or not old or old.query ~= spec.query or old.target_lang ~= spec.target_lang
+  end
+  if changed then
+    cache.highlighter = hl
+    cache.native_specs = specs
+    cache.version = cache.version + 1
+    cache.range_cache = {}
+    cache.range_cache_order = {}
   end
   local tick = vim.b[buf_id].changedtick
   local version = cache.version
@@ -649,7 +645,7 @@ local function setup_decoration_provider()
   vim.api.nvim_set_decoration_provider(ns_id, {
     on_win = function(_, win_id, buf_id, toprow, botrow)
       local cache = buffer_cache[buf_id]
-      if not cache or not cache.parser or not cache.specs or #cache.specs == 0 then
+      if not cache or not cache.parser or not cache.specs then
         return false
       end
 
@@ -783,11 +779,7 @@ end
 ---@param config table
 local function attach_to_buffer(buf, config)
   local root_lang = get_root_parser_lang(buf, config)
-  local specs = get_buffer_specs(buf, config)
-  if #specs == 0 then
-    return false
-  end
-
+  local specs = get_buffer_specs(config)
   local previous = buffer_cache[buf]
   local highlighter = source_highlighter(buf)
   if highlighter and highlighter.tree:lang() ~= root_lang then
@@ -890,22 +882,6 @@ local function get_conceal_query(language, names)
     end
   end
 
-  local default_query_files = vim.treesitter.query.get_files(language, "highlights")
-  if default_query_files and #default_query_files > 0 then
-    for _, file_path in ipairs(default_query_files) do
-      if not file_path:find("math%-conceal") then
-        local file = io.open(file_path, "r")
-        if file then
-          local content = file:read("*a")
-          file:close()
-          if content and content ~= "" then
-            table.insert(output, content)
-          end
-        end
-      end
-    end
-  end
-
   return table.concat(output, "\n")
 end
 
@@ -936,6 +912,7 @@ function M.attach(buf, lang)
     return false
   end
 
+  native_conceal.attach(buf)
   window_options.attach(buf, "render")
   for _, win in ipairs(buf_wins(buf)) do
     redraw_win(win)
@@ -951,6 +928,7 @@ function M.detach(buf)
   end
 
   release_source(buf, buffer_cache[buf])
+  native_conceal.detach(buf)
   buffer_cache[buf] = nil
   window_options.detach(buf, "render")
   buffer_cleanup_autocmds[buf] = nil
@@ -1104,7 +1082,7 @@ function M.collect_display_marks(buf, opts)
   end
 
   local cache = buffer_cache[buf]
-  if not cache or not cache.parser or not cache.specs or #cache.specs == 0 then
+  if not cache or not cache.parser or not cache.specs then
     return {}
   end
 
@@ -1127,7 +1105,7 @@ function M.collect_display_marks_by_row(buf, opts)
   end
 
   local cache = buffer_cache[buf]
-  if not cache or not cache.parser or not cache.specs or #cache.specs == 0 then
+  if not cache or not cache.parser or not cache.specs then
     return {}
   end
 
