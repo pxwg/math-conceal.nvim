@@ -73,8 +73,9 @@ or:
 $ luarocks --lua-version 5.1 --local --tree ~/.local/share/nvim/rocks install math-conceal-service
 ```
 
-LuaRocks uses a prebuilt service rock when one is available for your platform;
-otherwise it builds the service from source and requires Rust/Cargo.
+The service rock builds from source and requires Rust/Cargo. New prebuilt service
+binaries are distributed through GitHub Releases; existing binary rocks may still
+be available for older versions.
 
 ### lazy.nvim
 
@@ -83,7 +84,10 @@ return {
   "pxwg/math-conceal.nvim",
   event = "VeryLazy",
   main = "math-conceal",
-  build = "cargo build --release --manifest-path service/Cargo.toml", -- required for graphical equation conceal
+  version = "*", -- use a release tag so the service matches the plugin
+  build = function(plugin) -- optional: graphical equation conceal
+    require("math-conceal.install").install({ root = plugin.dir, wait = true })
+  end,
   --- @type LaTeXConcealOptions
   opts = {
     conceal = {
@@ -237,10 +241,35 @@ For rocks.nvim installs, install the optional service rock:
 :Rocks install math-conceal-service
 ```
 
-For source/lazy.nvim installs, build the bundled Rust service after installing or updating:
+For tagged source/lazy.nvim installs, the download hook installs the matching
+GitHub Release service without a Rust toolchain (Neovim 0.10+, Git, and curl required):
+
+```lua
+require("math-conceal.install").install()
+```
+
+The function downloads asynchronously and shows a progress bar in Neovim's
+command area. The lazy.nvim hook uses `wait = true` to keep the build pending
+until installation succeeds or fails, while processing UI events. For custom
+progress displays, pass `on_progress = function(message, percent) ... end`.
+The returned handle exposes `done`, `error`, and `path`. A headless entry point
+is also available: `nvim --headless -u NONE -i NONE -l scripts/install-service.lua`.
+
+Prebuilt targets are Linux x86_64 (glibc 2.35+), macOS Apple Silicon, and macOS
+Intel. The hook downloads only when invoked, verifies SHA-256, and atomically
+replaces `service/target/release/typst-concealer-service`, which the plugin
+discovers automatically. Failed downloads preserve the installed binary. curl
+uses standard proxy environment variables such as `https_proxy`. Restart Neovim
+after updating an already running service.
+
+The hook requires an exact release tag and never downloads `latest`. Releases
+created before this distribution workflow may lack the required assets. For
+development branches, unsupported platforms, or offline source builds, use this
+command instead (also usable as the lazy.nvim `build` hook; omit `version` to
+track the development branch):
 
 ```sh
-cargo build --release --manifest-path service/Cargo.toml
+cargo build --release --locked --manifest-path service/Cargo.toml
 ```
 
 Check Neovim APIs, terminal support, adapters, and the render service with:
