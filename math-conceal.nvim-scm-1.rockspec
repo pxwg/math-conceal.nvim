@@ -41,5 +41,5 @@ end
 
 build = {
   type = 'builtin',
-  copy_directories = {'doc', 'ftplugin'},
+  copy_directories = {'doc', 'plugin'},
 }

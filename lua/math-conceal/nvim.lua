@@ -161,7 +161,7 @@ end
 local function renderer_for_source(kind, filetype)
   local fallback
   for renderer_kind, renderer in pairs((root.opts.image or {}).renderers or {}) do
-    local source_kind = renderer.source_kind or renderer.scanner or renderer_kind
+    local source_kind = require("math-conceal.image.scanner").source_kind(renderer_kind, renderer)
     if list_contains(renderer.filetypes, filetype) then
       return renderer_kind
     end
@@ -225,7 +225,7 @@ function M.resolve_source(bufnr, source)
   if kind == nil then
     for renderer_kind, renderer in pairs((root.opts.image or {}).renderers or {}) do
       if list_contains(renderer.filetypes, filetype) then
-        kind = renderer.source_kind or renderer.scanner or renderer_kind
+        kind = require("math-conceal.image.scanner").source_kind(renderer_kind, renderer)
         source.renderer = source.renderer or renderer_kind
         break
       end
@@ -240,12 +240,19 @@ function M.resolve_source(bufnr, source)
     filetype = kind == "latex" and "tex" or kind
   end
 
+  -- A renderer-declared host filetype carries the source inside its own tree
+  -- (Typst injected into Org); its root parser comes from the host filetype.
+  local root_lang = profile.root_lang
+  if filetype_source_kinds[filetype] ~= kind and image_filetype_enabled(filetype) then
+    root_lang = vim.treesitter.language.get_lang(filetype) or filetype
+  end
+
   return {
     kind = kind,
     filetype = filetype,
     path = path,
     cwd = normalize_path(source.cwd or vim.uv.cwd()),
-    root_lang = source.root_lang or profile.root_lang,
+    root_lang = source.root_lang or root_lang,
     conceal_lang = source.conceal_lang or profile.conceal_lang,
     renderer = source.renderer or renderer_for_source(kind, filetype),
   }
@@ -602,7 +609,7 @@ function M.is_presentation_mode(bufnr)
   return render.is_presentation_mode(bufnr)
 end
 
----Compatibility entry point used by the bundled ftplugins.
+---FileType entry point used by the plugin's FileType hook.
 ---@param filetype string?
 ---@param bufnr integer?
 function M.set(filetype, bufnr)

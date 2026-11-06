@@ -183,18 +183,25 @@ local function track_source_slice(track, start_row, start_col, end_row, end_col)
   return table.concat(out, "\n")
 end
 
-local function get_math_symbol_span_at_pos(track, row, col)
+-- Typst syntax for a track comes from the buffer's host language tree: the root
+-- tree in Typst buffers, an injected Typst tree in other hosts.
+local function get_math_symbol_span_at_pos(track, row, col, host_lang)
   if not cursor_in_range(track, row, col, { include_right_edge = false }) then
     return nil
   end
 
-  local ok_parser, parser = pcall(vim.treesitter.get_parser, track.bufnr, "typst")
+  local ok_parser, parser = pcall(vim.treesitter.get_parser, track.bufnr, host_lang, { error = false })
   if not ok_parser or parser == nil then
     return nil
   end
 
-  local trees = parser:parse()
-  local tree = trees and trees[1] or nil
+  local range = { row, col, row, col + 1 }
+  parser:parse({ track.row, track.end_row + 1 })
+  local ltree = parser:language_for_range(range)
+  if ltree:lang() ~= "typst" then
+    return nil
+  end
+  local tree = ltree:tree_for_range(range, { ignore_injections = true })
   if tree == nil then
     return nil
   end
@@ -251,7 +258,7 @@ local function get_math_symbol_span_at_pos(track, row, col)
   }
 end
 
-local function get_math_symbol_span_at_cursor(track, row, col, mode)
+local function get_math_symbol_span_at_cursor(track, row, col, mode, host_lang)
   if track == nil or track.node_type ~= "math" then
     return nil
   end
@@ -268,7 +275,7 @@ local function get_math_symbol_span_at_cursor(track, row, col, mode)
   end
 
   for _, candidate_col in ipairs(candidates) do
-    local span = get_math_symbol_span_at_pos(track, row, candidate_col)
+    local span = get_math_symbol_span_at_pos(track, row, candidate_col, host_lang)
     if span ~= nil then
       return span
     end
@@ -276,7 +283,7 @@ local function get_math_symbol_span_at_cursor(track, row, col, mode)
   return nil
 end
 
-local function make_highlighted_preview_source(track, cursor_row, cursor_col, mode)
+local function make_highlighted_preview_source(track, cursor_row, cursor_col, mode, host_lang)
   if track == nil or track.node_type ~= "math" then
     return nil, nil, nil
   end
@@ -291,7 +298,11 @@ local function make_highlighted_preview_source(track, cursor_row, cursor_col, mo
     return source_text, source_text, nil
   end
 
-  local span = get_math_symbol_span_at_cursor(track, cursor_row, cursor_col, mode)
+  -- Slice from the compiled source range, which may start after the track
+  -- start (an injected block whose track covers its delimiter lines).
+  track = vim.tbl_extend("force", track, wrapper.source_range(track))
+
+  local span = get_math_symbol_span_at_cursor(track, cursor_row, cursor_col, mode, host_lang)
   if span == nil then
     return source_text, source_text, nil
   end
@@ -549,7 +560,9 @@ local function render_projection_preview(bufnr, projection, track, cursor_row, c
     seed_continuity_preview(bufnr, preview, projection, track, nil)
   end
 
-  local preview_source, source_text, span = make_highlighted_preview_source(track, cursor_row, cursor_col, mode)
+  local host_lang = vim.treesitter.language.get_lang(binding.filetype or "")
+  local preview_source, source_text, span =
+    make_highlighted_preview_source(track, cursor_row, cursor_col, mode, host_lang)
   if preview_source == nil or source_text == nil then
     M.clear(bufnr)
     return
@@ -806,5 +819,7 @@ function M.detach(bufnr)
     pcall(vim.api.nvim_buf_clear_namespace, bufnr, state.preview_ns, 0, -1)
   end
 end
+
+M._highlighted_preview_source = make_highlighted_preview_source
 
 return M

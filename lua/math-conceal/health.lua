@@ -66,7 +66,7 @@ function M.check()
   local registry = require("math-conceal.image.realization")
   local seen_services = {}
   for name, renderer in pairs(image.config.renderers or {}) do
-    local source_kind = renderer.source_kind or renderer.scanner or name
+    local source_kind = require("math-conceal.image.scanner").source_kind(name, renderer)
     if registry.get(source_kind) ~= nil then
       vim.health.ok(("%s realization adapter is registered"):format(source_kind))
     else
