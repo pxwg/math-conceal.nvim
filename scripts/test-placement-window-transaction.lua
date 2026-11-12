@@ -143,6 +143,53 @@ local function run()
   assert_true("cursor restore transaction", placement.reconcile_window(narrow, {}))
   assert_eq("restore reuses placement id", surfaces[narrow].records[inline_key].placement_id, retained_id)
 
+  -- Fold changes must reconcile through redraw, without cursor events.
+  local function settle(label, winid, expected)
+    vim.cmd("redraw!")
+    assert_true(
+      label,
+      vim.wait(1000, function()
+        return surfaces[winid].records[block_key].placed == expected
+      end, 10)
+    )
+  end
+  vim.api.nvim_set_current_win(narrow)
+  vim.wo.foldmethod = "manual"
+  vim.wo.foldminlines = 0
+  vim.cmd("3,5fold")
+  settle("fold hides without cursor motion", narrow, false)
+  assert_eq("fold clears all extmarks", #surfaces[narrow].records[block_key].extmark_ids, 0)
+  assert_true("other split stays placed", surfaces[wide].records[block_key].placed)
+  vim.cmd("3foldopen")
+  settle("unfold restores without cursor motion", narrow, true)
+  vim.cmd("normal! zE")
+  vim.cmd("4,5fold")
+  settle("partial fold hides whole image", narrow, false)
+  vim.cmd("normal! zE")
+  settle("delete fold restores image", narrow, true)
+  vim.cmd("1,5fold")
+  settle("outer fold ending at formula hides image", narrow, false)
+  vim.wo.foldenable = false
+  settle("disable folding restores image", narrow, true)
+  vim.wo.foldenable = true
+  settle("enable folding hides image", narrow, false)
+  vim.cmd("normal! zE")
+  settle("final restore", narrow, true)
+
+  -- An unrelated realization response must not override cursor source reveal
+  -- when a fold is opened before its scheduled redraw reconciliation runs.
+  vim.api.nvim_win_set_cursor(narrow, { 1, 1 })
+  placement.reconcile_window(narrow, {})
+  vim.cmd("1,5fold")
+  placement.reconcile_window(narrow, {})
+  vim.cmd("normal! zE")
+  placement.reconcile_window(narrow, {
+    upsert = { [block_key] = block_request },
+    visibility_scope = "realization",
+  })
+  assert_true("fold race preserves inline source reveal", surfaces[narrow].records[inline_key].source_visible)
+  assert_eq("fold race leaves inline unplaced", surfaces[narrow].records[inline_key].placed, false)
+
   assert_true("close transaction", placement.reconcile_window(narrow, { close = { [inline_key] = true } }))
   assert_eq("closed record removed", surfaces[narrow].records[inline_key], nil)
   assert_true("hard close deletes placement", calls.delete >= 1)

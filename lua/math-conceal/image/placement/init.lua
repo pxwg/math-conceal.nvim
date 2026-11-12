@@ -105,6 +105,18 @@ local function resolve_views(surface)
   return views
 end
 
+-- Fold state is window-local; a partially folded formula must also hide as a whole.
+local function folded(view)
+  if view ~= nil then
+    for row = view.row, view.end_row do
+      if vim.fn.foldclosed(row + 1) ~= -1 then
+        return true
+      end
+    end
+  end
+  return false
+end
+
 local function visibility_opts(surface, conceal_in_normal)
   local cursor = vim.api.nvim_win_get_cursor(surface.win)
   local mode = vim.api.nvim_get_mode().mode or ""
@@ -194,6 +206,7 @@ function M.reconcile_window(winid, transaction)
     return false
   end
 
+  surface.conceal_in_normal = transaction.conceal_in_normal == true
   local changed = {}
   for key in pairs(transaction.close or {}) do
     surface_api.close_record(surface, key)
@@ -216,20 +229,39 @@ function M.reconcile_window(winid, transaction)
     and next(transaction.close or {}) == nil
     and next(transaction.refresh or {}) == nil
   local views, source = visibility_state(surface, transaction.conceal_in_normal, changed, incremental)
-  for key, record in pairs(surface.records) do
-    if not incremental or source[key] ~= nil then
-      local desired_source = source[key] == true
-      if record.source_visible ~= desired_source then
+  vim.api.nvim_win_call(winid, function()
+    for key, record in pairs(surface.records) do
+      local is_folded = folded(views[key])
+      if record.folded ~= is_folded then
         changed[key] = true
+        -- A render response may race a fold change on an unrelated record.
+        -- Resolve its cursor/selection state before refreshing that placement.
+        if incremental then
+          source = conflict.resolve(surface.records, views, visibility_opts(surface, transaction.conceal_in_normal))
+          incremental = false
+        end
+      end
+      record.folded = is_folded
+      if not incremental or source[key] ~= nil then
+        local desired_source = source[key] == true or is_folded
+        if record.source_visible ~= desired_source then
+          changed[key] = true
+        end
       end
     end
-  end
+  end)
 
   local function commit()
     for key in pairs(changed) do
       local record = surface.records[key]
       if record ~= nil then
-        apply_record(surface, record, views[key], source[key] == true, transaction.refresh and transaction.refresh[key])
+        apply_record(
+          surface,
+          record,
+          views[key],
+          source[key] == true or record.folded,
+          transaction.refresh and transaction.refresh[key]
+        )
       end
     end
   end
@@ -240,6 +272,40 @@ function M.reconcile_window(winid, transaction)
   end
   return true
 end
+
+-- Folding can change without CursorMoved or a buffer edit. Defer mutations out
+-- of redraw, and retain the surface owner so a reused window cannot be refreshed.
+vim.api.nvim_set_decoration_provider(vim.api.nvim_create_namespace("math-conceal.image.placement.folds"), {
+  on_win = function(_, winid, bufnr)
+    local surface = surface_api._state().surfaces_by_win[winid]
+    if surface == nil or surface.bufnr ~= bufnr or surface.fold_sync_pending then
+      return false
+    end
+    local changed = vim.api.nvim_win_call(winid, function()
+      for _, record in pairs(surface.records) do
+        local view = track_view.for_ref(record.request.ref, { require_valid = true })
+        if record.folded ~= folded(view) then
+          return true
+        end
+      end
+      return false
+    end)
+    if changed then
+      surface.fold_sync_pending = true
+      vim.schedule(function()
+        surface.fold_sync_pending = nil
+        if
+          surface_api._state().surfaces_by_win[winid] == surface
+          and vim.api.nvim_win_is_valid(winid)
+          and vim.api.nvim_win_get_buf(winid) == bufnr
+        then
+          M.reconcile_window(winid, { conceal_in_normal = surface.conceal_in_normal })
+        end
+      end)
+    end
+    return false
+  end,
+})
 
 function M.close_window(winid, owner_bufnr)
   return surface_api.close_window(winid, owner_bufnr)
