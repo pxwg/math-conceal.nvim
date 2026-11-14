@@ -58,6 +58,17 @@ function M.shared_layout()
   return { key = "shared", signature = "shared" }
 end
 
+function M.formula_layout(track, window_context, config)
+  local binding = require("math-conceal.image").get_binding(track.bufnr)
+  local color =
+    require("math-conceal.environment").resolve_for(track.bufnr, window_context.winid, track, binding, config)
+  if not color then
+    return M.shared_layout()
+  end
+  local key = ("foreground:%06X"):format(color)
+  return { key = key, signature = key, foreground = color }
+end
+
 function M.realization_key(track, ctx, config, layout_key, variant)
   return vim.fn.sha256(table.concat({
     tracker.track_ref_key(track),

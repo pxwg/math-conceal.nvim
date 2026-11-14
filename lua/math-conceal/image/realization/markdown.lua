@@ -5,13 +5,13 @@ local wrapper = require("math-conceal.image.wrapper")
 
 local M = {}
 
-function M.layout(_track, _window_context, _ctx, _config)
-  return common.shared_layout()
+function M.layout(track, window_context, _ctx, config)
+  return common.formula_layout(track, window_context, config)
 end
 
 function M.describe(track, ctx, layout, config, projection_key)
   local key = common.realization_key(track, ctx, config, layout.key, "markdown-math")
-  local source, line_map = wrapper.build_slot_document(track, ctx, config)
+  local source, line_map = wrapper.build_slot_document(track, ctx, config, nil, layout.foreground)
   local display_kind = track.source_display_kind or "inline"
   local block_padding = math.max(0, tonumber(config.block_padding_cols) or 0)
   return {

@@ -247,14 +247,22 @@ function M.resolve_source(bufnr, source)
     root_lang = vim.treesitter.language.get_lang(filetype) or filetype
   end
 
+  local renderer = source.renderer or renderer_for_source(kind, filetype)
+  local image = root.opts.image or {}
+  local spec = (image.renderers or {})[renderer] or {}
+  local inherit = source.inherit_environment_color
+  if inherit == nil then
+    inherit = require("math-conceal.environment").enabled(spec, image)
+  end
   return {
+    inherit_environment_color = inherit,
     kind = kind,
     filetype = filetype,
     path = path,
     cwd = normalize_path(source.cwd or vim.uv.cwd()),
     root_lang = source.root_lang or root_lang,
     conceal_lang = source.conceal_lang or profile.conceal_lang,
-    renderer = source.renderer or renderer_for_source(kind, filetype),
+    renderer = renderer,
   }
 end
 
@@ -267,6 +275,7 @@ local function source_signature(source)
     source.root_lang,
     source.conceal_lang,
     source.renderer or "",
+    tostring(source.inherit_environment_color),
   }, "\0")
 end
 
@@ -300,11 +309,13 @@ local function attach_unicode(bufnr, source)
     conceal_lang = source.conceal_lang,
     root_lang = source.root_lang,
     extra_query_string = extra_query,
+    inherit_environment_color = source.inherit_environment_color,
   })
 end
 
 local function binding_matches_source(binding, source)
   return binding ~= nil
+    and binding.inherit_environment_color == source.inherit_environment_color
     and binding.kind == source.renderer
     and binding.source_kind == source.kind
     and binding.filetype == source.filetype

@@ -61,9 +61,9 @@ local function code_variant(track, ctx, config, layout, role, policy)
   }
 end
 
-function M.layout(track, window_context, _ctx, _config)
+function M.layout(track, window_context, _ctx, config)
   if not is_code(track) then
-    return common.shared_layout()
+    return common.formula_layout(track, window_context, config)
   end
   return {
     key = "window:" .. window_context.signature,
@@ -74,7 +74,7 @@ end
 
 local function describe_formula(track, ctx, layout, config, projection_key)
   local key = common.realization_key(track, ctx, config, layout.key, "typst-math")
-  local source, line_map = wrapper.build_slot_document(track, ctx, config)
+  local source, line_map = wrapper.build_slot_document(track, ctx, config, nil, layout.foreground)
   local display_kind = track.source_display_kind or "inline"
   return {
     adapter = "typst",

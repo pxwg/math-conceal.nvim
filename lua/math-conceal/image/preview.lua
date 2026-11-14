@@ -569,8 +569,19 @@ local function render_projection_preview(bufnr, projection, track, cursor_row, c
   end
 
   local ctx = context.resolve(bufnr, binding, tracker.get_context(bufnr), image.config)
-  local key =
-    preview_render_key(projection, track, ctx, source_text, preview_source, cursor_row, cursor_col, span, image.config)
+  local foreground =
+    require("math-conceal.environment").resolve_for(bufnr, vim.api.nvim_get_current_win(), track, binding, image.config)
+  local key = preview_render_key(
+    projection,
+    track,
+    ctx,
+    source_text,
+    preview_source,
+    cursor_row,
+    cursor_col,
+    span,
+    image.config
+  ) .. ":" .. tostring(foreground or "default")
 
   if preview.render_key == key and preview.visible_asset ~= nil then
     display.show_preview(bufnr, preview, track, preview.visible_asset)
@@ -595,7 +606,7 @@ local function render_projection_preview(bufnr, projection, track, cursor_row, c
   preview_track.source_hash = vim.fn.sha256(preview_source)
   preview_track.source_rows = math.max(1, wrapper.count_lines(preview_source))
 
-  local slot_source, line_map = wrapper.build_slot_document(preview_track, ctx, image.config)
+  local slot_source, line_map = wrapper.build_slot_document(preview_track, ctx, image.config, nil, foreground)
   local node_id = "preview:" .. projection.key
   local req_id = request_id(bufnr)
   local payload = {

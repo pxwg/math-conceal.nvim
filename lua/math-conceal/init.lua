@@ -166,6 +166,7 @@ local M = {
 --- @field debug boolean?: Show tracker debug projection extmarks. Default false.
 
 --- @class MathConcealImageRendererOptions
+--- @field inherit_environment_color boolean?: Inherit surrounding foreground for Unicode, images and previews. Default true.
 --- @field filetypes string[]?: Neovim filetypes that should attach this renderer.
 --- @field service_binary string?: Renderer service executable path.
 --- @field live_debounce integer?: Text-change live preview debounce in milliseconds for this renderer.
@@ -191,6 +192,7 @@ local M = {
 --- @field root_lang "latex"|"markdown"|"typst"
 --- @field conceal_lang "latex"|"typst"
 --- @field renderer string?
+--- @field inherit_environment_color boolean?: Explicit source override of the renderer option.
 
 --- @class MathConcealAttachSurfaces
 --- @field unicode boolean?
