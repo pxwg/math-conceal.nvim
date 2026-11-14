@@ -34,6 +34,8 @@ local function set_source(bufnr, lines)
 end
 
 local function display_marks(bufnr)
+  local source = require("math-conceal.nvim").get_attachment(bufnr).source
+  vim.treesitter.get_parser(bufnr, source.root_lang):parse(true)
   return require("math-conceal.render").collect_display_marks(bufnr, {
     toprow = 0,
     botrow = vim.api.nvim_buf_line_count(bufnr),
@@ -49,6 +51,7 @@ local function run()
 
   local conceal = require("math-conceal")
   conceal.setup({ image = { enabled = false } })
+  conceal = require("math-conceal.nvim")
 
   local bufnr = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_set_current_buf(bufnr)

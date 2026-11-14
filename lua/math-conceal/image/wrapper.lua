@@ -348,7 +348,7 @@ function M.source_range(track)
   }
 end
 
-function M.build_slot_document(track, ctx, config, window_layout)
+function M.build_slot_document(track, ctx, config, window_layout, foreground)
   local parts = {}
   local cur_line, cur_col = 1, 1
   local function append(text)
@@ -386,6 +386,9 @@ function M.build_slot_document(track, ctx, config, window_layout)
   end
 
   append(M.editor_size_prelude(config))
+  if foreground then
+    append(('#set text(fill: rgb("#%06X"))\n'):format(foreground))
+  end
 
   local gen_start = cur_line
   local gen_start_col = cur_col

@@ -290,6 +290,24 @@ Renderer-specific options live under `image.renderers.<name>`, including
 `code_render.exclude`, and Markdown's `mitex_package`, `mitex_preamble`, and
 `mitex_preamble_file`.
 
+Each renderer also accepts `inherit_environment_color` (default `true`).
+Set it to `false` to skip surrounding-foreground lookup for Unicode conceal,
+formula images and live previews, preserving default math styling:
+
+```lua
+image = {
+  renderers = {
+    org_typst = { filetypes = { "org" }, source_kind = "typst", inherit_environment_color = false },
+  },
+}
+```
+
+After changing the option, reattach the buffer (for example,
+`require("math-conceal.nvim").set(vim.bo.filetype, 0)`); the changed binding
+invalidates previous image and preview state. Other renderers remain enabled.
+The existing global `image.inherit_environment` remains a fallback when the
+renderer option is omitted. Explicit logical sources may override the option too.
+
 Markdown MiTeX rendering can prepend reusable LaTeX macro definitions to every
 inline and block formula. File definitions are loaded before inline definitions:
 

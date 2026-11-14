@@ -20,6 +20,7 @@ local M = {}
 ---@field path string?
 ---@field cwd string?
 ---@field renderer string?
+---@field inherit_environment_color boolean?
 
 ---@class MathConcealImageAttachOptions
 ---@field renderer string?
@@ -34,6 +35,7 @@ local M = {}
 ---@field filetypes string[]
 ---@field service_binary string
 ---@field live_debounce integer
+---@field inherit_environment_color boolean? Inherit surrounding foreground (default true).
 ---@field source_kind string?
 ---@field scanner string|fun(ctx: table): table|nil Builtin scanner name or scanner factory.
 ---@field backend string?
@@ -55,6 +57,7 @@ local M = {}
 ---@field tracker table
 ---@field renderers table<string, MathConcealImageRendererConfig>
 ---@field styling_type "colorscheme"|"simple"|"none"
+---@field inherit_environment boolean inherit persistent surrounding foreground colors
 ---@field color string?
 ---@field ppi integer
 ---@field math_baseline_pt number
@@ -74,6 +77,7 @@ local defaults = {
   },
   styling_type = "colorscheme",
   color = nil,
+  inherit_environment = true,
   ppi = 300,
   math_baseline_pt = 11,
   formula_worker_count = 2,
@@ -182,6 +186,7 @@ local function buffer_context(bufnr, kind, source)
     bufnr = bufnr,
     kind = kind,
     source_kind = source.kind or scanners.source_kind(kind, spec),
+    inherit_environment_color = source.inherit_environment_color,
     filetype = source.filetype or vim.bo[bufnr].filetype,
     path = normalize_path(source.path or vim.api.nvim_buf_get_name(bufnr)),
     cwd = normalize_path(source.cwd or vim.uv.cwd()),
@@ -312,6 +317,9 @@ local function path_excluded(spec, ctx)
 end
 
 local function make_binding(kind, spec, ctx)
+  if ctx.inherit_environment_color == nil then
+    ctx.inherit_environment_color = require("math-conceal.environment").enabled(spec, M.config)
+  end
   local source_kind = ctx.source_kind or scanners.source_kind(kind, spec)
   return {
     bufnr = ctx.bufnr,
@@ -325,6 +333,7 @@ local function make_binding(kind, spec, ctx)
     path = ctx.path,
     cwd = ctx.cwd,
     enabled = true,
+    inherit_environment_color = ctx.inherit_environment_color,
     service_binary = spec.service_binary,
     live_debounce = tonumber(spec.live_debounce) or 0,
     root = resolve_root(spec, ctx),
@@ -519,6 +528,7 @@ local function same_binding(a, b)
   for _, key in ipairs({
     "kind",
     "source_kind",
+    "inherit_environment_color",
     "scanner",
     "scanner_factory",
     "backend",
@@ -847,7 +857,7 @@ local function setup_autocmds()
 
   vim.api.nvim_create_autocmd("OptionSet", {
     group = augroup_id,
-    pattern = { "wrap", "number", "relativenumber", "signcolumn" },
+    pattern = { "wrap", "number", "relativenumber", "signcolumn", "winhighlight" },
     desc = "refresh math-conceal image display strategy after window option changes",
     callback = function()
       local bufnr = vim.api.nvim_get_current_buf()

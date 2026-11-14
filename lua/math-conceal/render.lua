@@ -275,6 +275,17 @@ local function get_expand_range(spec, node)
   return node:range()
 end
 
+local function formula_range(node)
+  while node do
+    local kind = node:type()
+    if kind == "math" or kind == "latex_block" or kind == "inline_formula" or kind == "displayed_equation" then
+      local row, col, end_row, end_col = node:range()
+      return { row = row, col = col, end_row = end_row, end_col = end_col }
+    end
+    node = node:parent()
+  end
+end
+
 local function get_conceal_line_range(node)
   local r1, _, r2, c2 = node:range()
   if r1 == r2 then
@@ -427,6 +438,7 @@ local function collect_marks(buf_id, cache, toprow, botrow)
               er2, -- [10]
               ec2, -- [11]
               [13] = group, -- query/tree order
+              [14] = formula_range(node),
             })
           end
         end
@@ -668,6 +680,8 @@ local function setup_decoration_provider()
         win_cursors[win_id] = { buf = buf_id, row = curr_row, col = curr_col, keep = keep_conceal }
       end
 
+      local environment = require("math-conceal.environment")
+      local environment_groups = {}
       for _, m in ipairs(state.marks) do
         if m[12] == "line" or not mark_overlaps_range(m, toprow, botrow) then
           goto continue
@@ -679,9 +693,18 @@ local function setup_decoration_provider()
         local is_cursor_inside = position_inside_range(curr_row, curr_col, r1, c1, r2, c2)
 
         if keep_conceal or not is_cursor_inside then
+          local group = m[6]
+          local span = m[14]
+          if span and cache.inherit_environment_color ~= false then
+            local key = table.concat({ span.row, span.col, span.end_row, span.end_col }, ":")
+            if environment_groups[key] == nil then
+              environment_groups[key] = environment.group(environment.resolve(buf_id, win_id, span)) or false
+            end
+            group = environment_groups[key] or group
+          end
           set_extmark(buf_id, ns_id, m[1], m[2], {
             conceal = m[5],
-            hl_group = m[6],
+            hl_group = group,
             priority = m[7],
             end_row = m[3],
             end_col = m[4],
@@ -828,6 +851,7 @@ local function attach_to_buffer(buf, config)
     buffer_cache[buf].owned_highlighter = owned_highlighter
     buffer_cache[buf].root_lang = root_lang
     buffer_cache[buf].specs = specs
+    buffer_cache[buf].inherit_environment_color = config.inherit_environment_color
     buffer_cache[buf].version = buffer_cache[buf].version + 1
     buffer_cache[buf].range_cache = {}
     buffer_cache[buf].range_cache_order = {}
@@ -839,6 +863,7 @@ local function attach_to_buffer(buf, config)
     owned_highlighter = owned_highlighter,
     root_lang = root_lang,
     specs = specs,
+    inherit_environment_color = config.inherit_environment_color,
     version = 1,
     range_cache = {},
     range_cache_order = {},
@@ -903,6 +928,7 @@ function M.attach(buf, lang)
 
   local config = vim.tbl_extend("force", {}, active, {
     root_lang = attach_opts.root_lang,
+    inherit_environment_color = attach_opts.inherit_environment_color,
   })
   if attach_opts.extra_query_string ~= nil and attach_opts.extra_query_string ~= "" then
     config.query_string = config.query_string .. "\n" .. strip_extends(attach_opts.extra_query_string)
