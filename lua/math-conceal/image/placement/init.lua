@@ -266,7 +266,16 @@ function M.reconcile_window(winid, transaction)
     end
   end
   if type(terminal.batch) == "function" then
-    terminal.batch(commit)
+    local range = {}
+    surface.redraw_range = range
+    local ok, err = pcall(terminal.batch, commit)
+    surface.redraw_range = nil
+    if range[1] then
+      surface_api.redraw(surface, range[1], range[2])
+    end
+    if not ok then
+      error(err, 0)
+    end
   else
     commit()
   end

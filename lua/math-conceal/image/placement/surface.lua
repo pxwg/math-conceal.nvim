@@ -121,6 +121,12 @@ function M.redraw(surface, start_row, end_row)
   end
   start_row = math.max(0, math.floor(tonumber(start_row) or 0))
   end_row = math.max(start_row, math.floor(tonumber(end_row) or start_row))
+  if surface.redraw_range then
+    local range = surface.redraw_range
+    range[1] = math.min(range[1] or start_row, start_row)
+    range[2] = math.max(range[2] or end_row, end_row)
+    return
+  end
   pcall(vim.api.nvim__redraw, {
     win = surface.win,
     range = { start_row, end_row + 1 },

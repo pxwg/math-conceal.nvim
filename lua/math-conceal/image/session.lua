@@ -183,7 +183,7 @@ send_next_payload = function(service, lane)
   end
 end
 
-local function handle_line(service, line)
+local function handle_line(service, line, transactions)
   if line == "" then
     return
   end
@@ -196,7 +196,7 @@ local function handle_line(service, line)
 
   local bufnr = service.bufnr
   local meta = service and service.active and service.active[decoded.request_id] or nil
-  require("math-conceal.image.projection").handle_service_response(bufnr, decoded, meta)
+  require("math-conceal.image.projection").handle_service_response(bufnr, decoded, meta, transactions)
 
   if meta ~= nil then
     meta.received = (meta.received or 0) + 1
@@ -221,9 +221,16 @@ local function on_stdout(service, _, data)
   end
 
   service.line_buffer = service.line_buffer .. (data[1] or "")
+  -- Only batch complete responses from this read. The final entry is a fragment.
+  local transactions = #data > 2 and {} or nil
   for idx = 2, #data do
-    handle_line(service, service.line_buffer)
+    handle_line(service, service.line_buffer, transactions)
     service.line_buffer = data[idx] or ""
+  end
+  if transactions ~= nil then
+    for winid, transaction in pairs(transactions) do
+      require("math-conceal.image.placement").reconcile_window(winid, transaction)
+    end
   end
 end
 

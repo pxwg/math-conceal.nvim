@@ -519,7 +519,7 @@ local function sync_repair(event)
   dispatch_batches(bufnr, binding, adapter, batches, ctx, image.config)
 end
 
-local function place_ready_realization(bufnr, bs, projection, track, adapter, asset, config)
+local function place_ready_realization(bufnr, bs, projection, track, adapter, asset, config, transactions)
   for _, winid in ipairs(active_windows(bufnr)) do
     local placement_keys = bs.window_placement_keys[winid]
     local realization_keys = bs.window_realization_keys[winid]
@@ -531,11 +531,18 @@ local function place_ready_realization(bufnr, bs, projection, track, adapter, as
     then
       local request = adapter.placement_request(asset, track, config)
       if request ~= nil then
-        placement.reconcile_window(winid, {
-          upsert = { [projection.key] = request },
-          conceal_in_normal = config.conceal_in_normal == true,
-          visibility_scope = "realization",
-        })
+        local transaction = transactions and transactions[winid]
+          or {
+            upsert = {},
+            conceal_in_normal = config.conceal_in_normal == true,
+            visibility_scope = "realization",
+          }
+        transaction.upsert[projection.key] = request
+        if transactions then
+          transactions[winid] = transaction
+        else
+          placement.reconcile_window(winid, transaction)
+        end
       end
     end
   end
@@ -625,7 +632,7 @@ function M.on_tracker_repair(event)
   require("math-conceal.image.preview").schedule(event.bufnr, { immediate = true })
 end
 
-function M.handle_service_response(bufnr, resp, meta)
+function M.handle_service_response(bufnr, resp, meta, transactions)
   if meta ~= nil and meta.kind == "live_preview" then
     require("math-conceal.image.preview").handle_service_response(bufnr, resp, meta)
     return
@@ -709,7 +716,16 @@ function M.handle_service_response(bufnr, resp, meta)
   projection.failed[descriptor.key] = nil
   projection.status = "ready"
   touch_asset(bs, projection, asset)
-  place_ready_realization(bufnr, bs, projection, track, adapter, asset, require("math-conceal.image").config)
+  place_ready_realization(
+    bufnr,
+    bs,
+    projection,
+    track,
+    adapter,
+    asset,
+    require("math-conceal.image").config,
+    transactions
+  )
 end
 
 function M.sync_cursor(bufnr, opts)

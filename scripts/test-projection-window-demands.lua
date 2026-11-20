@@ -226,7 +226,10 @@ local function run()
 
   transaction_history = {}
 
+  local combined = {}
   for _, batch in ipairs(vim.deepcopy(dispatched)) do
+    -- Deliver formula responses together and each window-specific code response alone.
+    local pending = batch.kind == "formula" and combined or nil
     for _, descriptor in ipairs(batch.descriptors) do
       projection.handle_service_response(bufnr, {
         type = "test",
@@ -240,13 +243,16 @@ local function run()
         kind = "realization",
         adapter = "typst",
         node_meta = { [descriptor.node.node_id] = descriptor },
-      })
+      }, pending)
     end
   end
-  assert_eq("ready responses submit six matching window updates", #transaction_history, 6)
+  for _, winid in ipairs(wins) do
+    assert_eq("two formula placements share a transaction", vim.tbl_count(combined[winid].upsert), 2)
+    require("math-conceal.image.placement").reconcile_window(winid, combined[winid])
+  end
+  assert_eq("one formula and one code update per window", #transaction_history, 4)
   local ready_by_win = {}
   for _, item in ipairs(transaction_history) do
-    assert_eq("ready update contains one track", vim.tbl_count(item.transaction.upsert), 1)
     assert_eq("ready update uses realization visibility scope", item.transaction.visibility_scope, "realization")
     ready_by_win[item.winid] = ready_by_win[item.winid] or {}
     for key, request in pairs(item.transaction.upsert) do
