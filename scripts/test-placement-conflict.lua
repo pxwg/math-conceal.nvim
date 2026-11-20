@@ -79,6 +79,17 @@ source = conflict.resolve(overlap_records, overlap_views, {})
 assert_true("unrelated left overlap reveals", source.left)
 assert_true("unrelated right overlap reveals", source.right)
 
+overlap_views.left.end_row, overlap_views.left.end_col = 4, 3
+overlap_views.right.row, overlap_views.right.end_row = 4, 4
+overlap_views.right.col = 3
+source = conflict.resolve(overlap_records, overlap_views, {})
+assert_false("adjacent multiline end stays concealed", source.left)
+assert_false("adjacent inline start stays concealed", source.right)
+overlap_views.right.col = 2
+source = conflict.resolve(overlap_records, overlap_views, {})
+assert_true("last row overlap reveals multiline formula", source.left)
+assert_true("last row overlap reveals inline formula", source.right)
+
 source = conflict.resolve({ block = ready("sandwich") }, {
   block = { row = 3, col = 2, end_row = 3, end_col = 6 },
 }, {})

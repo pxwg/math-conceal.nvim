@@ -151,12 +151,28 @@ function M.resolve(records, views, opts)
     end
   end
 
-  for left_index = 1, #keys do
-    local left_key = keys[left_index]
-    local left = views and views[left_key] or nil
-    for right_index = left_index + 1, #keys do
-      local right_key = keys[right_index]
-      local right = views and views[right_key] or nil
+  local ordered = {}
+  for _, key in ipairs(keys) do
+    if views and views[key] then
+      ordered[#ordered + 1] = key
+    end
+  end
+  table.sort(ordered, function(a, b)
+    local left, right = views[a], views[b]
+    if left.row ~= right.row then
+      return left.row < right.row
+    end
+    return left.col < right.col
+  end)
+  for left_index = 1, #ordered do
+    local left_key = ordered[left_index]
+    local left = views[left_key]
+    for right_index = left_index + 1, #ordered do
+      local right_key = ordered[right_index]
+      local right = views[right_key]
+      if right.row > left.end_row or (right.row == left.end_row and right.col >= left.end_col) then
+        break
+      end
       if views_overlap(left, right) and not direct_parent_child(left_key, left, right_key, right) then
         source[left_key] = true
         source[right_key] = true
