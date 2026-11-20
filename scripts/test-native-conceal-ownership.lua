@@ -154,7 +154,14 @@ for _, mark in ipairs(specific_marks) do
 end
 assert(links == 2, vim.inspect(specific_marks))
 assert(vim.treesitter.query.get("markdown_inline", "highlights") == raw_inline)
+local borrowed = vim.treesitter.highlighter.active[d]
+if borrowed._has_conceal ~= nil then
+  assert(not borrowed._has_conceal, "filtered highlighter must skip its width pass")
+end
 special:detach()
+if borrowed._has_conceal ~= nil then
+  assert(borrowed._has_conceal, "borrowed highlighter must resume native width measurement")
+end
 -- Native-only configurations still attach and own all conceal.
 render.update_query("latex", "")
 local e = newbuf()

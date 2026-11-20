@@ -1,6 +1,10 @@
 -- nvim --headless -u NONE -l scripts/test-environment-conceal.lua
 vim.opt.rtp:prepend(vim.fn.getcwd())
 local api = vim.api
+-- MATH_CONCEAL_LEGACY_CONCEAL=1 exercises the Neovim 0.12 ephemeral path on nightly.
+if os.getenv("MATH_CONCEAL_LEGACY_CONCEAL") == "1" then
+  api.nvim__ns_set = nil
+end
 local provider, render_ns
 local set_provider = api.nvim_set_decoration_provider
 api.nvim_set_decoration_provider = function(ns, callbacks)
@@ -24,6 +28,26 @@ vim.treesitter.query.set("typst", "highlights", "(heading) @environment")
 api.nvim_set_hl(0, "Normal", { fg = "#eeeeee" })
 api.nvim_set_hl(0, "@environment.typst", { fg = "#ff8800" })
 local buf, win = api.nvim_get_current_buf(), api.nvim_get_current_win()
+local render = require("math-conceal.render")
+local function draw()
+  emitted = {}
+  -- Stand in for the native highlighter, which parses in on_start before our on_win.
+  vim.treesitter.highlighter.active[buf].tree:parse(true)
+  provider.on_win(nil, win, buf, 0, 2)
+  if not render.uses_persistent_conceal() then
+    return
+  end
+  -- Neovim's conceal provider protocol: each drawn row, then the end of the redraw.
+  for row = 0, 2 do
+    provider._on_conceal("conceal", win, buf, row)
+  end
+  provider.on_end("end", 0)
+  for _, mark in ipairs(api.nvim_buf_get_extmarks(buf, render.window_namespace(win), 0, -1, { details = true })) do
+    if mark[4].conceal ~= nil then
+      emitted[#emitted + 1] = { conceal = mark[4].conceal, hl_group = mark[4].hl_group }
+    end
+  end
+end
 api.nvim_buf_set_lines(buf, 0, -1, false, { "= Heading $alpha$", "plain $alpha$", "cursor" })
 local handle = require("math-conceal.nvim").attach(buf, {
   source = { kind = "typst", filetype = "typst" },
@@ -33,7 +57,7 @@ local handle = require("math-conceal.nvim").attach(buf, {
 assert(handle.unicode)
 vim.treesitter.get_parser(buf, "typst"):parse()
 api.nvim_win_set_cursor(win, { 3, 0 })
-provider.on_win(nil, win, buf, 0, 2)
+draw()
 local inherited, ordinary = false, false
 for _, mark in ipairs(emitted) do
   if mark.conceal == "𝛼" then
@@ -49,8 +73,7 @@ assert(inherited and ordinary, vim.inspect(emitted))
 local ns = api.nvim_create_namespace("test-heading-decoration")
 api.nvim_set_hl(0, "EnvironmentOverride", { fg = "#33aa55" })
 set_extmark(buf, ns, 0, 0, { end_col = 17, hl_group = "EnvironmentOverride", priority = 200 })
-emitted = {}
-provider.on_win(nil, win, buf, 0, 2)
+draw()
 assert(
   vim.iter(emitted):any(function(mark)
     return mark.conceal == "𝛼" and mark.hl_group == "MathConcealEnvironment33AA55"
@@ -78,8 +101,7 @@ local resolve = env.resolve
 env.resolve = function()
   error("disabled adapter must not resolve colors")
 end
-emitted = {}
-provider.on_win(nil, win, buf, 0, 2)
+draw()
 assert(vim.iter(emitted):any(function(mark)
   return mark.conceal == "𝛼"
 end))
@@ -89,8 +111,7 @@ end))
 env.resolve = resolve
 root.opts.image.renderers.org_typst.inherit_environment_color = true
 reattach()
-emitted = {}
-provider.on_win(nil, win, buf, 0, 2)
+draw()
 assert(vim.iter(emitted):any(function(mark)
   return mark.hl_group == "MathConcealEnvironment33AA55"
 end))

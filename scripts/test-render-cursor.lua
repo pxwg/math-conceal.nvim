@@ -7,6 +7,11 @@ local function assert_eq(label, actual, expected)
   end
 end
 
+-- MATH_CONCEAL_LEGACY_CONCEAL=1 exercises the Neovim 0.12 ephemeral path on nightly.
+if os.getenv("MATH_CONCEAL_LEGACY_CONCEAL") == "1" then
+  vim.api.nvim__ns_set = nil
+end
+
 local function run()
   vim.opt.runtimepath:append(vim.fn.getcwd())
   assert(vim.treesitter.language.add("latex"), "LaTeX parser must be installed")
@@ -34,6 +39,7 @@ local function run()
   end
 
   local render = require("math-conceal.render")
+  local persistent = render.uses_persistent_conceal()
   render.setup({ conceal = {} }, "latex")
   render.update_query(
     "latex",
@@ -58,7 +64,10 @@ local function run()
     target = target or vim.api.nvim_get_current_win()
     emitted = {}
     local owner = vim.api.nvim_win_get_buf(target)
-    provider.on_win(nil, target, owner, 0, vim.api.nvim_buf_line_count(owner) - 1)
+    local last = vim.api.nvim_buf_line_count(owner) - 1
+    -- Stand in for the native highlighter, which parses the viewport before our on_win.
+    vim.treesitter.highlighter.active[owner].tree:parse({ 0, last + 1 })
+    provider.on_win(nil, target, owner, 0, last)
   end
   local function event(name, pattern)
     vim.api.nvim_exec_autocmds(name or "CursorMoved", { pattern = pattern, modeline = false })
@@ -74,35 +83,67 @@ local function run()
   local function ranges()
     local out = {}
     for _, opts in ipairs(redraws) do
-      assert_eq("redraw targets current window", opts.win, vim.api.nvim_get_current_win())
-      assert_eq("redraw preserves valid screen lines", opts.valid, true)
-      assert_eq("redraw batches flushing", opts.flush, false)
-      out[#out + 1] = opts.range
+      -- Buffer-wide redraws come from the native highlighter's parse callbacks.
+      if opts.win ~= nil or opts.buf == nil then
+        assert_eq("redraw targets current window", opts.win, vim.api.nvim_get_current_win())
+        assert_eq("redraw preserves valid screen lines", opts.valid, true)
+        assert_eq("redraw batches flushing", opts.flush, false)
+        out[#out + 1] = opts.range
+      end
     end
     return out
+  end
+  -- Persistent surfaces hold the current conceal state; count it without drawing.
+  local function surface_count(target)
+    target = target or vim.api.nvim_get_current_win()
+    local ns = render.window_namespace(target)
+    if not ns then
+      return 0
+    end
+    local count = 0
+    for _, mark in
+      ipairs(vim.api.nvim_buf_get_extmarks(vim.api.nvim_win_get_buf(target), ns, 0, -1, { details = true }))
+    do
+      if mark[4].conceal ~= nil then
+        count = count + 1
+      end
+    end
+    return count
+  end
+  local function rendered(target)
+    return persistent and surface_count(target) or #emitted
+  end
+  -- Legacy motion repaints toggled lines; persistent motion reconciles marks with no repaint.
+  local function after_move(label, legacy_ranges, count)
+    if persistent then
+      assert_eq(label .. " (no repaint)", ranges(), {})
+      assert_eq(label, surface_count(), count)
+    else
+      assert_eq(label, ranges(), legacy_ranges)
+    end
   end
 
   vim.api.nvim_win_set_cursor(win, { 1, 0 })
   draw()
   event()
-  assert_eq("all three concealed nodes render", #emitted, 3)
+  assert_eq("all three concealed nodes render", rendered(), 3)
   move(1, 1)
-  assert_eq("ordinary text needs no plugin redraw", ranges(), {})
+  after_move("ordinary text needs no plugin redraw", {}, 3)
 
   move(2, 1)
-  assert_eq("entering a symbol redraws its source line", ranges(), { { 1, 2 } })
+  after_move("entering a symbol redraws its source line", { { 1, 2 } }, 2)
   draw()
-  assert_eq("symbol under cursor expands", #emitted, 2)
+  assert_eq("symbol under cursor expands", rendered(), 2)
   move(2, 2)
-  assert_eq("moving within one symbol needs no redraw", ranges(), {})
+  after_move("moving within one symbol needs no redraw", {}, 2)
   move(2, 12)
-  assert_eq("two toggles on one line coalesce", ranges(), { { 1, 2 } })
+  after_move("two toggles on one line coalesce", { { 1, 2 } }, 2)
   move(1, 0)
   draw()
   redraws = {}
   vim.api.nvim_win_set_cursor(win, { 2, 1 })
   event("CursorMovedI")
-  assert_eq("insert-mode cursor motion reveals symbol", ranges(), { { 1, 2 } })
+  after_move("insert-mode cursor motion reveals symbol", { { 1, 2 } }, 2)
   draw()
   move(1, 0)
   draw()
@@ -110,15 +151,15 @@ local function run()
   -- :redraw can run on_win before CursorMoved. It must not consume the old
   -- cursor state: Neovim may only have repainted the old and new cursor lines.
   move(3, 1, true)
-  assert_eq("early rendering preserves pending multiline reveal", ranges(), { { 2, 5 } })
+  after_move("early rendering preserves pending multiline reveal", { { 2, 5 } }, 2)
   draw()
-  assert_eq("multiline equation expands", #emitted, 2)
+  assert_eq("multiline equation expands", rendered(), 2)
   move(4, 2)
-  assert_eq("motion within multiline equation needs no redraw", ranges(), {})
+  after_move("motion within multiline equation needs no redraw", {}, 2)
   move(6, 0)
-  assert_eq("leaving equation redraws all its source lines", ranges(), { { 2, 5 } })
+  after_move("leaving equation redraws all its source lines", { { 2, 5 } }, 3)
   draw()
-  assert_eq("equation conceals again", #emitted, 3)
+  assert_eq("equation conceals again", rendered(), 3)
 
   vim.cmd("vsplit")
   local split = vim.api.nvim_get_current_win()
@@ -126,25 +167,28 @@ local function run()
   draw(split)
   event()
   move(2, 1)
-  assert_eq("split redraw is local", ranges(), { { 1, 2 } })
+  after_move("split redraw is local", { { 1, 2 } }, 2)
   vim.api.nvim_set_current_win(win)
   move(6, 1)
-  assert_eq("other window retains independent cursor state", ranges(), {})
+  after_move("other window retains independent cursor state", {}, 3)
+  if persistent then
+    assert_eq("split surface keeps its own reveal", surface_count(split), 2)
+  end
 
   render.setup_buffer(buf, { mode = "preview" })
   draw()
   event()
   move(2, 1)
-  assert_eq("preview motion never changes conceal", ranges(), {})
+  after_move("preview motion never changes conceal", {}, 3)
   draw()
-  assert_eq("preview retains symbol under cursor", #emitted, 3)
+  assert_eq("preview retains symbol under cursor", rendered(), 3)
 
   move(4, 2)
   render.setup_buffer(buf, { mode = "edit" })
   draw()
-  assert_eq("preview to edit expands multiline equation", #emitted, 2)
+  assert_eq("preview to edit expands multiline equation", rendered(), 2)
   move(6, 0, true)
-  assert_eq("motion after mode redraw conceals the complete equation", ranges(), { { 2, 5 } })
+  after_move("motion after mode redraw conceals the complete equation", { { 2, 5 } }, 3)
   render.setup_buffer(buf, { mode = "preview" })
   move(2, 1)
   draw()
@@ -160,13 +204,13 @@ local function run()
   redraws = {}
   mode = "v"
   event("ModeChanged", "n:v")
-  assert_eq("presentation visual entry reveals cursor node", ranges(), { { 1, 2 } })
+  after_move("presentation visual entry reveals cursor node", { { 1, 2 } }, 2)
   draw()
-  assert_eq("presentation visual selection expands symbol", #emitted, 2)
+  assert_eq("presentation visual selection expands symbol", rendered(), 2)
   redraws = {}
   mode = "n"
   event("ModeChanged", "v:n")
-  assert_eq("presentation visual exit conceals cursor node", ranges(), { { 1, 2 } })
+  after_move("presentation visual exit conceals cursor node", { { 1, 2 } }, 3)
   vim.api.nvim_get_mode = get_mode
 
   local replacement = attach({ "plain", "plain", "\\gamma", "plain" })
@@ -175,19 +219,20 @@ local function run()
   draw()
   redraws = {}
   event()
-  assert_eq("reused window initializes replacement buffer cursor", ranges(), {})
+  after_move("reused window initializes replacement buffer cursor", {}, 0)
   move(1, 0)
-  assert_eq("replacement redraw uses only replacement marks", ranges(), { { 2, 3 } })
+  after_move("replacement redraw uses only replacement marks", { { 2, 3 } }, 1)
 
   vim.api.nvim_buf_set_lines(replacement, 2, 3, false, { "\\delta" })
   move(3, 1)
-  assert_eq("edit invalidation conservatively repaints viewport", ranges(), { { 0, 4 } })
+  -- The edit itself repaints; persistent surfaces rebuild rows of the new generation lazily.
+  assert_eq("edit invalidation conservatively repaints viewport", ranges(), persistent and {} or { { 0, 4 } })
   draw()
-  assert_eq("edited symbol under cursor expands", #emitted, 0)
+  assert_eq("edited symbol under cursor expands", rendered(), 0)
   move(3, 2)
-  assert_eq("refreshed edit cache restores no-op motion", ranges(), {})
+  after_move("refreshed edit cache restores no-op motion", {}, 0)
   move(1, 0)
-  assert_eq("refreshed edit cache restores targeted redraw", ranges(), { { 2, 3 } })
+  after_move("refreshed edit cache restores targeted redraw", { { 2, 3 } }, 1)
 
   vim.api.nvim_buf_set_lines(replacement, 0, -1, false, { "outside", "\\[", "a + b", "\\]", "outside" })
   vim.api.nvim_win_set_cursor(win, { 3, 1 })
@@ -208,17 +253,17 @@ local function run()
     { win }
   )
   draw()
-  assert_eq("default preview conceals equation under cursor", #emitted, 1)
+  assert_eq("default preview conceals equation under cursor", rendered(), 1)
   move(3, 2)
   render.set_default_buffer_config({ mode = "edit" })
   draw()
-  assert_eq("default edit expands equation under cursor", #emitted, 0)
+  assert_eq("default edit expands equation under cursor", rendered(), 0)
   move(5, 0, true)
-  assert_eq("motion after default mode redraw conceals equation", ranges(), { { 1, 4 } })
+  after_move("motion after default mode redraw conceals equation", { { 1, 4 } }, 1)
   assert_eq("explicit mode survives default changes", render.get_buffer_config(buf).mode, "presentation")
   vim.api.nvim_set_current_win(split)
   move(1, 0)
-  assert_eq("default changes preserve explicit mode cursor state", ranges(), {})
+  after_move("default changes preserve explicit mode cursor state", {}, 3)
 
   render.detach(buf)
   render.detach(replacement)

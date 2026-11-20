@@ -46,6 +46,7 @@ end
 
 local function filtered_query(raw)
   return setmetatable({
+    has_conceal = false,
     has_conceal_line = false,
     iter_captures = function(_, ...)
       local iter = raw:iter_captures(...)
@@ -103,6 +104,31 @@ local function reset(buf)
   -- Native conceal_lines marks are persistent; retire them on ownership changes.
   if vim.api.nvim_buf_is_valid(buf) then
     vim.api.nvim_buf_clear_namespace(buf, native_ns, 0, -1)
+  end
+  -- Nightly registers its own width provider when the query advertises conceal.
+  -- A filtered highlighter has no conceal work. Balance its registration on
+  -- ownership transitions, including a borrowed highlighter resuming on detach.
+  if hl._has_conceal ~= nil and vim.api.nvim__buf_set_conceal_provider then
+    local intra, lines = false, false
+    if not owners[buf] then
+      local function visit(language)
+        local q = original_get_query(hl, language:lang()):query()
+        intra = intra or (q and q.has_conceal == true) or false
+        lines = lines or (q and q.has_conceal_line == true) or false
+        for _, child in pairs(language:children()) do
+          visit(child)
+        end
+      end
+      visit(hl.tree)
+    end
+    if hl._has_conceal ~= intra then
+      vim.api.nvim__buf_set_conceal_provider(buf, intra)
+    end
+    hl._has_conceal, hl._has_conceal_line = intra, lines
+    local ns = vim.api.nvim_get_namespaces()["nvim.treesitter.highlighter.conceal"]
+    if ns then
+      vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+    end
   end
   if not owners[buf] then
     for _, wrapper in pairs(hl._queries) do

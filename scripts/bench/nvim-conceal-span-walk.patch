@@ -1,0 +1,44 @@
+diff --git a/src/nvim/plines.c b/src/nvim/plines.c
+index 0f8a093..f88bf49 100644
+--- a/src/nvim/plines.c
++++ b/src/nvim/plines.c
+@@ -126,4 +126,5 @@ CSType init_charsize_arg(CharsizeArg *csarg, win_T *wp, linenr_T lnum, char *lin
+   csarg->use_tabstop = !wp->w_p_list || wp->w_p_lcs_chars.tab1;
+   csarg->extconceal = NULL;
++  csarg->extconceal_idx = 0;
+
+   if (lnum > 0) {
+@@ -385,5 +386,22 @@ CharSize charsize_regular(CharsizeArg *csarg, const char *cur, colnr_T const vco
+     int const col = (int)(cur - line);
+     int const own = body - csarg->cur_text_width_left - csarg->cur_text_width_right;
+-    const ConcealSpan *const span = conceal_span_at(spans, col);
++    // Character sizing walks the line in byte order. Advance through spans
++    // together with the text instead of searching the entire vector per character.
++    size_t i = csarg->extconceal_idx;
++    if (i < kv_size(*spans) && kv_A(*spans, i).end_col <= col) {
++      i++;
++    }
++    const ConcealSpan *span = NULL;
++    if ((i > 0 && col < kv_A(*spans, i - 1).end_col)
++        || (i < kv_size(*spans) && kv_A(*spans, i).end_col <= col)) {
++      // Single-position measurements can start anywhere on the line.
++      span = conceal_span_at(spans, col);
++      if (span != NULL) {
++        i = (size_t)(span - spans->items);
++      }
++    } else if (i < kv_size(*spans) && kv_A(*spans, i).start_col <= col) {
++      span = &kv_A(*spans, i);
++    }
++    csarg->extconceal_idx = i;
+     if (span != NULL) {
+       hidden = conceal_span_hidden(span, col, own);
+diff --git a/src/nvim/plines.h b/src/nvim/plines.h
+index d6b9c31..263bd5a 100644
+--- a/src/nvim/plines.h
++++ b/src/nvim/plines.h
+@@ -50,4 +50,5 @@ typedef struct {
+   MarkTreeIter iter[1];
+
++  size_t extconceal_idx;  ///< First span not passed in the current line walk.
+   const ConcealSpans *extconceal;  ///< Extmark-conceal of the line, if measuring with it.
+ } CharsizeArg;

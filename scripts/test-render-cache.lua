@@ -13,6 +13,11 @@ local function assert_true(label, value)
   end
 end
 
+-- MATH_CONCEAL_LEGACY_CONCEAL=1 exercises the Neovim 0.12 ephemeral path on nightly.
+if os.getenv("MATH_CONCEAL_LEGACY_CONCEAL") == "1" then
+  vim.api.nvim__ns_set = nil
+end
+
 local function run()
   vim.opt.runtimepath:prepend(vim.fn.getcwd())
   for _, lang in ipairs({ "latex", "typst", "markdown", "markdown_inline" }) do
@@ -51,7 +56,11 @@ local function run()
       query.iter_captures = function(...)
         passes = passes + 1
         local first, last = select(4, ...)
-        query_ranges[#query_ranges + 1] = { first, last }
+        -- The plugin math query and native highlighter queries visit each range once.
+        local previous = query_ranges[#query_ranges]
+        if not previous or previous[1] ~= first or previous[2] ~= last then
+          query_ranges[#query_ranges + 1] = { first, last }
+        end
         return iter_captures(...)
       end
     end
@@ -59,6 +68,8 @@ local function run()
   end
 
   require("math-conceal").setup({ image = { enabled = false }, integrations = { snacks = false } })
+  -- Environment color runs its own native captures; test-environment-conceal covers it.
+  require("math-conceal.environment").resolve = function() end
   local conceal = require("math-conceal.nvim")
   local render = require("math-conceal.render")
   local function attach(kind, lines)
@@ -72,9 +83,27 @@ local function run()
     assert_true(kind .. " attachment succeeds", handle.unicode)
     return buf, handle
   end
+  -- Persistent surfaces keep marks between redraws; report those overlapping the viewport.
+  local function surface_marks(win, buf, top, bot)
+    local out = {}
+    local ns = render.window_namespace(win)
+    for _, mark in ipairs(ns and vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }) or {}) do
+      local details = mark[4]
+      if details.conceal ~= nil and mark[2] <= bot and (details.end_row or mark[2]) >= top then
+        out[#out + 1] = { row = mark[2], col = mark[3], conceal = details.conceal, end_row = details.end_row }
+      end
+    end
+    return out
+  end
   local function draw(win, buf, top, bot)
     emitted = {}
+    -- Stand in for the native highlighter, which parses before our on_win. Parse the whole
+    -- source so viewport padding is reusable and these checks isolate cache reuse.
+    vim.treesitter.highlighter.active[buf].tree:parse(true)
     provider.on_win(nil, win, buf, top, bot)
+    if render.uses_persistent_conceal() then
+      return surface_marks(win, buf, top, bot)
+    end
     return emitted
   end
   local function has_symbol(marks, row, symbol)
@@ -251,10 +280,13 @@ local function run()
   assert_matches_fresh("refill never merges different parser generations", win, generation_buf, 111, 141)
   for _, opts in ipairs({ { winid = win, toprow = 141, botrow = 150 }, { toprow = 141, botrow = 150 } }) do
     parser:set_included_regions({ { { 141, 0, 172, 0 } } })
+    parser:parse(true)
     assert_true("parser region populates cache", #render.collect_display_marks(generation_buf, opts) > 0)
     parser:set_included_regions({ { { 200, 0, 231, 0 } } })
     assert_true("pending parser changes invalidate the tree", not parser:is_valid())
-    assert_eq("cache hits reparse pending regions", render.collect_display_marks(generation_buf, opts), {})
+    -- Collection never parses; the native highlighter completes the pending regions.
+    parser:parse(true)
+    assert_eq("new parser generation discards cached marks", render.collect_display_marks(generation_buf, opts), {})
   end
   generation_handle:detach()
 
