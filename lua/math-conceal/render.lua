@@ -259,11 +259,7 @@ local function get_buffer_specs(config)
   return { spec }
 end
 
-local function get_expand_range(spec, node)
-  if spec.target_lang ~= "markdown" and spec.target_lang ~= "markdown_inline" then
-    return node:range()
-  end
-
+local function get_expand_range(node)
   local parent = node:parent()
   while parent do
     if markdown_expand_nodes[parent:type()] then
@@ -354,11 +350,57 @@ local function before(ar, ac, br, bc)
   return ar < br or (ar == br and ac < bc)
 end
 
-local function collect_marks(buf_id, cache, toprow, botrow)
+-- In start order, any interval ending before its predecessor is already
+-- covered. The remaining ends strictly increase, allowing a lower-bound
+-- overlap test without copying or merging the marks themselves.
+local function custom_intervals(marks, count)
+  local intervals, sorted = {}, true
+  for i = 1, count do
+    local m, prev = marks[i], marks[i - 1]
+    intervals[i] = m
+    if prev and before(m[1], m[2], prev[1], prev[2]) then
+      sorted = false
+    end
+  end
+  if not sorted then
+    table.sort(intervals, function(a, b)
+      return before(a[1], a[2], b[1], b[2])
+    end)
+  end
+  local kept = 0
+  for i = 1, count do
+    local m, prev = intervals[i], intervals[kept]
+    if not prev or before(prev[3], prev[4], m[3], m[4]) then
+      kept = kept + 1
+      intervals[kept] = m
+    end
+  end
+  for i = kept + 1, count do
+    intervals[i] = nil
+  end
+  return intervals
+end
+
+local function overlaps_custom(intervals, r1, c1, r2, c2)
+  local lo, hi = 1, #intervals + 1
+  while lo < hi do
+    local mid = math.floor((lo + hi) / 2)
+    local m = intervals[mid]
+    if before(r1, c1, m[3], m[4]) then
+      hi = mid
+    else
+      lo = mid + 1
+    end
+  end
+  local m = intervals[lo]
+  return m and before(m[1], m[2], r2, c2)
+end
+
+local function collect_marks(buf_id, cache, toprow, botrow, display_only)
   local marks = {}
   local group = 0
   local specs = vim.list_extend(vim.list_extend({}, cache.specs), cache.native_specs or {})
-  local custom_count
+  local custom_count, intervals
   for _, spec in ipairs(specs) do
     if not spec.native then
       custom_count = nil
@@ -382,11 +424,9 @@ local function collect_marks(buf_id, cache, toprow, botrow)
         if spec.native and (conceal_char ~= nil or conceal_lines ~= nil) then
           local range = vim.treesitter.get_range(node, buf_id, capture_data)
           local r1, c1, r2, c2 = range[1], range[2], range[4], range[5]
-          for i = 1, custom_count or 0 do
-            local mark = marks[i]
-            if before(r1, c1, mark[3], mark[4]) and before(mark[1], mark[2], r2, c2) then
-              goto next_capture
-            end
+          intervals = intervals or custom_intervals(marks, custom_count)
+          if overlaps_custom(intervals, r1, c1, r2, c2) then
+            goto next_capture
           end
         end
 
@@ -413,9 +453,15 @@ local function collect_marks(buf_id, cache, toprow, botrow)
             })
           end
         elseif conceal_char then
-          local range = vim.treesitter.get_range(node, buf_id, capture_data)
-          local r1, c1, r2, c2 = range[1], range[2], range[4], range[5]
-          local er1, ec1, er2, ec2 = get_expand_range(spec, node)
+          local r1, c1, r2, c2 = node:range()
+          local er1, ec1, er2, ec2 = r1, c1, r2, c2
+          if capture_data and (capture_data.range or capture_data.offset) then
+            local range = vim.treesitter.get_range(node, buf_id, capture_data)
+            r1, c1, r2, c2 = range[1], range[2], range[4], range[5]
+          end
+          if spec.target_lang == "markdown" or spec.target_lang == "markdown_inline" then
+            er1, ec1, er2, ec2 = get_expand_range(node)
+          end
           -- Keep complete marks, including nodes crossing the requested range.
           if r1 <= botrow and r2 >= toprow then
             local priority = (capture_data and capture_data.priority) or metadata.priority or 100
@@ -438,7 +484,7 @@ local function collect_marks(buf_id, cache, toprow, botrow)
               er2, -- [10]
               ec2, -- [11]
               [13] = group, -- query/tree order
-              [14] = formula_range(node),
+              [14] = not display_only and formula_range(node) or nil,
             })
           end
         end
@@ -566,7 +612,9 @@ local function collect_cached_marks(buf_id, cache, toprow, botrow, opts)
     return cache.range_cache[key]
   end
 
-  local marks = collect_marks(buf_id, cache, toprow, botrow)
+  -- The public display range has no environment span. Only window rendering
+  -- consumes formula ancestry, which can be expensive on wide syntax trees.
+  local marks = collect_marks(buf_id, cache, toprow, botrow, true)
   cache_range_marks(cache, key, marks)
   return marks
 end
