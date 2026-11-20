@@ -149,5 +149,90 @@ local function persistent()
   vim.cmd("only")
 end
 
+local function projected()
+  local view = require("math-conceal.ascii-view")
+  render.update_query(
+    "latex",
+    [[
+    ((generic_command) @greek (#eq? @greek "\\alpha") (#set! @greek conceal "α"))
+    ((generic_command) @arrow (#eq? @arrow "\\longrightarrow") (#set! @arrow conceal "→"))
+    ((generic_command) @shift (#eq? @shift "\\delta") (#offset! @shift 0 1 0 0) (#set! @shift conceal "δ"))
+    ((generic_command) @first (#eq? @first "\\beta") (#set! @first conceal "X"))
+    ((generic_command) @second (#eq? @second "\\beta") (#set! @second conceal "Y") (#set! @second priority 200))
+  ]]
+  )
+  local raw = "中文 $\\alpha + \\longrightarrow$ tail"
+  local compact = "中文 $α + →$ tail"
+  local source = attach({ "top", raw, "\\beta", "\\delta" })
+  api.nvim_win_set_buf(0, source)
+  local win = api.nvim_get_current_win()
+  cursor(win, 1, 0)
+  view.open()
+  assert(vim.fn.getline(2) == compact)
+  cursor(win, 2, compact:find("→", 1, true) - 1)
+  assert(vim.fn.getline(2) == "中文 $α + \\longrightarrow$ tail")
+  cursor(win, 2, api.nvim_win_get_cursor(win)[2] + 4)
+  view.leave()
+  assert(
+    api.nvim_get_current_buf() == source
+      and api.nvim_win_get_cursor(win)[2] == raw:find("\\longrightarrow", 1, true) + 3
+  )
+  view.open()
+  cursor(win, 1, 0)
+  api.nvim_buf_set_text(source, 1, 0, 1, 0, { "前" })
+  assert(vim.wait(1000, function()
+    return vim.fn.getline(2) == "前" .. compact
+  end))
+  cursor(win, 2, ("前中文 $"):len())
+  assert(vim.fn.getline(2) == "前中文 $\\alpha + →$ tail")
+  -- Offset changes the glyph range while reveal still covers the source command.
+  assert(vim.fn.getline(4) == "\\δ")
+  cursor(win, 4, 1)
+  assert(vim.fn.getline(4) == "\\delta")
+  -- The competing captures stay native on their own row.
+  local ns = api.nvim_get_namespaces()["math-conceal.ascii-view"]
+  local function competing()
+    return #api.nvim_buf_get_extmarks(0, ns, { 2, 0 }, { 2, -1 }, {})
+  end
+  assert(vim.fn.getline(3) == "\\beta" and competing() == 2)
+  cursor(win, 3, 2)
+  assert(competing() == 0)
+  cursor(win, 1, 0)
+  assert(competing() == 2)
+  view.leave()
+  assert(vim.fn.getline(2) == "前" .. raw)
+  render.detach(source)
+end
+
+local function file_attachment()
+  vim.cmd.runtime("plugin/math-conceal.lua")
+  local path = vim.fn.tempname() .. ".tex"
+  vim.fn.writefile({ "top", "$\\alpha$" }, path)
+  vim.cmd.edit(vim.fn.fnameescape(path))
+  local file = api.nvim_get_current_buf()
+  vim.bo[file].filetype = "tex"
+  assert(
+    vim.wait(2000, function()
+      return api.nvim_get_current_buf() ~= file
+    end),
+    "file did not open in view"
+  )
+  local auto = api.nvim_get_current_buf()
+  assert(vim.fn.getline(2):find("α", 1, true))
+  api.nvim_buf_set_lines(file, 0, 1, false, { "changed" })
+  assert(vim.wait(1000, function()
+    return vim.bo[auto].modified
+  end))
+  vim.cmd.update()
+  assert(vim.fn.readfile(path)[1] == "changed" and not vim.bo[file].modified and not vim.bo[auto].modified)
+  require("math-conceal.ascii-view").leave()
+  api.nvim_exec_autocmds("BufEnter", { buffer = file })
+  vim.wait(30)
+  assert(api.nvim_get_current_buf() == file, "explicit source navigation must survive scheduled attachment")
+  vim.fn.delete(path)
+end
+
 persistent()
+projected()
+file_attachment()
 print("render-nightly-ok")

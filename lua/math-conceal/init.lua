@@ -227,6 +227,12 @@ local function hook_filetypes(opts)
   return filetypes
 end
 
+local function open_file_view(buf)
+  if vim.fn.has("nvim-0.13") == 1 and vim.api.nvim_get_current_buf() == buf then
+    require("math-conceal.ascii-view").open_file(buf)
+  end
+end
+
 -- Attach after the current event finishes: host plugins that configure
 -- themselves in the same FileType event (e.g. lazy-loaded orgmode registering
 -- its injection directives) must run before we parse the buffer.
@@ -239,7 +245,10 @@ local function schedule_attach(bufnr, filetype)
     then
       return
     end
-    require("math-conceal.nvim").set(filetype, bufnr)
+    local handle = require("math-conceal.nvim").set(filetype, bufnr)
+    if handle and handle.unicode and not handle.image then
+      open_file_view(bufnr)
+    end
   end)
 end
 
@@ -266,6 +275,18 @@ function M._register_filetype_hook()
   local wanted = {}
   for _, filetype in ipairs(filetypes) do
     wanted[filetype] = true
+  end
+  if vim.fn.has("nvim-0.13") == 1 then
+    vim.api.nvim_create_autocmd({ "BufEnter", "InsertLeave" }, {
+      group = group,
+      callback = function(ev)
+        if wanted[vim.bo[ev.buf].filetype] and package.loaded["math-conceal.render"] then
+          vim.schedule(function()
+            open_file_view(ev.buf)
+          end)
+        end
+      end,
+    })
   end
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_loaded(bufnr) and wanted[vim.bo[bufnr].filetype] then
